@@ -222,8 +222,8 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
 
   const color = isCalibrating
     ? '#94a3b8'
-    : score >= 70 ? '#22c55e'
-    : score >= 40 ? '#f97316'
+    : score >= 65 ? '#22c55e'
+    : score >= 38 ? '#f97316'
     : '#ef4444'
 
   return (
@@ -688,7 +688,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const smoothed = rawFinal * 0.3 + focusScoreRef.current * 0.7
     focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
 
-    const newStatus   = focusScoreRef.current >= 70 ? 'focused' : focusScoreRef.current >= 40 ? 'distracted' : 'alert'
+    const newStatus   = focusScoreRef.current >= 65 ? 'focused' : focusScoreRef.current >= 38 ? 'distracted' : 'alert'
     const displayReason = newStatus === 'focused' ? 'focused' : primaryReason
 
     if (newStatus !== attentionStatusRef.current || displayReason !== currentReasonRef.current) {

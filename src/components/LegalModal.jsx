@@ -5,9 +5,9 @@ const navy = '#1a2e4a'
 const IMPRESSUM = [
   {
     heading: 'Angaben gemäß § 5 ECG',
-    body: `Name: [Vorname Nachname]
-Adresse: [Straße, PLZ Ort, Österreich]
-E-Mail: [email@example.com]`,
+    body: `Name: Clemens Steinbrenner
+Adresse: Wien, Österreich
+E-Mail: clemenssteinbrenner.crypto@gmail.com`,
   },
   {
     heading: 'Haftungsausschluss',
@@ -18,7 +18,7 @@ E-Mail: [email@example.com]`,
 const DATENSCHUTZ = [
   {
     heading: 'Verantwortlicher',
-    body: `[Vorname Nachname], [Adresse] (siehe Impressum)`,
+    body: `Clemens Steinbrenner, Wien, Österreich (siehe Impressum)`,
   },
   {
     heading: 'Welche Daten wir verarbeiten',
@@ -38,7 +38,7 @@ const DATENSCHUTZ = [
   },
   {
     heading: 'Kontakt',
-    body: `Bei Fragen: [email@example.com]`,
+    body: `Bei Fragen: clemenssteinbrenner.crypto@gmail.com`,
   },
 ]
 
