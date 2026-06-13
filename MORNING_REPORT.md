@@ -1,45 +1,56 @@
-# Morning Report — June 15, 2026 (Session 2)
+# Morning Report — June 15, 2026 (Session 3)
 
 ## Session Summary
-Stability & polish pass — June 15 (afternoon Vienna time)
+Feature pass — milestone notifications, month calendar, share button
 
 ## Total Commits This Session
-1 commit pushed to `main`
+1 commit pushed to `main` (`90cdc40`)
 
 ---
 
 ## What Was Built
 
 ### Task 1: Build verified ✅
-- `npx vite build` clean, no errors
-- All screen transitions verified in App.jsx: landing → onboarding → home → setup → session → end → history ✓
+- `npx vite build` clean before and after all changes
 
-### Task 2: FocusRing quality glow
-- SVG `filter` now maps directly to focus zone:
-  - Green (≥65): `drop-shadow(0 0 12px rgba(34,197,94,0.25))`
-  - Orange (≥38): `drop-shadow(0 0 12px rgba(249,115,22,0.2))`
-  - Red (<38): `drop-shadow(0 0 12px rgba(239,68,68,0.2))`
-  - Calibrating: no glow
-- Feels premium, subtle ambient light effect
+### Task 2: Session tags — verified ✅
+- Tags chips render on HomeScreen with QUICK_TAGS color palette
+- Tags passed via App.jsx `enriched` object into session data
+- Tags displayed in EndScreen and HistoryDashboard session cards
+- All wiring confirmed intact
 
-### Task 3: WorkspaceSetup simple mode icons
-- Added `LaptopIcon` and `MonitorIcon` inline SVG components (navy, 20px)
-- PillOption now accepts `icon` render prop — icons appear left of label
-- Laptop screen → laptop SVG, Desktop monitor → monitor SVG, Both → laptop + monitor side by side
-- Icons invert to white when pill is selected
+### Task 3: Session milestone notifications ✅
+- At 5 min: "5 min in — nice start 🌱"
+- At 25 min: "25 min — great work 🔥"  
+- At 50 min: "50 min — impressive focus ⚡"
+- Shown only when `focusScoreRef.current >= 65`
+- Dark green pill with slide-in animation from top (via `@keyframes milestoneSlide`)
+- Auto-dismisses after 3.5s, pointer-events none
+- Lives above break banner (z-index 25 vs 20)
 
-### Task 4: LandingPage trust signals
-- Replaced plain text "Works in your browser · No download · No account"
-- Now shows 3 pill badges with inline SVG icons: 🔒 Private · ⚡ Fast · ✓ Free
-- Subtle background pills (`rgba(42,46,58,0.07)`), rounded, consistent spacing
+### Task 4: History month calendar grid ✅
+- `MonthCalendar` component added at top of HistoryDashboard.jsx
+- Shows current month as 7-col CSS grid (Su–Sa day labels)
+- Day squares colored: green ≥70%, yellow 45–70%, red <45%, gray = no sessions
+- Click a day to filter session list to that day; click again to deselect
+- "This month" filter now shows calendar + sessions from current month (not last 30 days)
+- Legend below grid explains colors
 
-### Task 5: History pagination
-- Sessions list paginated at 10 per page
-- Shows "← Previous / Next →" buttons + "Showing 1–10 of N sessions" counter
-- Overall stats (OverallStats, WeeklyTrends) always use all sessions regardless of page
-- Page resets on filter or search change
+### Task 5: EndScreen share button ✅
+- New `shareSession()` function generates formatted text:
+  ```
+  📊 Eudaimonia session
+  Task: <task>
+  Duration: Xmin · Focus: Y%
+  Longest streak: Z min
+  ```
+- `📤 Share` button below existing "Copy summary"
+- Uses `navigator.clipboard.writeText()`
+- Shows "Copied!" feedback for 2s
 
 ---
 
-## Commit
-`005cb85` feat: focus ring quality glow, setup icons, landing trust pills, history pagination
+## Repo State
+- Branch: `main`
+- Last commit: `90cdc40` — feat: milestone pills, month calendar grid, share button
+- Build: ✅ clean (246.92 kB JS gzipped 75.62 kB)
