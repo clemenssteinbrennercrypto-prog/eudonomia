@@ -24,7 +24,7 @@ const EAR_PROLONGED_CLOSE = 0.18
 const PROLONGED_CLOSE_MS  = 1500
 const MAR_YAWN            = 0.55
 const YAWN_HOLD_MS        = 1500
-const BLINK_WIN_MS        = 10_000
+const BLINK_WIN_MS        = 20_000
 const PERCLOS_WIN_MS      = 60_000
 const PITCH_NEUTRAL       = 0.50
 const PITCH_UP_THRESH     = 15
@@ -32,7 +32,7 @@ const PHONE_PITCH_THRESH  = 38
 const PHONE_HOLD_MS       = 4000
 const HEAD_DOWN_HOLD      = 10
 const HEAD_TURN_HOLD      = 5
-const FACE_ABSENT_HOLD_MS = 2000
+const FACE_ABSENT_HOLD_MS = 4000
 const HEAD_DRIFT_WIN_MS   = 3000
 const HEAD_DRIFT_THRESH   = 0.035
 const ALERT_COOLDOWN_MS   = 60_000
@@ -330,6 +330,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
   // ── Score & alert refs ────────────────────────────────────────────────────
   const focusScoreRef          = useRef(100)
+  const rawScoreRef            = useRef(100)
   const scoreLowSinceRef       = useRef(null)
   const lastAlertTimeRef       = useRef(0)
   const overlayActiveRef       = useRef(false)
@@ -344,6 +345,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const currentStreakRef     = useRef(0)
   const timelineSnapshotsRef = useRef([])
   const distractionLogRef    = useRef([]) // [{second, reason}]
+
+  // ── Personal EAR baseline refs ───────────────────────────────────────────
+  const earBaselineRef      = useRef(0.28) // fallback default
+  const earCalibSamplesRef  = useRef([])
 
   // ── Ambient sound refs ────────────────────────────────────────────────────
   const ambientRef = useRef(null) // { source, gain }
@@ -458,13 +463,17 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       mar       = f.mar
       irisV     = f.irisV
 
-      if (avgEar < EAR_BLINK) {
+      // Computed personal EAR thresholds from baseline
+      const earBlink = earBaselineRef.current * 0.72
+      const earHeavy = earBaselineRef.current * 0.55
+
+      if (avgEar < earBlink) {
         wasClosedRef.current = true
       } else if (wasClosedRef.current) {
         wasClosedRef.current = false
         blinkTimestampsRef.current.push(now)
       }
-      perclosHistRef.current.push({ t: now, heavy: avgEar < EAR_HEAVY })
+      perclosHistRef.current.push({ t: now, heavy: avgEar < earHeavy })
       nosePtHistRef.current.push({ t: now, x: f.nosePt.x, y: f.nosePt.y })
     }
 
@@ -475,7 +484,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     perclosHistRef.current     = perclosHistRef.current.filter(f => f.t > sixtyAgo)
     nosePtHistRef.current      = nosePtHistRef.current.filter(p => p.t > driftAgo)
 
-    const blinkRate    = blinkTimestampsRef.current.length * 6
+    const blinkRate    = blinkTimestampsRef.current.length * 3
     const hasBlinkData = sessionElapsed >= 15
     const pHist        = perclosHistRef.current
     const perclos      = pHist.length > 0 ? (pHist.filter(f => f.heavy).length / pHist.length) * 100 : 0
@@ -534,8 +543,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const fidgetVariance = headVariance(nosePtHistRef.current)
     const eyesRolledUp   = hasFace && irisV > 0.25
 
-    // During calibration: don't compute penalties, score stays at 100
+    // During calibration: collect EAR samples for personal baseline, then return
     if (calibrating) {
+      if (hasFace && avgEar > 0.20) {
+        earCalibSamplesRef.current.push(avgEar)
+      }
+      if (earCalibSamplesRef.current.length > 0) {
+        const sum = earCalibSamplesRef.current.reduce((a, b) => a + b, 0)
+        earBaselineRef.current = sum / earCalibSamplesRef.current.length
+      }
       focusScoreRef.current = 100
       return
     }
@@ -546,6 +562,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     if (faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
       score = 0
       primaryReason = 'away'
+    } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
+      score = focusScoreRef.current * 0.88
     } else if (hasFace) {
       const phonePenalty = ignoreBelowPhone ? 20 : 45
       if (phoneMs >= PHONE_HOLD_MS) { score -= phonePenalty; primaryReason = 'phone' }
@@ -577,9 +595,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     }
 
     score = Math.max(0, score)
-    focusScoreRef.current = score
+    rawScoreRef.current = score
+    const smoothed = rawScoreRef.current * 0.3 + focusScoreRef.current * 0.7
+    focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
 
-    const newStatus   = score >= 70 ? 'focused' : score >= 40 ? 'distracted' : 'alert'
+    const newStatus   = focusScoreRef.current >= 70 ? 'focused' : focusScoreRef.current >= 40 ? 'distracted' : 'alert'
     const displayReason = newStatus === 'focused' ? 'focused' : primaryReason
 
     if (newStatus !== attentionStatusRef.current || displayReason !== currentReasonRef.current) {
@@ -589,7 +609,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setDistractReason(displayReason)
     }
 
-    if (score < 40) {
+    if (focusScoreRef.current < 40) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS

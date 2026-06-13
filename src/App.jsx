@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
 import WorkspaceSetup from './components/WorkspaceSetup'
 import SessionScreen from './components/SessionScreen'
@@ -20,6 +21,9 @@ function saveDevices(devices) {
 }
 
 export default function App() {
+  const [onboarded, setOnboarded] = useState(
+    () => localStorage.getItem('eudaimonia_onboarded') === 'true'
+  )
   const [screen,   setScreen]   = useState('home')
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
@@ -54,6 +58,9 @@ export default function App() {
 
   return (
     <>
+      {!onboarded && (
+        <Onboarding onComplete={() => setOnboarded(true)} />
+      )}
       {screen === 'home' && (
         <HomeScreen
           task={task}
