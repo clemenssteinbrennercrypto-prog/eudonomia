@@ -253,22 +253,27 @@ function PaletteBtn({ id, selected, onClick }) {
   const d = DEVICE_DIMS[id]
   const meta = DEVICE_META.find(m => m.id === id)
   const vScale = 0.28
-  const vw = d.w * vScale + 16, vh = d.h * vScale + 16
+  const vw = d.w * vScale + 8, vh = d.h * vScale + 8
   return (
-    <button onClick={onClick} style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-      padding: '10px 6px',
-      background: selected ? '#1a2e4a0d' : '#fafafa',
-      border: `2px solid ${selected ? '#1a2e4a' : '#e2e8f0'}`,
-      borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-      transition: 'all 0.14s', minWidth: 72,
-    }}>
-      <svg width={vw} height={vh} viewBox={`${-vw/2} ${-vh/2} ${vw} ${vh}`} overflow="visible">
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 10px', width: '100%',
+        background: selected ? '#1a2e4a' : 'transparent',
+        border: `1.5px solid ${selected ? '#1a2e4a' : 'transparent'}`,
+        borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+        transition: 'all 0.14s', textAlign: 'left',
+      }}
+      onMouseEnter={e => { if (!selected) { e.currentTarget.style.background = '#F0EDE8'; e.currentTarget.style.borderColor = '#EDEBE6' }}}
+      onMouseLeave={e => { if (!selected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}}
+    >
+      <svg width={vw} height={vh} viewBox={`${-vw/2} ${-vh/2} ${vw} ${vh}`} overflow="visible" style={{ flexShrink: 0 }}>
         <g transform={`scale(${vScale})`}>
           <R w={d.w} h={d.h} uid={`pal_${id}`}/>
         </g>
       </svg>
-      <span style={{ fontSize: 11, fontWeight: 700, color: selected ? '#1a2e4a' : '#64748b', letterSpacing: '0.02em' }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: selected ? '#fff' : '#374151', letterSpacing: '0.01em' }}>
         {meta?.label}
       </span>
     </button>
@@ -379,40 +384,46 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      background: '#F7F6F2', fontFamily: 'inherit', userSelect: 'none',
+      background: '#F5F4F0', fontFamily: 'inherit', userSelect: 'none',
     }}>
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '22px 28px 14px',
-        background: '#FAFAF8', borderBottom: '1px solid #E8E4DC',
+        padding: '18px 28px 16px',
+        background: '#FAFAF8',
+        borderBottom: '1px solid #EDEBE6',
       }}>
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.022em', margin: 0 }}>
-            Your Workspace
-          </h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
+            Advanced Setup
+          </p>
+          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
             {selectedDevice
-              ? `Click anywhere on the desk to place your ${DEVICE_META.find(d=>d.id===selectedDevice)?.label} — then drag & resize it`
-              : 'Select a device → click desk to place · drag to move · corner handle to resize'}
+              ? `Click the desk to place · drag to move · corner to resize`
+              : activeId
+              ? `Selected — drag to reposition or resize`
+              : 'Select a device from the panel'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {activeId && (
             <button onClick={() => removeDevice(activeId)} style={{
-              padding: '8px 18px', fontSize: 13, fontWeight: 600,
-              background: '#fee2e2', color: '#dc2626',
-              border: '1.5px solid #fca5a5', borderRadius: 10,
+              padding: '7px 16px', fontSize: 12, fontWeight: 600,
+              background: 'transparent', color: '#ef4444',
+              border: '1px solid #fca5a5', borderRadius: 100,
               cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.15s',
             }}>Remove</button>
           )}
           <button onClick={onContinue} style={{
-            padding: '10px 26px', fontSize: 14, fontWeight: 700,
+            padding: '9px 24px', fontSize: 13, fontWeight: 700,
             background: '#1a2e4a', color: '#fff',
-            border: 'none', borderRadius: 12, cursor: 'pointer',
-            fontFamily: 'inherit', boxShadow: '0 2px 8px #1a2e4a30',
+            border: 'none', borderRadius: 100, cursor: 'pointer',
+            fontFamily: 'inherit', letterSpacing: '0.01em',
+            boxShadow: '0 2px 10px rgba(26,46,74,0.25)',
+            transition: 'opacity 0.15s',
           }}>
-            {hasDevices ? 'Save & Continue' : 'Skip →'}
+            {hasDevices ? 'Save' : 'Skip'}
           </button>
         </div>
       </div>
@@ -559,14 +570,20 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
 
         {/* Sidebar */}
         <div style={{
-          width: 186, display: 'flex', flexDirection: 'column', gap: 6,
-          padding: '18px 14px',
-          background: '#FAFAF8', borderLeft: '1px solid #E8E4DC',
+          width: 172, display: 'flex', flexDirection: 'column',
+          padding: '20px 12px 20px',
+          background: '#FAFAF8', borderLeft: '1px solid #EDEBE6',
           overflowY: 'auto',
+          gap: 4,
         }}>
-          <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 4px' }}>
-            Add Devices
+          <p style={{
+            fontSize: 10, fontWeight: 700, color: '#9ca3af',
+            textTransform: 'uppercase', letterSpacing: '0.1em',
+            margin: '0 4px 10px',
+          }}>
+            Devices
           </p>
+
           {DEVICE_META.map(d => (
             <PaletteBtn
               key={d.id} id={d.id}
@@ -576,39 +593,54 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
           ))}
 
           {hasDevices && (
-            <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
-              <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 6px' }}>Placed</p>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #EDEBE6' }}>
+              <p style={{
+                fontSize: 10, fontWeight: 700, color: '#9ca3af',
+                textTransform: 'uppercase', letterSpacing: '0.1em',
+                margin: '0 4px 8px',
+              }}>On desk</p>
               {devices.map(d => {
                 const meta = DEVICE_META.find(m => m.id === d.type)
+                const isActive = d.id === activeId
                 return (
-                  <div key={d.id} onClick={() => setActiveId(d.id === activeId ? null : d.id)}
+                  <div
+                    key={d.id}
+                    onClick={() => setActiveId(isActive ? null : d.id)}
                     style={{
-                      display: 'flex', justifyContent: 'space-between',
-                      padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
-                      background: d.id === activeId ? '#1a2e4a10' : 'transparent',
-                      fontSize: 11,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
+                      background: isActive ? '#1a2e4a' : 'transparent',
+                      transition: 'background 0.15s',
+                      marginBottom: 2,
                     }}>
-                    <span style={{ fontWeight: 600, color: '#374151' }}>{meta?.label}</span>
-                    <span style={{ color: '#94a3b8', fontSize: 10 }}>{Math.round(d.scale * 100)}%</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#fff' : '#374151' }}>
+                      {meta?.label}
+                    </span>
+                    <span style={{ fontSize: 10, color: isActive ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
+                      {Math.round(d.scale * 100)}%
+                    </span>
                   </div>
                 )
               })}
-              <button onClick={() => { setDevices([]); setActiveId(null) }}
+              <button
+                onClick={() => { setDevices([]); setActiveId(null) }}
                 style={{
-                  marginTop: 8, width: '100%', padding: '6px',
-                  fontSize: 11, color: '#94a3b8',
-                  background: 'none', border: '1px solid #e2e8f0',
+                  marginTop: 8, width: '100%', padding: '7px',
+                  fontSize: 11, fontWeight: 500, color: '#9ca3af',
+                  background: 'none', border: '1px solid #EDEBE6',
                   borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'color 0.15s, border-color 0.15s',
                 }}>
                 Clear all
               </button>
             </div>
           )}
-          <p style={{ fontSize: 10, color: '#b0bac8', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>
-            Drag to move<br/>
-            Corner handle to resize<br/>
-            Click to select · Remove button to delete
-          </p>
+
+          <div style={{ marginTop: 'auto', paddingTop: 12 }}>
+            <p style={{ fontSize: 10, color: '#C8C4BA', lineHeight: 1.6, textAlign: 'center' }}>
+              Click to place<br/>Drag to move<br/>Corner to resize
+            </p>
+          </div>
         </div>
       </div>
     </div>
