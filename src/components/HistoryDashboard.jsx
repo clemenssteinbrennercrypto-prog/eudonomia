@@ -67,6 +67,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
       style={{
         background: '#FFFFFF',
         border: `1.5px solid ${expanded ? '#1a2e4a' : '#E8E3DA'}`,
+        borderLeft: `4px solid ${focusPct >= 70 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444'}`,
         borderRadius: 16,
         padding: '20px 22px',
         cursor: 'pointer',

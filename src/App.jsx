@@ -50,10 +50,10 @@ export default function App() {
     setScreen('end')
   }, [task, goal])
 
-  const handleRestart = () => {
-    setTask('')
-    setGoal('')
-    setDuration(30)
+  const handleRestart = (prefill = null) => {
+    setTask(prefill?.task ?? '')
+    setGoal(prefill?.goal ?? '')
+    setDuration(prefill?.duration ?? 30)
     setSessionData(null)
     setScreen('home')
   }

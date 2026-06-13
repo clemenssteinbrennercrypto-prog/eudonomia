@@ -321,11 +321,11 @@ function StatusDot({ status, score, reason, isCalibrating }) {
       {reasonText && (
         <div style={{
           padding: '3px 10px',
-          background: '#1C1F28',
-          border: '1px solid #2A2E3A',
+          background: 'rgba(255,255,255,0.07)',
+          border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 100,
           fontSize: 11,
-          color: '#64748b',
+          color: '#6b7280',
           fontWeight: 500,
           letterSpacing: '0.01em',
           transition: 'opacity 0.3s',

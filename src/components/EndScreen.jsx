@@ -39,6 +39,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     timeline             = [],
     completed            = false,
     goal                 = '',
+    task                 = '',
     distractionLog       = [],
     plannedDuration      = 0,
   } = sessionData
@@ -226,6 +227,22 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             }}
           >
             View History
+          </button>
+          <button
+            onClick={() => onRestart({ task, goal, duration: plannedDuration || 30 })}
+            style={{
+              padding: '14px 28px',
+              fontSize: 15, fontWeight: 600,
+              background: 'transparent',
+              color: '#1a2e4a',
+              border: '1.5px solid #1a2e4a',
+              borderRadius: 14,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              letterSpacing: '0.01em',
+            }}
+          >
+            Repeat
           </button>
         </div>
 
