@@ -298,7 +298,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [alertReason,     setAlertReason]     = useState('default')
   const [attentionStatus, setAttentionStatus] = useState('focused')
   const [distractReason,  setDistractReason]  = useState('focused')
-  const [focusScore,      setFocusScore]      = useState(100)
+  const [focusScore,      setFocusScore]      = useState(68)
   const [camHidden,       setCamHidden]       = useState(false)
   const [isPaused,        setIsPaused]        = useState(false)
   const [isCalibrating,   setIsCalibrating]   = useState(true)
@@ -329,9 +329,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const nosePtHistRef          = useRef([])
 
   // ── Score & alert refs ────────────────────────────────────────────────────
-  const focusScoreRef          = useRef(100)
-  const rawScoreRef            = useRef(100)
+  const focusScoreRef          = useRef(68)
+  const rawScoreRef            = useRef(68)
   const scoreLowSinceRef       = useRef(null)
+  const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
+  const lastFrameTsRef         = useRef(0)
   const lastAlertTimeRef       = useRef(0)
   const overlayActiveRef       = useRef(false)
   const attentionStatusRef     = useRef('focused')
@@ -571,11 +573,22 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         const sum = earCalibSamplesRef.current.reduce((a, b) => a + b, 0)
         earBaselineRef.current = sum / earCalibSamplesRef.current.length
       }
-      focusScoreRef.current = 100
+      focusScoreRef.current = 68
       return
     }
 
-    let score = hasFace ? 100 : 0
+    // ── Frame delta for sustained-focus ramp ────────────────────────────────
+    const frameDelta = lastFrameTsRef.current ? Math.min(200, now - lastFrameTsRef.current) : 33
+    lastFrameTsRef.current = now
+
+    // ── Scoring: earned focus, not assumed ──────────────────────────────────
+    // Scientific basis:
+    //  • Base 68: face present = necessary but not sufficient for focus
+    //  • Bonuses reward healthy signals (blink rate, head stability, work-zone gaze)
+    //  • Sustained-focus ramp: up to +15 after ~2 min of continuous good focus
+    //    (mirrors PERCLOS & cognitive-load research: focus must be sustained, not instant)
+    //  • Camera stare (pitch ≈ 0) does NOT earn the work-zone bonus, max ~83 without ramp
+    let score = hasFace ? 68 : 0
     let primaryReason = 'focused'
 
     if (faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
@@ -584,6 +597,20 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
       score = focusScoreRef.current * 0.88
     } else if (hasFace) {
+      // ── Positive signals ───────────────────────────────────────────────────
+      // Healthy blink rate: 12–20/min is optimal for screen work (Doughty 2001)
+      if (hasBlinkData && blinkRate >= 12 && blinkRate <= 20) score += 7
+      else if (hasBlinkData && blinkRate >= 8 && blinkRate <= 28) score += 3
+
+      // Stable head position (not fidgeting)
+      if (fidgetVariance <= HEAD_DRIFT_THRESH * 0.5) score += 5
+      else if (fidgetVariance <= HEAD_DRIFT_THRESH) score += 2
+
+      // Work-zone gaze: camera is at top of screen, so pitch 3–15° down = looking at screen
+      // pitch ≈ 0 means staring at camera — not a focus signal
+      if (pitchDeg >= 3 && pitchDeg < pitchDT * 0.7) score += 5
+
+      // ── Penalties ─────────────────────────────────────────────────────────
       const phonePenalty = ignoreBelowPhone ? 20 : 45
       if (phoneMs >= PHONE_HOLD_MS) { score -= phonePenalty; primaryReason = 'phone' }
       if (eyesClosedMs >= PROLONGED_CLOSE_MS) {
@@ -610,12 +637,21 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (-yawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
       else if (-yawSigned >= yawRT * 0.6) score -= 8
       if (eyesRolledUp) score -= 15
-      if (fidgetVariance > HEAD_DRIFT_THRESH) score -= 10
     }
 
-    score = Math.max(0, score)
-    rawScoreRef.current = score
-    const smoothed = rawScoreRef.current * 0.3 + focusScoreRef.current * 0.7
+    score = Math.max(0, Math.min(85, score))  // raw capped at 85 — last 15 pts come from ramp
+
+    // ── Sustained-focus ramp (+0 to +15 over ~2 min) ──────────────────────
+    if (score >= 72) {
+      sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta)
+    } else {
+      sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
+    }
+    const rampBonus = (sustainedGoodMsRef.current / 120_000) * 15
+
+    const rawFinal = Math.min(100, score + rampBonus)
+    rawScoreRef.current = rawFinal
+    const smoothed = rawFinal * 0.3 + focusScoreRef.current * 0.7
     focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
 
     const newStatus   = focusScoreRef.current >= 70 ? 'focused' : focusScoreRef.current >= 40 ? 'distracted' : 'alert'
