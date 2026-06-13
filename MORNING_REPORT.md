@@ -48,8 +48,15 @@ Overnight autonomous dev session — June 13 (22:00) → June 14 (01:00 Vienna t
 
 ---
 
+## Session 3 Additions (latest)
+- **Reason pill styling**: rgba(255,255,255,0.07) bg, rgba(255,255,255,0.1) border — subtle on dark session bg
+- **History left border**: 4px color-coded border per session quality (green/orange/red)
+- **"Repeat" button on EndScreen**: re-launches with same task+duration pre-filled
+- **updateSession in storage.js**: already present from prior session (confirmed)
+- **Task 1 (Landing→Onboarding flow)**: already correct, no double-screen issue found
+
 ## Current State
-- Build: ✅ clean (41 modules, 216KB JS, 7KB CSS)
+- Build: ✅ clean (41 modules, 220KB JS, 7KB CSS)
 - All React warnings resolved
 - All screens mobile-responsive
 - Impressum/Datenschutz has real data
