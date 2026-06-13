@@ -91,9 +91,22 @@ export default function LandingPage({ onEnter }) {
             Start focusing — it's free
           </button>
 
-          <p style={{ fontSize: 12, color: '#2A2E3A', marginTop: 16 }}>
-            Works in your browser · No download · No account
-          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {[
+              { icon: <svg width="12" height="14" viewBox="0 0 12 14" fill="none"><rect x="1" y="5" width="10" height="8" rx="1.5" stroke="#2A2E3A" strokeWidth="1.3"/><path d="M3.5 5V3.5a2.5 2.5 0 015 0V5" stroke="#2A2E3A" strokeWidth="1.3" strokeLinecap="round"/></svg>, label: 'Private' },
+              { icon: <svg width="12" height="14" viewBox="0 0 12 14" fill="none"><path d="M6 1l1.5 3.5H11l-2.75 2 1 3.5L6 8l-3.25 2 1-3.5L1 4.5h3.5L6 1z" stroke="#2A2E3A" strokeWidth="1.2" strokeLinejoin="round"/></svg>, label: 'Fast' },
+              { icon: <svg width="14" height="11" viewBox="0 0 14 11" fill="none"><path d="M1 5.5l4 4L13 1" stroke="#2A2E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, label: 'Free' },
+            ].map(({ icon, label }) => (
+              <span key={label} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '5px 12px', borderRadius: 100,
+                background: 'rgba(42,46,58,0.07)',
+                fontSize: 12, color: '#2A2E3A', fontWeight: 500,
+              }}>
+                {icon} {label}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 

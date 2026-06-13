@@ -37,14 +37,33 @@ function buildDevices(mainScreen, extraCount, extraPositions) {
 }
 
 // ── Pill option button ────────────────────────────────────────────────────────
-function PillOption({ label, selected, onClick, sub }) {
+function LaptopIcon({ color }) {
+  return (
+    <svg width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+      <rect x="2" y="1" width="16" height="11" rx="1.5" stroke={color} strokeWidth="1.5"/>
+      <path d="M0 13h20" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+function MonitorIcon({ color }) {
+  return (
+    <svg width="20" height="17" viewBox="0 0 20 17" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+      <rect x="1" y="1" width="18" height="12" rx="1.5" stroke={color} strokeWidth="1.5"/>
+      <path d="M7 16h6" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M10 13v3" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function PillOption({ label, selected, onClick, sub, icon }) {
   return (
     <button
       onClick={onClick}
       style={{
         width: '100%', height: sub ? 60 : 52,
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'flex-start', justifyContent: 'center',
+        display: 'flex', flexDirection: 'row',
+        alignItems: 'center', justifyContent: 'flex-start',
+        gap: 10,
         padding: '0 22px',
         background: selected ? navy : '#fff',
         color: selected ? '#fff' : '#1A1A1A',
@@ -58,16 +77,19 @@ function PillOption({ label, selected, onClick, sub }) {
         textAlign: 'left',
       }}
     >
-      <span>{label}</span>
-      {sub && (
-        <span style={{
-          fontSize: 11, fontWeight: 400,
-          color: selected ? 'rgba(255,255,255,0.65)' : '#9ca3af',
-          marginTop: 1,
-        }}>
-          {sub}
-        </span>
-      )}
+      {icon && icon(selected ? '#fff' : navy)}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <span>{label}</span>
+        {sub && (
+          <span style={{
+            fontSize: 11, fontWeight: 400,
+            color: selected ? 'rgba(255,255,255,0.65)' : '#9ca3af',
+            marginTop: 1,
+          }}>
+            {sub}
+          </span>
+        )}
+      </div>
     </button>
   )
 }
@@ -349,17 +371,20 @@ function StepOne({ mainScreen, setMainScreen }) {
           label="Laptop screen"
           selected={mainScreen === 'laptop'}
           onClick={() => setMainScreen('laptop')}
+          icon={(c) => <LaptopIcon color={c} />}
         />
         <PillOption
           label="Desktop monitor"
           selected={mainScreen === 'monitor'}
           onClick={() => setMainScreen('monitor')}
+          icon={(c) => <MonitorIcon color={c} />}
         />
         <PillOption
           label="Both — laptop + monitor"
           sub="e.g. laptop open next to an external monitor"
           selected={mainScreen === 'both'}
           onClick={() => setMainScreen('both')}
+          icon={(c) => <span style={{ display: 'flex', gap: 3 }}><LaptopIcon color={c} /><MonitorIcon color={c} /></span>}
         />
       </div>
       {mainScreen && (

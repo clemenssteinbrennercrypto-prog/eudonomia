@@ -533,6 +533,8 @@ export default function HistoryDashboard({ onClose }) {
   const [confirmClear, setConfirmClear] = useState(false)
   const [dateFilter, setDateFilter] = useState('all') // 'all' | 'week' | 'month'
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 10
 
   const filteredSessions = useMemo(() => {
     let result = sessions
@@ -550,7 +552,9 @@ export default function HistoryDashboard({ onClose }) {
     return result
   }, [sessions, dateFilter, search])
 
-  const groupedSessions = useMemo(() => groupByDate(filteredSessions), [filteredSessions])
+  const pagedSessions = useMemo(() => filteredSessions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [filteredSessions, page])
+  const groupedSessions = useMemo(() => groupByDate(pagedSessions), [pagedSessions])
+  const totalPages = Math.ceil(filteredSessions.length / PAGE_SIZE)
 
   const handleDelete = (id) => {
     deleteSession(id)
@@ -666,7 +670,7 @@ export default function HistoryDashboard({ onClose }) {
               {[['all','All time'],['week','This week'],['month','This month']].map(([val, label]) => (
                 <button
                   key={val}
-                  onClick={() => setDateFilter(val)}
+                  onClick={() => { setDateFilter(val); setPage(0) }}
                   style={{
                     border: dateFilter === val ? '1.5px solid #1a2e4a' : '1.5px solid #E8E3DA',
                     borderRadius: 100, padding: '6px 16px',
@@ -684,7 +688,7 @@ export default function HistoryDashboard({ onClose }) {
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setSearch(e.target.value); setPage(0) }}
                 placeholder="Search sessions..."
                 style={{
                   width: '100%', boxSizing: 'border-box',
@@ -739,6 +743,35 @@ export default function HistoryDashboard({ onClose }) {
                 </div>
               ))}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  style={{
+                    padding: '7px 16px', fontSize: 13, fontWeight: 600,
+                    border: '1.5px solid #E8E3DA', borderRadius: 100,
+                    background: 'transparent', color: page === 0 ? '#d1d5db' : '#1a2e4a',
+                    cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'inherit',
+                  }}
+                >← Previous</button>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredSessions.length)} of {filteredSessions.length} sessions
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  style={{
+                    padding: '7px 16px', fontSize: 13, fontWeight: 600,
+                    border: '1.5px solid #E8E3DA', borderRadius: 100,
+                    background: 'transparent', color: page >= totalPages - 1 ? '#d1d5db' : '#1a2e4a',
+                    cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'inherit',
+                  }}
+                >Next →</button>
+              </div>
+            )}
 
             <div style={{ marginTop: 40, textAlign: 'center' }}>
               {!confirmClear ? (

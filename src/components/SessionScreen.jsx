@@ -251,7 +251,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
 
   return (
     <div className={isCalibrating ? 'ring--calibrating' : ''} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: `drop-shadow(0 0 8px ${color}4D)` }}>
+      <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: isCalibrating ? 'none' : score >= 65 ? 'drop-shadow(0 0 12px rgba(34,197,94,0.25))' : score >= 38 ? 'drop-shadow(0 0 12px rgba(249,115,22,0.2))' : 'drop-shadow(0 0 12px rgba(239,68,68,0.2))' }}>
         <circle
           cx={size / 2} cy={size / 2} r={radius}
           fill="none" stroke="#1C1F28" strokeWidth={stroke}
