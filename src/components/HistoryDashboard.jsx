@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { loadSessions, deleteSession, clearAllSessions } from '../lib/storage'
+import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(seconds) {
@@ -55,8 +55,90 @@ function MiniTimeline({ timeline }) {
   )
 }
 
+// ── Session note editor ───────────────────────────────────────────────────────
+function SessionNote({ session, onNoteUpdate }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(session.note || '')
+
+  const save = () => {
+    updateSession(session.id, { note: draft })
+    onNoteUpdate(session.id, draft)
+    setEditing(false)
+  }
+
+  if (!editing && !session.note) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setEditing(true) }}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 12, color: '#9ca3af', padding: 0, fontFamily: 'inherit',
+          textDecoration: 'underline', marginTop: 12, display: 'block',
+        }}
+      >
+        + Add note
+      </button>
+    )
+  }
+
+  if (!editing && session.note) {
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); setEditing(true) }}
+        style={{
+          marginTop: 12, padding: '8px 12px',
+          background: '#f9fafb', border: '1px solid #e5e7eb',
+          borderRadius: 8, fontSize: 13, color: '#374151',
+          cursor: 'pointer', lineHeight: 1.5,
+        }}
+        title="Click to edit note"
+      >
+        {session.note}
+      </div>
+    )
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12 }}>
+      <textarea
+        rows={3}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="Add a note… e.g. had coffee, felt distracted"
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          padding: '8px 12px', fontSize: 13, fontFamily: 'inherit',
+          border: '1px solid #e5e7eb', borderRadius: 8,
+          background: '#fff', color: '#374151', resize: 'vertical',
+          outline: 'none', lineHeight: 1.5,
+        }}
+        autoFocus
+      />
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <button
+          onClick={save}
+          style={{
+            padding: '5px 14px', fontSize: 12, fontWeight: 600,
+            background: '#1a2e4a', color: '#fff', border: 'none',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >Save</button>
+        <button
+          onClick={() => { setDraft(session.note || ''); setEditing(false) }}
+          style={{
+            padding: '5px 14px', fontSize: 12, fontWeight: 600,
+            background: 'none', color: '#6b7280',
+            border: '1px solid #e5e7eb', borderRadius: 8,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Session card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, onDelete, onExpand, expanded }) {
+function SessionCard({ session, onDelete, onExpand, expanded, onNoteUpdate }) {
   const focusPct = session.actualSeconds > 0
     ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
     : 0
@@ -126,6 +208,18 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
 
       <MiniTimeline timeline={session.timeline} />
 
+      {/* Note preview (collapsed) */}
+      {!expanded && session.note && (
+        <div style={{
+          marginTop: 10, padding: '7px 10px',
+          background: '#f9fafb', border: '1px solid #e5e7eb',
+          borderRadius: 8, fontSize: 12, color: '#6b7280',
+          lineHeight: 1.5,
+        }}>
+          {session.note}
+        </div>
+      )}
+
       {/* Expanded detail */}
       {expanded && (
         <div style={{
@@ -159,6 +253,9 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
               </div>
             ))}
           </div>
+
+          {/* Session note */}
+          <SessionNote session={session} onNoteUpdate={onNoteUpdate} />
 
           {/* Full timeline */}
           {session.timeline?.length > 0 && (
@@ -373,6 +470,10 @@ export default function HistoryDashboard({ onClose }) {
     if (expandedId === id) setExpandedId(null)
   }
 
+  const handleNoteUpdate = (id, note) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, note } : s))
+  }
+
   const handleClearAll = () => {
     clearAllSessions()
     setSessions([])
@@ -509,6 +610,7 @@ export default function HistoryDashboard({ onClose }) {
                         onDelete={handleDelete}
                         onExpand={handleExpand}
                         expanded={expandedId === s.id}
+                        onNoteUpdate={handleNoteUpdate}
                       />
                     ))}
                   </div>

@@ -360,6 +360,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [inFlowState,     setInFlowState]     = useState(false)
   const [hintVisible,     setHintVisible]     = useState(true)
   const [endConfirm,      setEndConfirm]      = useState(false)
+  const [faceAbsentPrompt, setFaceAbsentPrompt] = useState(false)
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -455,7 +456,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     if (sessionEndedRef.current) return
     sessionEndedRef.current = true
     stopAmbient()
-    const actualSeconds = Math.round((Date.now() - startTimeRef.current - pausedTotalRef.current) / 1000)
+    // If currently paused, include the ongoing pause interval in the total
+    const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
+    const actualSeconds = Math.round((Date.now() - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     const snapshots = timelineSnapshotsRef.current
     const avgFocusScore = snapshots.length > 0
       ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
@@ -524,6 +527,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       faceAbsentSinceRef.current = null
     }
     const faceAbsentMs = faceAbsentSinceRef.current ? now - faceAbsentSinceRef.current : 0
+
+    // Early prompt: show "Looking away?" after 2s but before 4s penalty
+    const shouldPrompt = faceAbsentMs >= 2000 && faceAbsentMs < FACE_ABSENT_HOLD_MS
+    setFaceAbsentPrompt(shouldPrompt)
 
     let avgEar = 0.30, pitchDeg = 0, pitchUpDeg = 0, yawSigned = 0, mar = 0, irisV = 0
 
@@ -1114,6 +1121,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       </div>
 
       <div className="webcam-corner">
+        {faceAbsentPrompt && !isPaused && !isCalibrating && (
+          <div style={{
+            fontSize: 11, color: '#9ca3af', textAlign: 'center',
+            marginBottom: 4, letterSpacing: '0.04em', fontWeight: 500,
+            opacity: 0.8,
+          }}>
+            Looking away?
+          </div>
+        )}
         <video
           ref={videoRef}
           className="webcam-feed"

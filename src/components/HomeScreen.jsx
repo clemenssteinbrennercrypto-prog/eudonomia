@@ -79,6 +79,12 @@ export default function HomeScreen({
     setShowCustomInput(true)
   }
 
+  const handlePresetClick = (d) => {
+    setDuration(d)
+    setShowCustomInput(false)
+    setCustomVal('')
+  }
+
   const handleCustomChange = (e) => {
     const val = e.target.value
     setCustomVal(val)

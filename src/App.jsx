@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
