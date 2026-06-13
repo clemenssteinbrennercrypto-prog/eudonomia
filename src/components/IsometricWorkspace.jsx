@@ -1,360 +1,334 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
-// ── Perspective Desk View ──────────────────────────────────────────────────────
-// Single vanishing point at top-center.
-// "You" are at the bottom looking at your desk from a seated position.
-// The desk fills most of the canvas, wider at bottom (near) narrower at top (far).
+// ── Perspective mapping ────────────────────────────────────────────────────────
+// Moderate perspective: 25° tilt, not bird's eye.
+// col: 0=left … 1=right   row: 0=near(front) … 1=far(back)
 
-const VP = { x: 320, y: 60 }   // vanishing point
-const W  = 640
-const H  = 420
+const SVG_W = 680
+const SVG_H = 460
 
-// Map desk coordinates (col 0-1, row 0-1) to SVG canvas
-// row=0 = far edge (back of desk), row=1 = near edge (front, closest to you)
-// col=0 = left edge, col=1 = right edge
-const DESK_NEAR_Y = 390   // y of front edge
-const DESK_FAR_Y  = 130   // y of back edge
-const DESK_NEAR_L = 40    // x of front-left corner
-const DESK_NEAR_R = 600   // x of front-right corner
-const DESK_FAR_L  = 155   // x of back-left corner
-const DESK_FAR_R  = 485   // x of back-right corner
+// Desk corners in SVG space — less extreme foreshortening
+const NEAR_L = 60,  NEAR_R = 620, NEAR_Y = 390
+const FAR_L  = 190, FAR_R  = 490, FAR_Y  = 145
 
-function deskX(col, row) {
-  // left edge at col=0, right at col=1
-  const nearX = DESK_NEAR_L + col * (DESK_NEAR_R - DESK_NEAR_L)
-  const farX  = DESK_FAR_L  + col * (DESK_FAR_R  - DESK_FAR_L)
-  return nearX + row * (farX - nearX)
+function deskToSVG(col, row) {
+  const leftX  = NEAR_L + row * (FAR_L - NEAR_L)
+  const rightX = NEAR_R + row * (FAR_R - NEAR_R)
+  const y      = NEAR_Y + row * (FAR_Y - NEAR_Y)
+  const x      = leftX + col * (rightX - leftX)
+  return { x, y }
 }
-function deskY(row) {
-  return DESK_NEAR_Y + row * (DESK_FAR_Y - DESK_NEAR_Y)
-}
-function dp(col, row) { return `${deskX(col, row).toFixed(1)},${deskY(row).toFixed(1)}` }
 
-// Scale factor based on row depth (near = big, far = small)
+function svgToDeskCoords(sx, sy) {
+  // Solve for row from y first
+  const row = Math.max(0, Math.min(1, (sy - NEAR_Y) / (FAR_Y - NEAR_Y)))
+  const leftX  = NEAR_L + row * (FAR_L - NEAR_L)
+  const rightX = NEAR_R + row * (FAR_R - NEAR_R)
+  const col = Math.max(0, Math.min(1, (sx - leftX) / (rightX - leftX)))
+  return { col, row }
+}
+
+// Depth scale: devices at back are smaller
 function depthScale(row) {
-  return 0.45 + (1 - row) * 0.55   // near row=0→1.0, far row=1→0.45
+  return 1.0 - row * 0.38  // front=1.0, back=0.62
 }
-
-// Center point of a zone on desk (in SVG coords)
-function zoneSVG(col, row) {
-  return { x: deskX(col, row), y: deskY(row) }
-}
-
-// ── Zone definitions ──────────────────────────────────────────────────────────
-// Layout: 3 columns × 3 rows on desk
-// row: 0=near/front ... 1=far/back   (inverted: row 0 is near you)
-export const ZONES = [
-  // Back row (furthest from you)
-  { id: 'back-left',   label: 'Back Left',   col: 0.17, row: 0.88, wC: 0.28, wR: 0.18 },
-  { id: 'back-center', label: 'Back Center', col: 0.50, row: 0.88, wC: 0.28, wR: 0.18 },
-  { id: 'back-right',  label: 'Back Right',  col: 0.83, row: 0.88, wC: 0.28, wR: 0.18 },
-  // Middle row
-  { id: 'mid-left',    label: 'Left',        col: 0.17, row: 0.52, wC: 0.28, wR: 0.18 },
-  { id: 'mid-center',  label: 'Center',      col: 0.50, row: 0.52, wC: 0.28, wR: 0.18 },
-  { id: 'mid-right',   label: 'Right',       col: 0.83, row: 0.52, wC: 0.28, wR: 0.18 },
-  // Front row (closest to you)
-  { id: 'front',       label: 'Front',       col: 0.50, row: 0.15, wC: 0.40, wR: 0.14 },
-]
 
 // ── Device metadata ───────────────────────────────────────────────────────────
 export const DEVICE_META = [
-  { id: 'monitor', label: 'Monitor',  desc: 'External display' },
-  { id: 'laptop',  label: 'Laptop',   desc: 'MacBook / PC' },
-  { id: 'ipad',    label: 'iPad',     desc: 'Tablet' },
-  { id: 'phone',   label: 'Phone',    desc: 'Smartphone' },
-  { id: 'camera',  label: 'Webcam',   desc: 'External camera' },
+  { id: 'monitor', label: 'Monitor'  },
+  { id: 'laptop',  label: 'Laptop'   },
+  { id: 'ipad',    label: 'iPad'     },
+  { id: 'phone',   label: 'Phone'    },
+  { id: 'camera',  label: 'Webcam'   },
 ]
 
-export const POSITION_LABELS = Object.fromEntries(ZONES.map(z => [z.id, z.label]))
+export const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
+export const POSITION_LABELS = {}  // legacy compat — unused now
 
-export const DEVICE_TYPES = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
+// ── Device renderers ──────────────────────────────────────────────────────────
+// Each centered at (0,0), rendered at requested pixel size
 
-// ── Device SVG components (perspective-scaled) ────────────────────────────────
-// Each rendered at SVG center (cx, cy) with a depth scale
-
-function DeviceMonitor({ cx, cy, scale, id = '' }) {
-  const w = 110 * scale, h = 80 * scale, leg = 22 * scale, base = 36 * scale
-  const gid = `mg_${id}`
+function MonitorSVG({ w, h, uid }) {
+  const sw = w, sh = h * 0.78
+  const neckH = h * 0.12, neckW = w * 0.07
+  const baseW = w * 0.38, baseH = h * 0.08
   return (
     <g>
-      {/* Shadow */}
-      <ellipse cx={cx} cy={cy + h * 0.52} rx={w * 0.5} ry={h * 0.08} fill="black" opacity={0.12} />
-      {/* Base */}
-      <rect x={cx - base/2} y={cy + h/2 - 2} width={base} height={leg * 0.35} rx={3 * scale} fill="#2A2F3A" />
-      {/* Neck */}
-      <rect x={cx - 5*scale} y={cy + h/2 - leg} width={10 * scale} height={leg + 2} fill="#1E2330" />
-      {/* Screen housing */}
-      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={6 * scale} fill="#1A1D28" />
-      {/* Bezel inner */}
-      <rect x={cx - w/2 + 4*scale} y={cy - h/2 + 4*scale} width={w - 8*scale} height={h - 8*scale} rx={3 * scale} fill={`url(#${gid})`} />
-      {/* Content lines */}
-      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 22*scale} width={w * 0.35} height={2.5 * scale} rx={1.2*scale} fill="white" opacity={0.18} />
-      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 28*scale} width={w * 0.25} height={2 * scale} rx={1*scale} fill="white" opacity={0.12} />
-      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 34*scale} width={w * 0.30} height={2 * scale} rx={1*scale} fill="white" opacity={0.12} />
-      {/* Shine */}
-      <rect x={cx - w/2 + 4*scale} y={cy - h/2 + 4*scale} width={w - 8*scale} height={5 * scale} rx={2*scale} fill="white" opacity={0.05} />
+      <ellipse cx={0} cy={sh/2 + neckH + baseH * 0.3} rx={baseW * 0.6} ry={baseH * 0.25} fill="black" opacity={0.15}/>
+      <rect x={-baseW/2} y={sh/2 + neckH - 2} width={baseW} height={baseH} rx={baseH * 0.45} fill="#252830"/>
+      <rect x={-neckW/2} y={sh/2} width={neckW} height={neckH + 2} fill="#1C1F28"/>
+      <rect x={-sw/2} y={-sh/2} width={sw} height={sh} rx={6} fill="#16181F"/>
+      <rect x={-sw/2 + 5} y={-sh/2 + 5} width={sw - 10} height={sh - 10} rx={4} fill={`url(#ms_${uid})`}/>
+      <rect x={-sw/2 + 5} y={-sh/2 + 5} width={sw - 10} height={6} rx={2} fill="white" opacity={0.06}/>
+      <rect x={-sw/2 + 14} y={-sh/2 + 24} width={sw * 0.36} height={3} rx={1.5} fill="white" opacity={0.2}/>
+      <rect x={-sw/2 + 14} y={-sh/2 + 31} width={sw * 0.26} height={2.5} rx={1.2} fill="white" opacity={0.13}/>
+      <rect x={-sw/2 + 14} y={-sh/2 + 37} width={sw * 0.30} height={2.5} rx={1.2} fill="white" opacity={0.13}/>
       <defs>
-        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2A4ADF" stopOpacity="0.7" />
-          <stop offset="40%" stopColor="#1A2FA0" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#080F30" stopOpacity="0.9" />
+        <linearGradient id={`ms_${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stopColor="#2E54E8" stopOpacity="0.75"/>
+          <stop offset="50%"  stopColor="#1630A0" stopOpacity="0.55"/>
+          <stop offset="100%" stopColor="#050A20" stopOpacity="0.95"/>
         </linearGradient>
       </defs>
     </g>
   )
 }
 
-function DeviceLaptop({ cx, cy, scale, id = '' }) {
-  const w = 120 * scale, screenH = 72 * scale, baseH = 12 * scale
-  const gid = `lg_${id}`
-  const lidAngle = 0.3  // how much the lid recedes (perspective lean)
-  // Screen top edge shifts back visually
-  const topOffset = 18 * scale
+function LaptopSVG({ w, h, uid }) {
+  const baseH = h * 0.2, screenH = h * 0.72, lean = w * 0.12
   return (
     <g>
-      {/* Shadow */}
-      <ellipse cx={cx} cy={cy + screenH/2 + baseH + 4*scale} rx={w*0.52} ry={baseH*0.5} fill="black" opacity={0.12} />
-      {/* Keyboard base */}
-      <rect x={cx - w/2} y={cy + screenH/2 - baseH/2} width={w} height={baseH * 1.8} rx={4*scale} fill="#B0B8C4" />
-      {/* Trackpad */}
-      <rect x={cx - 18*scale} y={cy + screenH/2 + 2*scale} width={36*scale} height={10*scale} rx={3*scale} fill="#9AA2AE" opacity={0.8} />
-      {/* Keyboard rows */}
-      {[0,1,2].map(row => (
-        <g key={row}>
-          {[-36,-22,-8,6,20,34].map(kx => (
-            <rect key={kx} x={cx + kx*scale - 4*scale} y={cy + screenH/2 - baseH/2 + 2*scale + row*3.2*scale}
-              width={7*scale} height={2.2*scale} rx={0.8*scale} fill="#8A9AAA" opacity={0.6} />
-          ))}
-        </g>
-      ))}
-      {/* Screen (trapezoid — leaning back) */}
+      <ellipse cx={0} cy={screenH/2 + baseH + 4} rx={w * 0.52} ry={baseH * 0.35} fill="black" opacity={0.13}/>
+      <rect x={-w/2} y={screenH/2 - baseH * 0.1} width={w} height={baseH * 1.6} rx={4} fill="#A8B0BE"/>
+      {[-3,-2,-1,0,1,2,3].map((ki, i) => [0,1,2].map(row => (
+        <rect key={`k${ki}${row}`} x={ki * w/8 - w/18} y={screenH/2 + 3 + row * (baseH * 0.35)}
+          width={w/9} height={baseH * 0.24} rx={1.5} fill="#8A92A0" opacity={0.65}/>
+      )))}
+      <rect x={-w * 0.22} y={screenH/2 + baseH * 0.7} width={w * 0.44} height={baseH * 0.55} rx={3} fill="#9098A8" opacity={0.7}/>
+      <rect x={-w/2 + baseH*0.1} y={screenH/2 - baseH * 0.1} width={w - baseH * 0.2} height={5} rx={2} fill="#8890A0"/>
       <polygon
-        points={`${cx - w/2 + topOffset},${cy - screenH/2} ${cx + w/2 - topOffset},${cy - screenH/2} ${cx + w/2},${cy + screenH/2} ${cx - w/2},${cy + screenH/2}`}
-        fill="#1A1D28"
+        points={`${-w/2 + lean},${-screenH/2} ${w/2 - lean},${-screenH/2} ${w/2},${screenH/2} ${-w/2},${screenH/2}`}
+        fill="#16181F"
       />
-      {/* Screen glow */}
       <polygon
-        points={`${cx - w/2 + topOffset + 5*scale},${cy - screenH/2 + 5*scale} ${cx + w/2 - topOffset - 5*scale},${cy - screenH/2 + 5*scale} ${cx + w/2 - 5*scale},${cy + screenH/2 - 5*scale} ${cx - w/2 + 5*scale},${cy + screenH/2 - 5*scale}`}
-        fill={`url(#${gid})`}
+        points={`${-w/2 + lean + 5},${-screenH/2 + 5} ${w/2 - lean - 5},${-screenH/2 + 5} ${w/2 - 5},${screenH/2 - 5} ${-w/2 + 5},${screenH/2 - 5}`}
+        fill={`url(#ls_${uid})`}
       />
-      {/* Content */}
-      <rect x={cx - w/2 + topOffset + 12*scale} y={cy - screenH/2 + 18*scale} width={w*0.3} height={2.5*scale} rx={1*scale} fill="white" opacity={0.15} />
-      <rect x={cx - w/2 + topOffset + 12*scale} y={cy - screenH/2 + 24*scale} width={w*0.2} height={2*scale} rx={1*scale} fill="white" opacity={0.1} />
-      {/* Hinge */}
-      <rect x={cx - w/2} y={cy + screenH/2 - 3*scale} width={w} height={5*scale} rx={2*scale} fill="#888F9A" />
+      <rect x={-w/2 + lean + 14} y={-screenH/2 + 18} width={w * 0.3} height={3} rx={1.5} fill="white" opacity={0.18}/>
+      <rect x={-w/2 + lean + 14} y={-screenH/2 + 24} width={w * 0.2} height={2.5} rx={1.2} fill="white" opacity={0.12}/>
       <defs>
-        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2A4ADF" stopOpacity="0.65" />
-          <stop offset="100%" stopColor="#070C20" stopOpacity="0.9" />
+        <linearGradient id={`ls_${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#2E54E8" stopOpacity="0.7"/>
+          <stop offset="100%" stopColor="#050A20" stopOpacity="0.95"/>
         </linearGradient>
       </defs>
     </g>
   )
 }
 
-function DevicePhone({ cx, cy, scale, id = '' }) {
-  const w = 38 * scale, h = 72 * scale, r = 7 * scale
-  const gid = `phg_${id}`
+function PhoneSVG({ w, h, uid }) {
+  const r = w * 0.22
   return (
     <g>
-      <ellipse cx={cx} cy={cy + h/2 + 3*scale} rx={w*0.5} ry={4*scale} fill="black" opacity={0.13} />
-      {/* Body */}
-      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={r} fill="#17191F" />
-      {/* Screen */}
-      <rect x={cx - w/2 + 3*scale} y={cy - h/2 + 6*scale} width={w - 6*scale} height={h - 12*scale} rx={r - 2*scale} fill={`url(#${gid})`} />
-      {/* Dynamic Island */}
-      <rect x={cx - 8*scale} y={cy - h/2 + 9*scale} width={16*scale} height={5*scale} rx={2.5*scale} fill="#0D0E12" />
-      {/* Home bar */}
-      <rect x={cx - 10*scale} y={cy + h/2 - 10*scale} width={20*scale} height={3*scale} rx={1.5*scale} fill="#2A2D35" />
-      {/* Side button */}
-      <rect x={cx + w/2} y={cy - 8*scale} width={3*scale} height={16*scale} rx={1.5*scale} fill="#222530" />
-      {/* Volume */}
-      <rect x={cx - w/2 - 3*scale} y={cy - 12*scale} width={3*scale} height={10*scale} rx={1.5*scale} fill="#222530" />
-      <rect x={cx - w/2 - 3*scale} y={cy + 2*scale} width={3*scale} height={10*scale} rx={1.5*scale} fill="#222530" />
+      <ellipse cx={0} cy={h/2 + 4} rx={w * 0.48} ry={5} fill="black" opacity={0.14}/>
+      <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#14151A"/>
+      <rect x={-w/2 + 3} y={-h/2 + 7} width={w - 6} height={h - 14} rx={r - 2} fill={`url(#ps_${uid})`}/>
+      <rect x={-w * 0.22} y={-h/2 + 10} width={w * 0.44} height={h * 0.07} rx={h * 0.035} fill="#0A0A0C"/>
+      <rect x={-w * 0.25} y={h/2 - 12} width={w * 0.5} height={4} rx={2} fill="#222530"/>
+      <rect x={w/2} y={-h * 0.15} width={4} height={h * 0.22} rx={2} fill="#1E2028"/>
+      <rect x={-w/2 - 4} y={-h * 0.18} width={4} height={h * 0.14} rx={2} fill="#1E2028"/>
+      <rect x={-w/2 - 4} y={h * 0.02} width={4} height={h * 0.14} rx={2} fill="#1E2028"/>
       <defs>
-        <linearGradient id={gid} x1="0%" y1="0%" x2="60%" y2="100%">
-          <stop offset="0%" stopColor="#1E3A7A" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#060B1A" stopOpacity="0.95" />
+        <linearGradient id={`ps_${uid}`} x1="0%" y1="0%" x2="80%" y2="100%">
+          <stop offset="0%"   stopColor="#1840A0" stopOpacity="0.85"/>
+          <stop offset="100%" stopColor="#050A1A" stopOpacity="0.97"/>
         </linearGradient>
       </defs>
     </g>
   )
 }
 
-function DeviceIPad({ cx, cy, scale, id = '' }) {
-  const w = 80 * scale, h = 108 * scale, r = 8 * scale
-  const gid = `ipg_${id}`
+function IPadSVG({ w, h, uid }) {
+  const r = w * 0.1
   return (
     <g>
-      <ellipse cx={cx} cy={cy + h/2 + 4*scale} rx={w*0.5} ry={5*scale} fill="black" opacity={0.12} />
-      {/* Body */}
-      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={r} fill="#1C1F28" />
-      {/* Screen */}
-      <rect x={cx - w/2 + 5*scale} y={cy - h/2 + 8*scale} width={w - 10*scale} height={h - 16*scale} rx={r - 3*scale} fill={`url(#${gid})`} />
-      {/* FaceID bar */}
-      <rect x={cx - 12*scale} y={cy - h/2 + 4*scale} width={24*scale} height={3*scale} rx={1.5*scale} fill="#0D0E12" />
-      {/* Home bar bottom */}
-      <rect x={cx - 14*scale} y={cy + h/2 - 8*scale} width={28*scale} height={3*scale} rx={1.5*scale} fill="#2A2D35" />
-      {/* Side button */}
-      <rect x={cx + w/2} y={cy - 18*scale} width={3*scale} height={22*scale} rx={1.5*scale} fill="#222530" />
-      {/* Content UI */}
-      <rect x={cx - w/2 + 12*scale} y={cy - h/2 + 20*scale} width={w - 24*scale} height={2*scale} rx={1*scale} fill="white" opacity={0.12} />
-      <rect x={cx - w/2 + 12*scale} y={cy - h/2 + 25*scale} width={(w - 24*scale) * 0.7} height={2*scale} rx={1*scale} fill="white" opacity={0.08} />
+      <ellipse cx={0} cy={h/2 + 5} rx={w * 0.5} ry={6} fill="black" opacity={0.12}/>
+      <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#18191F"/>
+      <rect x={-w/2 + 6} y={-h/2 + 9} width={w - 12} height={h - 18} rx={r - 3} fill={`url(#is_${uid})`}/>
+      <rect x={-w * 0.18} y={-h/2 + 5} width={w * 0.36} height={3.5} rx={1.75} fill="#0C0D10"/>
+      <rect x={-w * 0.22} y={h/2 - 10} width={w * 0.44} height={4} rx={2} fill="#222530"/>
+      <rect x={w/2} y={-h * 0.1} width={3.5} height={h * 0.26} rx={1.75} fill="#1C1E26"/>
+      <rect x={-w/2 + 12} y={-h/2 + 18} width={w * 0.4} height={3} rx={1.5} fill="white" opacity={0.12}/>
+      <rect x={-w/2 + 12} y={-h/2 + 24} width={w * 0.28} height={2.5} rx={1.2} fill="white" opacity={0.08}/>
       <defs>
-        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#1F3A8F" stopOpacity="0.75" />
-          <stop offset="100%" stopColor="#060C1E" stopOpacity="0.92" />
+        <linearGradient id={`is_${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stopColor="#1E3A9A" stopOpacity="0.78"/>
+          <stop offset="100%" stopColor="#050A1C" stopOpacity="0.95"/>
         </linearGradient>
       </defs>
     </g>
   )
 }
 
-function DeviceCamera({ cx, cy, scale, id = '' }) {
-  const bw = 72 * scale, bh = 44 * scale, r = 6 * scale
-  const gid = `cg_${id}`
+function CameraSVG({ w, h, uid }) {
+  const bh = h * 0.72, br = 6
   return (
     <g>
-      <ellipse cx={cx} cy={cy + bh/2 + 3*scale} rx={bw*0.48} ry={4*scale} fill="black" opacity={0.12} />
-      {/* Body */}
-      <rect x={cx - bw/2} y={cy - bh/2} width={bw} height={bh} rx={r} fill="#222530" />
-      {/* Grip texture left */}
-      <rect x={cx - bw/2} y={cy - bh/2} width={12*scale} height={bh} rx={r} fill="#1A1D24" />
-      {/* Shutter bump top */}
-      <rect x={cx - 10*scale} y={cy - bh/2 - 8*scale} width={22*scale} height={10*scale} rx={4*scale} fill="#1E2130" />
-      {/* Lens outer ring */}
-      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={17*scale} fill="#111318" />
-      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={15*scale} fill="#0C0F14" stroke="#2A2D35" strokeWidth={1.5*scale} />
-      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={11*scale} fill={`url(#${gid})`} />
-      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={6*scale} fill="#070A10" />
-      {/* Lens reflection */}
-      <ellipse cx={cx + 1*scale} cy={cy - 3*scale} rx={4*scale} ry={2*scale} fill="white" opacity={0.18} transform={`rotate(-35, ${cx + 1*scale}, ${cy - 3*scale})`} />
-      {/* Flash */}
-      <rect x={cx - bw/2 + 16*scale} y={cy - 8*scale} width={10*scale} height={7*scale} rx={2*scale} fill="#FFD060" opacity={0.75} />
-      <rect x={cx - bw/2 + 16*scale} y={cy - 8*scale} width={10*scale} height={7*scale} rx={2*scale} fill="white" opacity={0.1} />
-      {/* Mode dial top */}
-      <circle cx={cx - bw/2 + 26*scale} cy={cy - bh/2 - 3*scale} r={7*scale} fill="#2C303C" />
-      <circle cx={cx - bw/2 + 26*scale} cy={cy - bh/2 - 3*scale} r={4*scale} fill="#383C48" />
-      {/* Top shutter button */}
-      <circle cx={cx - 10*scale} cy={cy - bh/2 - 3*scale} r={5*scale} fill="#383C48" />
-      <circle cx={cx - 10*scale} cy={cy - bh/2 - 3*scale} r={3*scale} fill="#2C3040" />
+      <ellipse cx={0} cy={bh/2 + 5} rx={w * 0.5} ry={5} fill="black" opacity={0.13}/>
+      <rect x={-w/2} y={-bh/2} width={w} height={bh} rx={br} fill="#1E2130"/>
+      <rect x={-w/2} y={-bh/2} width={w * 0.2} height={bh} rx={br} fill="#181A22"/>
+      <rect x={-w * 0.18} y={-bh/2 - h * 0.2} width={w * 0.38} height={h * 0.22} rx={5} fill="#181A24"/>
+      <circle cx={w * 0.08} cy={bh * 0.04} r={bh * 0.4} fill="#0E1018" stroke="#2A2D3A" strokeWidth={2}/>
+      <circle cx={w * 0.08} cy={bh * 0.04} r={bh * 0.31} fill="#080A12" stroke="#1C1F2A" strokeWidth={1.5}/>
+      <circle cx={w * 0.08} cy={bh * 0.04} r={bh * 0.19} fill={`url(#cs_${uid})`}/>
+      <circle cx={w * 0.08} cy={bh * 0.04} r={bh * 0.08} fill="#040608"/>
+      <ellipse cx={w * 0.02} cy={bh * -0.06} rx={bh * 0.08} ry={bh * 0.045} fill="white" opacity={0.22} transform={`rotate(-40,${w*0.02},${bh*-0.06})`}/>
+      <rect x={-w * 0.32} y={-bh * 0.22} width={w * 0.18} height={bh * 0.17} rx={3} fill="#F0C040" opacity={0.78}/>
+      <circle cx={-w * 0.28} cy={-bh * 0.32} r={bh * 0.17} fill="#252838"/>
+      <circle cx={-w * 0.28} cy={-bh * 0.32} r={bh * 0.1} fill="#2E3245"/>
+      <circle cx={-w * 0.08} cy={-bh * 0.32} r={bh * 0.13} fill="#202335"/>
+      <circle cx={-w * 0.08} cy={-bh * 0.32} r={bh * 0.07} fill="#181A28"/>
       <defs>
-        <radialGradient id={gid} cx="40%" cy="35%" r="60%">
-          <stop offset="0%" stopColor="#1E3560" />
-          <stop offset="60%" stopColor="#0E1830" />
-          <stop offset="100%" stopColor="#050810" />
+        <radialGradient id={`cs_${uid}`} cx="38%" cy="34%" r="62%">
+          <stop offset="0%"   stopColor="#1E3A6A"/>
+          <stop offset="60%"  stopColor="#0E1A38"/>
+          <stop offset="100%" stopColor="#040810"/>
         </radialGradient>
       </defs>
     </g>
   )
 }
 
-const DEVICE_RENDERERS = {
-  monitor: DeviceMonitor,
-  laptop:  DeviceLaptop,
-  phone:   DevicePhone,
-  ipad:    DeviceIPad,
-  camera:  DeviceCamera,
+const RENDERERS = { monitor: MonitorSVG, laptop: LaptopSVG, phone: PhoneSVG, ipad: IPadSVG, camera: CameraSVG }
+
+// Native dimensions (w x h) for each device type
+const DEVICE_DIMS = {
+  monitor: { w: 130, h: 110 },
+  laptop:  { w: 130, h: 95  },
+  phone:   { w: 44,  h: 88  },
+  ipad:    { w: 82,  h: 110 },
+  camera:  { w: 84,  h: 60  },
 }
 
-// ── Palette icon (small sidebar) ─────────────────────────────────────────────
-function PaletteIcon({ id, selected, onClick }) {
-  const Renderer = DEVICE_RENDERERS[id]
-  const meta = DEVICE_META.find(d => d.id === id)
-  const iconScale = id === 'monitor' ? 0.22 : id === 'laptop' ? 0.2 : id === 'ipad' ? 0.18 : id === 'camera' ? 0.24 : 0.18
+// ── Palette button ────────────────────────────────────────────────────────────
+function PaletteBtn({ id, selected, onClick }) {
+  const R = RENDERERS[id]
+  const d = DEVICE_DIMS[id]
+  const meta = DEVICE_META.find(m => m.id === id)
+  const vScale = 0.28
+  const vw = d.w * vScale + 16, vh = d.h * vScale + 16
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-        padding: '10px 6px',
-        background: selected ? '#1a2e4a0f' : '#f8fafc',
-        border: `2px solid ${selected ? '#1a2e4a' : '#e2e8f0'}`,
-        borderRadius: 14,
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        transition: 'all 0.15s',
-        minWidth: 70,
-      }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = '#94a3b8' }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = '#e2e8f0' }}
-    >
-      <svg width={56} height={46} viewBox="0 0 56 46" overflow="visible">
-        <Renderer cx={28} cy={23} scale={iconScale} id={`pal_${id}`} />
+    <button onClick={onClick} style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+      padding: '10px 6px',
+      background: selected ? '#1a2e4a0d' : '#fafafa',
+      border: `2px solid ${selected ? '#1a2e4a' : '#e2e8f0'}`,
+      borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+      transition: 'all 0.14s', minWidth: 72,
+    }}>
+      <svg width={vw} height={vh} viewBox={`${-vw/2} ${-vh/2} ${vw} ${vh}`} overflow="visible">
+        <g transform={`scale(${vScale})`}>
+          <R w={d.w} h={d.h} uid={`pal_${id}`}/>
+        </g>
       </svg>
-      <span style={{
-        fontSize: 11, fontWeight: 600, letterSpacing: '0.02em',
-        color: selected ? '#1a2e4a' : '#64748b',
-      }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: selected ? '#1a2e4a' : '#64748b', letterSpacing: '0.02em' }}>
         {meta?.label}
       </span>
     </button>
   )
 }
 
-// ── Zone polygon for click ────────────────────────────────────────────────────
-function ZonePolygon({ zone, filled, selected, onClick }) {
-  const { col, row, wC, wR } = zone
-  const pts = [
-    dp(col - wC/2, row - wR/2),
-    dp(col + wC/2, row - wR/2),
-    dp(col + wC/2, row + wR/2),
-    dp(col - wC/2, row + wR/2),
-  ].join(' ')
-
+// ── Resize handle ─────────────────────────────────────────────────────────────
+function ResizeHandle({ x, y, onPointerDown }) {
   return (
-    <polygon
-      points={pts}
-      fill={selected ? 'rgba(26,46,74,0.1)' : filled ? 'transparent' : 'rgba(0,0,0,0)'}
-      stroke={selected ? '#1a2e4a' : filled ? 'transparent' : '#94a3b840'}
-      strokeWidth={selected ? 2 : 1}
-      strokeDasharray={selected ? 'none' : '4,3'}
-      style={{ cursor: 'pointer' }}
-      onClick={onClick}
-    />
+    <g style={{ cursor: 'nwse-resize' }} onPointerDown={onPointerDown}>
+      <rect x={x - 8} y={y - 8} width={16} height={16} fill="transparent"/>
+      <rect x={x - 5} y={y - 5} width={10} height={10} rx={2}
+        fill="white" stroke="#1a2e4a" strokeWidth={1.5} opacity={0.9}/>
+    </g>
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 export default function IsometricWorkspace({ devices, setDevices, onContinue }) {
-  const [selectedDevice, setSelectedDevice] = useState(null)
+  const [selectedDevice, setSelectedDevice] = useState(null) // type to add
+  const [activeId,       setActiveId]       = useState(null) // selected placed device id
+  const svgRef  = useRef(null)
+  const dragRef = useRef(null) // { id, mode: 'move'|'resize', startSX, startSY, startCol, startRow, startScale }
 
-  const zoneMap = {}
-  devices.forEach(d => { zoneMap[d.position] = d.type })
-
-  const handleZoneClick = (zoneId) => {
-    if (!selectedDevice) {
-      if (zoneMap[zoneId]) {
-        setDevices(prev => prev.filter(d => d.position !== zoneId))
-      }
-      return
+  // Convert a PointerEvent to SVG coordinates
+  const eventToSVG = useCallback((e) => {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const rect = svg.getBoundingClientRect()
+    const scaleX = SVG_W / rect.width
+    const scaleY = SVG_H / rect.height
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
     }
-    setDevices(prev => {
-      const filtered = prev.filter(d => d.position !== zoneId)
-      return [...filtered, { position: zoneId, type: selectedDevice }]
-    })
+  }, [])
+
+  // Check if SVG point is inside desk trapezoid
+  function insideDesk(sx, sy) {
+    const { col, row } = svgToDeskCoords(sx, sy)
+    return col >= 0 && col <= 1 && row >= 0 && row <= 1
   }
 
-  const handleDeviceSelect = (id) => {
-    setSelectedDevice(prev => prev === id ? null : id)
+  // Click on desk surface → place device
+  const handleSVGClick = useCallback((e) => {
+    if (dragRef.current?.moved) return // was a drag, not a click
+    if (!selectedDevice) return
+    const { x, y } = eventToSVG(e)
+    if (!insideDesk(x, y)) return
+    const { col, row } = svgToDeskCoords(x, y)
+    const id = `${selectedDevice}_${Date.now()}`
+    setDevices(prev => [...prev, { id, type: selectedDevice, col, row, scale: 1 }])
+  }, [selectedDevice, eventToSVG, setDevices])
+
+  // Pointer down on a device → start drag/resize
+  const handleDevicePointerDown = useCallback((e, deviceId, mode) => {
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const { x, y } = eventToSVG(e)
+    const dev = devices.find(d => d.id === deviceId)
+    if (!dev) return
+    dragRef.current = {
+      id: deviceId, mode,
+      startSX: x, startSY: y,
+      startCol: dev.col, startRow: dev.row,
+      startScale: dev.scale,
+      moved: false,
+    }
+    setActiveId(deviceId)
+    setSelectedDevice(null)
+    e.preventDefault()
+  }, [devices, eventToSVG])
+
+  // Pointer move → update position or scale
+  const handlePointerMove = useCallback((e) => {
+    const dr = dragRef.current
+    if (!dr) return
+    const { x, y } = eventToSVG(e)
+    const dx = x - dr.startSX, dy = y - dr.startSY
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dr.moved = true
+    if (!dr.moved) return
+
+    if (dr.mode === 'move') {
+      const { col, row } = svgToDeskCoords(x, y)
+      setDevices(prev => prev.map(d => d.id === dr.id ? { ...d, col: Math.max(0.04, Math.min(0.96, col)), row: Math.max(0.04, Math.min(0.96, row)) } : d))
+    } else if (dr.mode === 'resize') {
+      // dy upward (negative) = bigger; dy downward = smaller
+      const factor = 1 - dy * 0.004
+      const newScale = Math.max(0.4, Math.min(2.4, dr.startScale * factor))
+      setDevices(prev => prev.map(d => d.id === dr.id ? { ...d, scale: newScale } : d))
+    }
+  }, [eventToSVG, setDevices])
+
+  const handlePointerUp = useCallback(() => {
+    dragRef.current = null
+  }, [])
+
+  const removeDevice = (id) => {
+    setDevices(prev => prev.filter(d => d.id !== id))
+    if (activeId === id) setActiveId(null)
   }
+
+  // Sort devices by row so far devices render first (behind near ones)
+  const sortedDevices = [...devices].sort((a, b) => b.row - a.row)
 
   const hasDevices = devices.length > 0
-  const selectedMeta = DEVICE_META.find(d => d.id === selectedDevice)
 
   return (
     <div style={{
-      minHeight: '100vh',
-      display: 'flex', flexDirection: 'column',
-      background: '#F7F6F2',
-      fontFamily: 'inherit',
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      background: '#F7F6F2', fontFamily: 'inherit', userSelect: 'none',
     }}>
-      {/* Top bar */}
+      {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '24px 32px 16px',
-        borderBottom: '1px solid #E8E4DC',
-        background: '#FAFAF8',
+        padding: '22px 28px 14px',
+        background: '#FAFAF8', borderBottom: '1px solid #E8E4DC',
       }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.022em', margin: 0 }}>
@@ -362,175 +336,164 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
           </h1>
           <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>
             {selectedDevice
-              ? `Click a spot on the desk to place your ${selectedMeta?.label}`
-              : 'Select a device from the list, then click the desk to place it'}
+              ? `Click anywhere on the desk to place your ${DEVICE_META.find(d=>d.id===selectedDevice)?.label} — then drag & resize it`
+              : 'Select a device → click desk to place · drag to move · corner handle to resize'}
           </p>
         </div>
-        <button
-          onClick={onContinue}
-          style={{
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {activeId && (
+            <button onClick={() => removeDevice(activeId)} style={{
+              padding: '8px 18px', fontSize: 13, fontWeight: 600,
+              background: '#fee2e2', color: '#dc2626',
+              border: '1.5px solid #fca5a5', borderRadius: 10,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>Remove</button>
+          )}
+          <button onClick={onContinue} style={{
             padding: '10px 26px', fontSize: 14, fontWeight: 700,
             background: '#1a2e4a', color: '#fff',
-            border: 'none', borderRadius: 12,
-            cursor: 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 2px 8px #1a2e4a30',
-          }}
-        >
-          {hasDevices ? 'Save & Continue' : 'Skip →'}
-        </button>
+            border: 'none', borderRadius: 12, cursor: 'pointer',
+            fontFamily: 'inherit', boxShadow: '0 2px 8px #1a2e4a30',
+          }}>
+            {hasDevices ? 'Save & Continue' : 'Skip →'}
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {/* Body */}
+      <div style={{ display: 'flex', flex: 1 }}>
 
-        {/* Desk scene */}
+        {/* SVG scene */}
         <div style={{
-          flex: 1,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '24px 0 32px',
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '20px 8px 28px',
         }}>
           <svg
-            width={W} height={H + 30}
-            viewBox={`0 0 ${W} ${H + 30}`}
-            style={{ overflow: 'visible', maxWidth: '100%' }}
+            ref={svgRef}
+            width={SVG_W} height={SVG_H}
+            viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+            style={{ overflow: 'visible', maxWidth: '100%', cursor: selectedDevice ? 'crosshair' : 'default' }}
+            onClick={handleSVGClick}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
           >
             <defs>
-              {/* Desk wood grain gradient */}
-              <linearGradient id="deskTop" x1="20%" y1="0%" x2="80%" y2="100%">
-                <stop offset="0%"   stopColor="#E8E0CE" />
-                <stop offset="40%"  stopColor="#DDD4BC" />
-                <stop offset="70%"  stopColor="#D4C8AA" />
-                <stop offset="100%" stopColor="#C8BAA0" />
+              <linearGradient id="deskSurface" x1="20%" y1="0%" x2="80%" y2="100%">
+                <stop offset="0%"   stopColor="#EDE5D0"/>
+                <stop offset="35%"  stopColor="#E0D4BB"/>
+                <stop offset="70%"  stopColor="#D4C4A4"/>
+                <stop offset="100%" stopColor="#C8B898"/>
               </linearGradient>
-              {/* Desk edge (near) */}
-              <linearGradient id="deskEdge" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#B8A888" />
-                <stop offset="100%" stopColor="#A09070" />
+              <linearGradient id="deskFrontEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%"   stopColor="#B0A080"/>
+                <stop offset="100%" stopColor="#8C7A60"/>
               </linearGradient>
-              {/* Floor */}
-              <linearGradient id="floorGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#DEDACE" />
-                <stop offset="100%" stopColor="#C8C4B8" />
+              <linearGradient id="floorGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+                <stop offset="0%"   stopColor="#D8D2C4"/>
+                <stop offset="100%" stopColor="#C0B8A8"/>
               </linearGradient>
-              {/* Vignette on desk */}
-              <radialGradient id="deskVignette" cx="50%" cy="60%" r="60%">
-                <stop offset="0%" stopColor="transparent" />
-                <stop offset="100%" stopColor="rgba(0,0,0,0.06)" />
+              <radialGradient id="deskVig" cx="50%" cy="55%" r="55%">
+                <stop offset="0%"   stopColor="transparent"/>
+                <stop offset="100%" stopColor="rgba(0,0,0,0.07)"/>
               </radialGradient>
-              {/* Subtle wood grain lines */}
-              <pattern id="grain" x="0" y="0" width="40" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-5)">
-                <rect width="40" height="8" fill="none"/>
-                <line x1="0" y1="2" x2="40" y2="2" stroke="rgba(100,80,40,0.04)" strokeWidth="1"/>
-                <line x1="0" y1="5" x2="40" y2="5" stroke="rgba(100,80,40,0.03)" strokeWidth="0.5"/>
+              <pattern id="woodGrain" x="0" y="0" width="60" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-3)">
+                <line x1="0" y1="3"  x2="60" y2="3"  stroke="rgba(80,55,20,0.04)" strokeWidth="1.2"/>
+                <line x1="0" y1="7"  x2="60" y2="7"  stroke="rgba(80,55,20,0.025)" strokeWidth="0.7"/>
+                <line x1="0" y1="10" x2="60" y2="10" stroke="rgba(80,55,20,0.02)" strokeWidth="0.5"/>
               </pattern>
+              <filter id="deviceShadow">
+                <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#00000020"/>
+              </filter>
             </defs>
 
             {/* Floor */}
-            <rect x={0} y={DESK_NEAR_Y + 18} width={W} height={60} fill="url(#floorGrad)" />
+            <rect x={0} y={NEAR_Y + 14} width={SVG_W} height={80} fill="url(#floorGrad)"/>
+            {/* Floor/desk seam shadow */}
+            <rect x={NEAR_L - 20} y={NEAR_Y + 12} width={NEAR_R - NEAR_L + 40} height={8} fill="black" opacity={0.05} style={{filter:'blur(4px)'}}/>
 
-            {/* Desk legs */}
+            {/* Desk legs (near visible, far dimmed) */}
             {[
-              [DESK_NEAR_L + 20, DESK_NEAR_Y + 4],
-              [DESK_NEAR_R - 20, DESK_NEAR_Y + 4],
-              [DESK_FAR_L + 12, DESK_FAR_Y + 14],
-              [DESK_FAR_R - 12, DESK_FAR_Y + 14],
-            ].map(([lx, ly], i) => (
-              <g key={i}>
-                <rect
-                  x={lx - 7} y={ly}
-                  width={14} height={DESK_NEAR_Y + 20 - ly}
-                  rx={3}
-                  fill={i < 2 ? '#2C2C2C' : '#252525'}
-                  opacity={i >= 2 ? 0.55 : 1}
-                />
-                {/* Leg cap */}
-                <rect x={lx - 9} y={DESK_NEAR_Y + 16} width={18} height={6} rx={2} fill="#1A1A1A" opacity={i < 2 ? 1 : 0} />
+              { x: NEAR_L + 24,       y: NEAR_Y,     h: 56, opacity: 1   },
+              { x: NEAR_R - 24 - 14,  y: NEAR_Y,     h: 56, opacity: 1   },
+              { x: FAR_L + 14,        y: FAR_Y + 10, h: 26, opacity: 0.4 },
+              { x: FAR_R - 14 - 10,   y: FAR_Y + 10, h: 26, opacity: 0.4 },
+            ].map((leg, i) => (
+              <g key={i} opacity={leg.opacity}>
+                <rect x={leg.x} y={leg.y} width={14} height={leg.h + 8} rx={3}
+                  fill={i < 2 ? '#282828' : '#202020'}/>
+                {i < 2 && <rect x={leg.x - 4} y={leg.y + leg.h + 4} width={22} height={8} rx={2} fill="#181818"/>}
               </g>
             ))}
 
-            {/* Desk surface — trapezoid */}
+            {/* Desk surface */}
             <polygon
-              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
-              fill="url(#deskTop)"
+              points={`${FAR_L},${FAR_Y} ${FAR_R},${FAR_Y} ${NEAR_R},${NEAR_Y} ${NEAR_L},${NEAR_Y}`}
+              fill="url(#deskSurface)"
             />
-            {/* Wood grain */}
             <polygon
-              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
-              fill="url(#grain)" opacity={0.8}
+              points={`${FAR_L},${FAR_Y} ${FAR_R},${FAR_Y} ${NEAR_R},${NEAR_Y} ${NEAR_L},${NEAR_Y}`}
+              fill="url(#woodGrain)" opacity={0.9}
             />
-            {/* Vignette */}
             <polygon
-              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
-              fill="url(#deskVignette)"
+              points={`${FAR_L},${FAR_Y} ${FAR_R},${FAR_Y} ${NEAR_R},${NEAR_Y} ${NEAR_L},${NEAR_Y}`}
+              fill="url(#deskVig)"
             />
+            {/* Front edge */}
+            <polygon
+              points={`${NEAR_L},${NEAR_Y} ${NEAR_R},${NEAR_Y} ${NEAR_R + 10},${NEAR_Y + 16} ${NEAR_L - 10},${NEAR_Y + 16}`}
+              fill="url(#deskFrontEdge)"
+            />
+            <line x1={NEAR_L} y1={NEAR_Y} x2={NEAR_R} y2={NEAR_Y} stroke="white" strokeWidth={1.5} opacity={0.28}/>
+            <line x1={FAR_L}  y1={FAR_Y}  x2={FAR_R}  y2={FAR_Y}  stroke="white" strokeWidth={0.8} opacity={0.12}/>
 
-            {/* Front edge of desk (thickness) */}
-            <polygon
-              points={`${DESK_NEAR_L},${DESK_NEAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_R + 8},${DESK_NEAR_Y + 18} ${DESK_NEAR_L - 8},${DESK_NEAR_Y + 18}`}
-              fill="url(#deskEdge)"
-            />
-            {/* Edge highlight */}
-            <line x1={DESK_NEAR_L} y1={DESK_NEAR_Y} x2={DESK_NEAR_R} y2={DESK_NEAR_Y} stroke="white" strokeWidth={1.5} opacity={0.3} />
-            {/* Far edge */}
-            <line x1={DESK_FAR_L} y1={DESK_FAR_Y} x2={DESK_FAR_R} y2={DESK_FAR_Y} stroke="white" strokeWidth={0.8} opacity={0.15} />
-
-            {/* Zone click areas */}
-            {ZONES.map(zone => (
-              <ZonePolygon
-                key={zone.id}
-                zone={zone}
-                filled={!!zoneMap[zone.id]}
-                selected={selectedDevice !== null}
-                onClick={() => handleZoneClick(zone.id)}
-              />
-            ))}
-
-            {/* Zone labels (empty zones) */}
-            {ZONES.map(zone => {
-              if (zoneMap[zone.id]) return null
-              const sx = deskX(zone.col, zone.row)
-              const sy = deskY(zone.row)
+            {/* Placed devices — sorted far→near so near devices render on top */}
+            {sortedDevices.map(dev => {
+              const { x, y } = deskToSVG(dev.col, dev.row)
+              const ds = depthScale(dev.row) * dev.scale
+              const R  = RENDERERS[dev.type]
+              const d  = DEVICE_DIMS[dev.type]
+              const dw = d.w * ds, dh = d.h * ds
+              const isActive = activeId === dev.id
+              const handleX = dw / 2 + 2, handleY = dh / 2 + 2
               return (
-                <text
-                  key={`lbl_${zone.id}`}
-                  x={sx} y={sy}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fontSize={10 + (1 - zone.row) * 3}
-                  fontWeight="700"
-                  fill={selectedDevice ? '#1a2e4a70' : '#a0a8b4'}
-                  style={{ pointerEvents: 'none', userSelect: 'none', letterSpacing: '0.06em', textTransform: 'uppercase' }}
-                  onClick={() => handleZoneClick(zone.id)}
+                <g
+                  key={dev.id}
+                  transform={`translate(${x}, ${y})`}
+                  filter="url(#deviceShadow)"
+                  style={{ cursor: 'grab' }}
+                  onPointerDown={e => handleDevicePointerDown(e, dev.id, 'move')}
                 >
-                  {zone.label}
-                </text>
-              )
-            })}
-
-            {/* Placed devices */}
-            {ZONES.map(zone => {
-              const deviceId = zoneMap[zone.id]
-              if (!deviceId) return null
-              const Renderer = DEVICE_RENDERERS[deviceId]
-              if (!Renderer) return null
-              const scale = depthScale(1 - zone.row) // row=0 near → scale=1
-              const sx = deskX(zone.col, zone.row)
-              const sy = deskY(zone.row)
-              return (
-                <g key={zone.id} style={{ cursor: 'pointer' }} onClick={() => {
-                  setDevices(prev => prev.filter(d => d.position !== zone.id))
-                }}>
-                  <Renderer cx={sx} cy={sy} scale={scale} id={zone.id} />
-                  {/* Remove hint on hover - invisible large hit area */}
-                  <circle cx={sx} cy={sy} r={40 * scale} fill="transparent" />
+                  <g transform={`scale(${ds})`}>
+                    <R w={d.w} h={d.h} uid={dev.id}/>
+                  </g>
+                  {/* Selection ring */}
+                  {isActive && (
+                    <rect
+                      x={-dw/2 - 5} y={-dh/2 - 5}
+                      width={dw + 10} height={dh + 10}
+                      rx={8} fill="none"
+                      stroke="#1a2e4a" strokeWidth={1.5}
+                      strokeDasharray="5,3" opacity={0.7}
+                    />
+                  )}
+                  {/* Resize handle */}
+                  {isActive && (
+                    <ResizeHandle
+                      x={handleX} y={handleY}
+                      onPointerDown={e => handleDevicePointerDown(e, dev.id, 'resize')}
+                    />
+                  )}
                 </g>
               )
             })}
 
-            {/* "You are here" indicator at bottom */}
-            <g transform={`translate(${W/2}, ${H + 10})`}>
-              <rect x={-36} y={-10} width={72} height={20} rx={10} fill="#1a2e4a15" />
-              <text textAnchor="middle" dominantBaseline="middle" fontSize={10} fontWeight="700"
-                fill="#1a2e4a80" letterSpacing="0.08em">
+            {/* "You" indicator */}
+            <g transform={`translate(${SVG_W / 2}, ${SVG_H - 14})`}>
+              <rect x={-44} y={-11} width={88} height={22} rx={11} fill="#1a2e4a18"/>
+              <text textAnchor="middle" dominantBaseline="middle"
+                fontSize={9.5} fontWeight="800" fill="#1a2e4a70"
+                letterSpacing="0.1em">
                 ↑ YOU ARE HERE
               </text>
             </g>
@@ -539,69 +502,55 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
 
         {/* Sidebar */}
         <div style={{
-          width: 192,
-          display: 'flex', flexDirection: 'column', gap: 6,
-          padding: '20px 16px',
-          background: '#FAFAF8',
-          borderLeft: '1px solid #E8E4DC',
+          width: 186, display: 'flex', flexDirection: 'column', gap: 6,
+          padding: '18px 14px',
+          background: '#FAFAF8', borderLeft: '1px solid #E8E4DC',
           overflowY: 'auto',
         }}>
-          <p style={{
-            fontSize: 10, fontWeight: 800, color: '#94a3b8',
-            textTransform: 'uppercase', letterSpacing: '0.1em',
-            margin: '0 0 6px',
-          }}>
-            Devices
+          <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 4px' }}>
+            Add Devices
           </p>
-
           {DEVICE_META.map(d => (
-            <PaletteIcon
-              key={d.id}
-              id={d.id}
+            <PaletteBtn
+              key={d.id} id={d.id}
               selected={selectedDevice === d.id}
-              onClick={() => handleDeviceSelect(d.id)}
+              onClick={() => { setSelectedDevice(prev => prev === d.id ? null : d.id); setActiveId(null) }}
             />
           ))}
 
-          {/* Placed list */}
           {hasDevices && (
-            <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
-              <p style={{
-                fontSize: 10, fontWeight: 800, color: '#94a3b8',
-                textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 8px',
-              }}>Placed</p>
-              {devices.map((d, i) => {
+            <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 6px' }}>Placed</p>
+              {devices.map(d => {
                 const meta = DEVICE_META.find(m => m.id === d.type)
-                const zone = ZONES.find(z => z.id === d.position)
                 return (
-                  <div key={i} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '3px 0', fontSize: 11,
-                  }}>
+                  <div key={d.id} onClick={() => setActiveId(d.id === activeId ? null : d.id)}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
+                      background: d.id === activeId ? '#1a2e4a10' : 'transparent',
+                      fontSize: 11,
+                    }}>
                     <span style={{ fontWeight: 600, color: '#374151' }}>{meta?.label}</span>
-                    <span style={{ color: '#94a3b8', fontSize: 10 }}>{zone?.label}</span>
+                    <span style={{ color: '#94a3b8', fontSize: 10 }}>{Math.round(d.scale * 100)}%</span>
                   </div>
                 )
               })}
-              <button
-                onClick={() => setDevices([])}
+              <button onClick={() => { setDevices([]); setActiveId(null) }}
                 style={{
                   marginTop: 8, width: '100%', padding: '6px',
                   fontSize: 11, color: '#94a3b8',
                   background: 'none', border: '1px solid #e2e8f0',
                   borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
+                }}>
                 Clear all
               </button>
             </div>
           )}
-
-          {/* Hint */}
-          <p style={{
-            fontSize: 10, color: '#b0bac8', marginTop: 8, lineHeight: 1.5, textAlign: 'center',
-          }}>
-            Click a placed device to remove it
+          <p style={{ fontSize: 10, color: '#b0bac8', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>
+            Drag to move<br/>
+            Corner handle to resize<br/>
+            Click to select · Remove button to delete
           </p>
         </div>
       </div>

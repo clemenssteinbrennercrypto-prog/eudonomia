@@ -62,25 +62,27 @@ const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
 // back-left / mid-left → left,  back-right / mid-right → right
 // back-* → far / behind (above in angular terms)
 // front → below/close
-const LEFT_ZONES  = new Set(['back-left', 'mid-left'])
-const RIGHT_ZONES = new Set(['back-right', 'mid-right'])
-const FAR_ZONES   = new Set(['back-left', 'back-center', 'back-right'])
-const CLOSE_ZONES = new Set(['front'])
-
+// devices now have {type, col, row} from IsometricWorkspace
+// col: 0=left, 1=right   row: 0=near/front, 1=far/back
 function computeThresholds(devices = []) {
   let yawLeft = 30, yawRight = 30, pitchDown = 20, pitchUp = 15
   let ignoreBelowPhone = false
 
   for (const d of devices) {
     const isScreen = SCREEN_DEVICES.has(d.type)
-    const pos = d.position
+    const col = d.col ?? 0.5
+    const row = d.row ?? 0.5
 
-    if (isScreen && LEFT_ZONES.has(pos))  yawLeft  = Math.max(yawLeft,  55)
-    if (isScreen && RIGHT_ZONES.has(pos)) yawRight = Math.max(yawRight, 55)
-    if (isScreen && FAR_ZONES.has(pos))   pitchUp  = Math.max(pitchUp,  28)
-    if (isScreen && CLOSE_ZONES.has(pos)) pitchDown = Math.max(pitchDown, 30)
+    // Screen on left side → looking left is ok
+    if (isScreen && col < 0.35)  yawLeft  = Math.max(yawLeft,  55)
+    if (isScreen && col > 0.65)  yawRight = Math.max(yawRight, 55)
+    // Screen far back → slight pitch up is ok
+    if (isScreen && row > 0.6)   pitchUp  = Math.max(pitchUp,  28)
+    // Screen close/front → slight pitch down is ok
+    if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 30)
 
-    if (d.type === 'phone' && CLOSE_ZONES.has(pos)) ignoreBelowPhone = true
+    // Phone in front zone → soften phone penalty
+    if (d.type === 'phone' && row < 0.3) ignoreBelowPhone = true
   }
 
   return { yawLeft, yawRight, pitchDown, pitchUp, ignoreBelowPhone }

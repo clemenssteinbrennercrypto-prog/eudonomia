@@ -8,8 +8,11 @@ import { saveSession } from './lib/storage'
 
 // ── Persist helpers ───────────────────────────────────────────────────────────
 function loadDevices() {
-  try { return JSON.parse(localStorage.getItem('eudaimonia_devices') || '[]') }
-  catch { return [] }
+  try {
+    const raw = JSON.parse(localStorage.getItem('eudaimonia_devices') || '[]')
+    // Migrate: discard old format entries that have `position` string instead of col/row
+    return raw.filter(d => typeof d.col === 'number' && typeof d.row === 'number')
+  } catch { return [] }
 }
 function saveDevices(devices) {
   try { localStorage.setItem('eudaimonia_devices', JSON.stringify(devices)) }
