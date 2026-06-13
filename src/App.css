@@ -454,7 +454,15 @@ body {
 }
 
 /* ── Mobile responsive (max-width: 600px) ─────────────────────────────────── */
+.history-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
 @media (max-width: 600px) {
+  .history-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 
   /* Home */
   .home-content {

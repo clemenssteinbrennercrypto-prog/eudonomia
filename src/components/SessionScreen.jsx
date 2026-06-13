@@ -150,7 +150,7 @@ function playAlertSound() {
 
 // ── Ambient Sound Engine ──────────────────────────────────────────────────────
 const AMBIENT_MODES = ['off', 'rain', 'white', 'brown']
-const AMBIENT_LABELS = { off: '🔇 Off', rain: '🌧 Rain', white: '〰 White', brown: '▓ Brown' }
+const AMBIENT_LABELS = { off: 'Off', rain: 'Rain', white: 'White noise', brown: 'Brown noise' }
 
 function createAmbientSource(ctx, mode) {
   const bufferSize = ctx.sampleRate * 2
@@ -350,6 +350,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const earBaselineRef      = useRef(0.28) // fallback default
   const earCalibSamplesRef  = useRef([])
 
+  // ── 3-frame deadzone refs ─────────────────────────────────────────────────
+  const headTurnLeftFramesRef  = useRef(0)
+  const headTurnRightFramesRef = useRef(0)
+  const headDownFramesRef      = useRef(0)
+
   // ── Ambient sound refs ────────────────────────────────────────────────────
   const ambientRef = useRef(null) // { source, gain }
 
@@ -518,26 +523,40 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     }
     const lookingUpMs = lookingUpStartRef.current ? now - lookingUpStartRef.current : 0
 
-    let headDownSecs = 0
+    // ── 3-frame deadzone: only start timers after 3 consecutive qualifying frames ──
     if (hasFace && pitchDeg >= pitchDT && pitchDeg < PHONE_PITCH_THRESH) {
-      if (!headDownStartRef.current) headDownStartRef.current = now
-      headDownSecs = (now - headDownStartRef.current) / 1000
+      headDownFramesRef.current += 1
     } else {
+      headDownFramesRef.current = 0
       headDownStartRef.current = null
     }
-
-    let headTurnLeftSecs = 0, headTurnRightSecs = 0
     if (hasFace && yawSigned >= yawLT) {
-      if (!headTurnLeftStartRef.current) headTurnLeftStartRef.current = now
-      headTurnLeftSecs = (now - headTurnLeftStartRef.current) / 1000
+      headTurnLeftFramesRef.current += 1
     } else {
+      headTurnLeftFramesRef.current = 0
       headTurnLeftStartRef.current = null
     }
     if (hasFace && -yawSigned >= yawRT) {
+      headTurnRightFramesRef.current += 1
+    } else {
+      headTurnRightFramesRef.current = 0
+      headTurnRightStartRef.current = null
+    }
+
+    let headDownSecs = 0
+    if (headDownFramesRef.current >= 3) {
+      if (!headDownStartRef.current) headDownStartRef.current = now
+      headDownSecs = (now - headDownStartRef.current) / 1000
+    }
+
+    let headTurnLeftSecs = 0, headTurnRightSecs = 0
+    if (headTurnLeftFramesRef.current >= 3) {
+      if (!headTurnLeftStartRef.current) headTurnLeftStartRef.current = now
+      headTurnLeftSecs = (now - headTurnLeftStartRef.current) / 1000
+    }
+    if (headTurnRightFramesRef.current >= 3) {
       if (!headTurnRightStartRef.current) headTurnRightStartRef.current = now
       headTurnRightSecs = (now - headTurnRightStartRef.current) / 1000
-    } else {
-      headTurnRightStartRef.current = null
     }
 
     const fidgetVariance = headVariance(nosePtHistRef.current)

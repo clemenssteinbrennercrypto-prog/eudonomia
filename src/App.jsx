@@ -22,11 +22,9 @@ function saveDevices(devices) {
 }
 
 export default function App() {
-  const [showLanding, setShowLanding] = useState(
-    () => localStorage.getItem('eudaimonia_onboarded') !== 'true'
-  )
-  const [onboarded, setOnboarded] = useState(
-    () => localStorage.getItem('eudaimonia_onboarded') === 'true'
+  // 'landing' → 'onboarding' → 'app'
+  const [flow, setFlow] = useState(
+    () => localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'landing'
   )
   const [screen,   setScreen]   = useState('home')
   const [task,     setTask]     = useState('')
@@ -60,15 +58,16 @@ export default function App() {
     setScreen('home')
   }
 
-  if (showLanding) {
-    return <LandingPage onEnter={() => setShowLanding(false)} />
+  if (flow === 'landing') {
+    return <LandingPage onEnter={() => setFlow('onboarding')} />
+  }
+
+  if (flow === 'onboarding') {
+    return <Onboarding onComplete={() => setFlow('app')} />
   }
 
   return (
     <>
-      {!onboarded && (
-        <Onboarding onComplete={() => setOnboarded(true)} />
-      )}
       {screen === 'home' && (
         <HomeScreen
           task={task}

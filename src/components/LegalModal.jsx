@@ -65,8 +65,11 @@ function Section({ heading, body }) {
 export default function LegalModal({ open, onClose, initialTab }) {
   const [tab, setTab] = useState(initialTab ?? 'impressum')
 
-  // Sync tab when initialTab changes (e.g. user clicks Impressum then Datenschutz)
   if (!open) return null
+  // Sync active tab whenever the modal is reopened with a different initialTab
+  if (tab !== initialTab && initialTab) {
+    setTab(initialTab)
+  }
 
   const sections = tab === 'impressum' ? IMPRESSUM : DATENSCHUTZ
 

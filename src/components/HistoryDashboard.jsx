@@ -129,12 +129,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
           borderTop: '1px solid #f1f5f9',
         }}>
           {/* Big stats */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-            gap: 16,
-            textAlign: 'center',
-          }}>
+          <div className="history-stats-grid" style={{ textAlign: 'center' }}>
             {[
               { label: 'Total time', value: fmt(session.actualSeconds) },
               { label: 'Focused', value: `${focusPct}%`, color },
@@ -228,10 +223,11 @@ function OverallStats({ sessions }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
       gap: 12,
       marginBottom: 32,
-    }}>
+    }}
+      className="history-stats-grid"
+    >
       {[
         { label: 'Total focus time',  value: fmt(stats.totalFocusTime) },
         { label: 'Avg focus %',       value: `${stats.avgFocus}%`,   color: focusColor(stats.avgFocus) },
