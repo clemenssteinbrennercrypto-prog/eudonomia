@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import IsometricWorkspace from './IsometricWorkspace'
 
 // ── Step-by-step workspace wizard ─────────────────────────────────────────────
 // Outputs devices in the same {type, col, row} format as before
@@ -113,8 +114,43 @@ function PositionPicker({ label, value, onChange }) {
   )
 }
 
-// ── Main wizard ───────────────────────────────────────────────────────────────
+// ── Root export: wizard or advanced ──────────────────────────────────────────
 export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
+  const [mode, setMode] = useState('wizard')
+
+  if (mode === 'advanced') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <IsometricWorkspace
+          devices={devices}
+          setDevices={setDevices}
+          onContinue={onContinue}
+        />
+        <button
+          onClick={() => setMode('wizard')}
+          style={{
+            position: 'fixed', top: 22, left: 24, zIndex: 999,
+            background: 'rgba(255,255,255,0.9)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid #E8E3DA',
+            borderRadius: 100, padding: '6px 16px',
+            fontSize: 12, fontWeight: 500, color: '#6B7280',
+            cursor: 'pointer',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+            transition: 'color 0.15s',
+          }}
+        >
+          ← Simple mode
+        </button>
+      </div>
+    )
+  }
+
+  return <Wizard devices={devices} setDevices={setDevices} onContinue={onContinue} onAdvanced={() => setMode('advanced')} />
+}
+
+// ── Wizard ────────────────────────────────────────────────────────────────────
+function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   // Derive initial state from existing devices if any
   const [step, setStep] = useState(1)
   const [mainScreen,      setMainScreen]      = useState(null)   // 'laptop' | 'monitor' | 'both'
@@ -188,8 +224,11 @@ export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif',
     }}>
 
-      {/* Back link */}
-      <div style={{ width: '100%', maxWidth: 460, marginBottom: 14 }}>
+      {/* Back + Advanced row */}
+      <div style={{
+        width: '100%', maxWidth: 460, marginBottom: 14,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
         <button
           onClick={handleBack}
           style={{
@@ -199,6 +238,19 @@ export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
           }}
         >
           ← Back
+        </button>
+        <button
+          onClick={onAdvanced}
+          style={{
+            background: 'none',
+            border: '1px solid #E8E3DA',
+            borderRadius: 100, padding: '5px 14px',
+            fontSize: 12, fontWeight: 500,
+            color: '#6B7280', cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Advanced mode →
         </button>
       </div>
 
