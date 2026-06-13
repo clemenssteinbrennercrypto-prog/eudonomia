@@ -44,9 +44,21 @@ const HEAD_TURN_HOLD      = 5
 const FACE_ABSENT_HOLD_MS = 4000
 const HEAD_DRIFT_WIN_MS   = 3000
 const HEAD_DRIFT_THRESH   = 0.035
-const ALERT_COOLDOWN_MS   = 60_000
-const SCORE_UPDATE_SECS   = 5
-const CALIBRATION_SECS    = 20
+const ALERT_COOLDOWN_MS      = 60_000
+const SCORE_UPDATE_SECS      = 5
+const CALIBRATION_SECS       = 20
+const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 min
+const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
+
+// ── Circadian thresholds ───────────────────────────────────────────────────────
+// Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
+// We lenient-shift PROLONGED_CLOSE_MS and ALERT delay in these windows.
+function getCircadianFactor() {
+  const h = new Date().getHours()
+  if (h >= 23 || h < 6) return 0.75   // night owl — more lenient: 75% strictness
+  if (h >= 13 && h < 15) return 0.85  // post-lunch dip — mildly lenient
+  return 1.0                           // normal hours
+}
 
 // ── Alert messages ────────────────────────────────────────────────────────────
 const ALERT_MESSAGES = {
@@ -320,6 +332,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [ambientMode,     setAmbientMode]     = useState('off')
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
+  const [inFlowState,     setInFlowState]     = useState(false)
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -365,6 +378,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   // ── Personal EAR baseline refs ───────────────────────────────────────────
   const earBaselineRef      = useRef(0.28) // fallback default
   const earCalibSamplesRef  = useRef([])
+  const lastRecalibTimeRef  = useRef(0)    // timestamp of last EAR re-calibration
+
+  // ── Flow state refs ───────────────────────────────────────────────────────
+  const flowGoodSinceRef    = useRef(null) // when flow conditions first met
+  const inFlowRef           = useRef(false)
 
   // ── 3-frame deadzone refs ─────────────────────────────────────────────────
   const headTurnLeftFramesRef  = useRef(0)
@@ -594,6 +612,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       return
     }
 
+    // ── EAR drift compensation: re-calibrate baseline every 10 min ──────────
+    // Eye muscles fatigue mid-session → EAR naturally drops ~5–8% over 30 min.
+    // Without re-calibration, a tired-but-still-focused user gets false penalties.
+    // We blend new open-eye samples (>0.20) into existing baseline at 20% weight.
+    if (hasFace && avgEar > 0.20 && (now - lastRecalibTimeRef.current) >= EAR_RECALIB_INTERVAL) {
+      earBaselineRef.current = earBaselineRef.current * 0.8 + avgEar * 0.2
+      lastRecalibTimeRef.current = now
+    }
+
     // ── Frame delta for sustained-focus ramp ────────────────────────────────
     const frameDelta = lastFrameTsRef.current ? Math.min(200, now - lastFrameTsRef.current) : 33
     lastFrameTsRef.current = now
@@ -698,12 +725,41 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setDistractReason(displayReason)
     }
 
+    // ── Flow state detection ─────────────────────────────────────────────────
+    // Conditions (science: Csikszentmihalyi 1990; fNIRS research on flow = stable gaze,
+    // low head movement, suppressed blink rate, consistent task engagement):
+    //   • Score ≥ 72 (good, not just OK)
+    //   • Low head fidget (stable gaze)
+    //   • No active distraction reason
+    //   • Maintained for FLOW_STABLE_MS (90s)
+    const flowConditions = focusScoreRef.current >= 72 &&
+      fidgetVariance <= HEAD_DRIFT_THRESH * 0.5 &&
+      primaryReason === 'focused'
+    if (flowConditions) {
+      if (!flowGoodSinceRef.current) flowGoodSinceRef.current = now
+      const flowFor = now - flowGoodSinceRef.current
+      if (flowFor >= FLOW_STABLE_MS && !inFlowRef.current) {
+        inFlowRef.current = true
+        setInFlowState(true)
+      }
+    } else {
+      flowGoodSinceRef.current = null
+      if (inFlowRef.current) {
+        inFlowRef.current = false
+        setInFlowState(false)
+      }
+    }
+
+    // ── Circadian-adjusted alert delay ────────────────────────────────────
+    const circFactor      = getCircadianFactor()
+    const adjustedAlertMs = alertDelayMs / circFactor  // lenient hours → longer delay
+
     if (focusScoreRef.current < 40) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
 
-      if (lowFor >= alertDelayMs && !overlayActiveRef.current && cooldownOk) {
+      if (lowFor >= adjustedAlertMs && !overlayActiveRef.current && cooldownOk) {
         overlayActiveRef.current   = true
         lastAlertTimeRef.current   = now
         lastAlertReasonRef.current = primaryReason
@@ -885,8 +941,26 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           isPaused={isPaused}
         />
 
+        {/* Flow state indicator */}
+        {inFlowState && !isCalibrating && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            marginTop: 8,
+            animation: 'none',
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%', background: '#a78bfa',
+              boxShadow: '0 0 0 3px #a78bfa28',
+              animation: 'flowPulse 2s ease-in-out infinite',
+            }} />
+            <span style={{ fontSize: 12, color: '#a78bfa', fontWeight: 600, letterSpacing: '0.05em' }}>
+              Flow state
+            </span>
+          </div>
+        )}
+
         {/* Streak counter */}
-        {showStreak && (
+        {showStreak && !inFlowState && (
           <p style={{
             fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>

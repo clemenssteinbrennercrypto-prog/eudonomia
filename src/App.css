@@ -324,6 +324,11 @@ body {
   50%       { opacity: 0.4; transform: scale(0.82); }
 }
 
+@keyframes flowPulse {
+  0%, 100% { box-shadow: 0 0 0 3px #a78bfa28; }
+  50%       { box-shadow: 0 0 0 6px #a78bfa14; }
+}
+
 @keyframes overlayIn {
   from {
     opacity: 0;
