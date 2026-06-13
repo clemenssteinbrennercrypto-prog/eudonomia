@@ -86,3 +86,15 @@ Overnight autonomous dev session — June 13 (22:00) → June 14 (01:00 Vienna t
 - **Setup mode persistence** — WorkspaceSetup remembers last chosen mode (simple/advanced) via `localStorage['eudaimonia_setup_mode']`; restored on next open
 - **Landing stats section** — New section between "How it works" and "Privacy": 3 privacy stats (100% local, 0 server data, Free) with large light numbers (font-weight 200, 48px)
 - **End session confirmation** — Clicking "End session" button shows inline "End session? [Yes] [Cancel]" with 3s auto-cancel timeout; Escape key still ends immediately (no confirmation)
+
+## Session Update — June 15, 2026 (Part 2)
+
+### Features Added
+- **Export CSV** — "Export CSV" button added to HistoryDashboard footer (next to "Clear all history"). Downloads `eudaimonia-sessions-YYYY-MM-DD.csv` with columns: timestamp, task, durationSeconds, focusPct, distractionEvents, longestStreakSeconds. Uses Blob + URL.createObjectURL, no library needed.
+- **Break reminder dark styling** — Banner now matches dark session bg: `#1C1F28` background, `#2A2E3A` border, `#94a3b8` text, `#6b7280` dismiss button. No longer jarring white/orange on dark screen.
+
+### Testing
+- Full user flow verified end-to-end: Landing → Onboarding → HomeScreen → History
+- Mobile 375px: hero text, CTA, feature cards all readable, no overflow
+- SessionScreen handleFaceResults useCallback deps confirmed complete (all state via refs)
+- Build: ✅ clean (41 modules, ~226KB JS, 7KB CSS)

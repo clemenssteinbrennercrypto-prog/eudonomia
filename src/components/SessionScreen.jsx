@@ -989,20 +989,20 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         <div style={{
           position: 'fixed', top: 40, left: '50%', transform: 'translateX(-50%)',
           zIndex: 20,
-          background: 'rgba(255,255,255,0.96)',
-          border: '1px solid #f97316',
+          background: '#1C1F28',
+          border: '1px solid #2A2E3A',
           borderRadius: 100,
           padding: '7px 18px 7px 16px',
           display: 'flex', alignItems: 'center', gap: 10,
-          boxShadow: '0 2px 12px rgba(249,115,22,0.15)',
-          fontSize: 13, fontWeight: 500, color: '#7c3a1c',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+          fontSize: 13, fontWeight: 500, color: '#94a3b8',
         }}>
           <span>{breakBanner.msg}</span>
           <button
             onClick={dismissBreak}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: 0,
+              color: '#6b7280', fontSize: 16, lineHeight: 1, padding: 0,
             }}
           >×</button>
         </div>

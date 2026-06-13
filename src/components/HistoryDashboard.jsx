@@ -379,6 +379,31 @@ export default function HistoryDashboard({ onClose }) {
     setConfirmClear(false)
   }
 
+  const handleExportCSV = () => {
+    const header = ['timestamp', 'task', 'durationSeconds', 'focusPct', 'distractionEvents', 'longestStreakSeconds']
+    const rows = sessions.map(s => {
+      const focusPct = s.actualSeconds > 0
+        ? Math.round((s.focusedSeconds / s.actualSeconds) * 100)
+        : 0
+      return [
+        new Date(s.timestamp).toISOString(),
+        `"${(s.task || '').replace(/"/g, '""')}"`,
+        s.actualSeconds ?? 0,
+        focusPct,
+        s.distractionEvents ?? 0,
+        s.longestFocusedStreak ?? 0,
+      ].join(',')
+    })
+    const csv = [header.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `eudaimonia-sessions-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleExpand = (id) => {
     setExpandedId((prev) => (prev === id ? null : id))
   }
@@ -493,17 +518,30 @@ export default function HistoryDashboard({ onClose }) {
 
             <div style={{ marginTop: 40, textAlign: 'center' }}>
               {!confirmClear ? (
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  style={{
-                    background: 'none', border: '1px solid #e5e7eb',
-                    color: '#9ca3af', fontSize: 13, padding: '8px 20px',
-                    borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
-                    transition: 'color 0.15s, border-color 0.15s',
-                  }}
-                >
-                  Clear all history
-                </button>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                  <button
+                    onClick={handleExportCSV}
+                    style={{
+                      background: 'none', border: '1px solid #e5e7eb',
+                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={() => setConfirmClear(true)}
+                    style={{
+                      background: 'none', border: '1px solid #e5e7eb',
+                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    Clear all history
+                  </button>
+                </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, color: '#6b7280' }}>Are you sure?</span>
