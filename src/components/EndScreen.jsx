@@ -46,6 +46,16 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
   const [goalAchieved, setGoalAchieved] = useState(null)
+  const [copied, setCopied] = useState(false)
+
+  function copySummary() {
+    const durationMin = Math.round(actualSeconds / 60)
+    const text = `Eudaimonia session: ${task || 'Focus'} — ${durationMin}min, ${focusPct}% focused, ${distractionEvents} alerts`
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <div className="screen-center">
@@ -212,6 +222,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           <button className="restart-btn" onClick={onRestart}>
             New Session
           </button>
+
           <button
             onClick={onShowHistory}
             style={{
@@ -245,6 +256,20 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             Repeat
           </button>
         </div>
+        <button
+          onClick={copySummary}
+          style={{
+            marginTop: 12,
+            background: 'none', border: 'none',
+            color: copied ? '#22c55e' : '#9ca3af',
+            fontSize: 13, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'inherit',
+            textDecoration: 'underline', textDecorationColor: 'transparent',
+            transition: 'color 0.2s',
+          }}
+        >
+          {copied ? 'Copied!' : 'Copy summary'}
+        </button>
 
       </div>
     </div>

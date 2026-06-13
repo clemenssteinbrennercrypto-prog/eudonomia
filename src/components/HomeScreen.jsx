@@ -63,6 +63,10 @@ export default function HomeScreen({
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
+  const recentTask = useMemo(() => {
+    const sessions = loadSessions()
+    return sessions[0]?.task || null
+  }, [])
 
   const handleCustomClick = () => {
     setShowCustomInput(true)
@@ -179,6 +183,18 @@ export default function HomeScreen({
               placeholder="e.g. Writing my thesis introduction"
               autoFocus
             />
+            {recentTask && recentTask !== task && (
+              <button
+                onClick={() => setTask(recentTask)}
+                style={{
+                  marginTop: 6, background: 'none', border: 'none',
+                  color: '#6b7280', fontSize: 12, cursor: 'pointer',
+                  fontFamily: 'inherit', padding: 0, textAlign: 'left',
+                }}
+              >
+                ↩ {recentTask}
+              </button>
+            )}
           </div>
 
           {/* Goal input */}

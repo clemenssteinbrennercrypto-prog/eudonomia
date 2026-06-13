@@ -187,7 +187,7 @@ function playAlertSound() {
 
 // ── Ambient Sound Engine ──────────────────────────────────────────────────────
 const AMBIENT_MODES = ['off', 'rain', 'white', 'brown']
-const AMBIENT_LABELS = { off: 'Off', rain: 'Rain', white: 'White noise', brown: 'Brown noise' }
+const AMBIENT_LABELS = { off: 'Off', rain: 'Rain', white: 'White', brown: 'Brown' }
 
 function createAmbientSource(ctx, mode) {
   const bufferSize = ctx.sampleRate * 2
@@ -1058,12 +1058,12 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         <button
           onClick={cycleAmbient}
           style={{
-            background: '#1C1F28',
+            background: ambientMode === 'off' ? '#1C1F28' : '#1C2818',
             border: `1px solid ${ambientMode === 'off' ? '#2A2E3A' : '#22c55e40'}`,
             borderRadius: 100,
-            padding: '6px 14px',
-            fontSize: 12, fontWeight: 500,
-            color: ambientMode === 'off' ? '#6B7280' : '#22c55e',
+            padding: '6px 16px',
+            fontSize: 12, fontWeight: 600,
+            color: ambientMode === 'off' ? '#6b7280' : '#22c55e',
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
@@ -1075,11 +1075,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         <video
           ref={videoRef}
           className="webcam-feed"
-          style={{ opacity: camHidden ? 0 : 1 }}
+          style={{
+            opacity: camHidden ? 0 : 1,
+            height: camHidden ? 0 : 120,
+            marginBottom: camHidden ? 0 : undefined,
+            transition: 'opacity 0.25s ease, height 0.25s ease',
+          }}
           autoPlay muted playsInline
         />
         <button className="cam-toggle" onClick={() => setCamHidden((h) => !h)}>
-          {camHidden ? 'Show camera' : 'Hide'}
+          {camHidden ? (
+            <span title="Show camera" style={{ fontSize: 14, lineHeight: 1 }}>👁</span>
+          ) : 'Hide'}
         </button>
       </div>
 
