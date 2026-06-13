@@ -34,7 +34,7 @@ function depthScale(row) {
 }
 
 // ── Device metadata ───────────────────────────────────────────────────────────
-export const DEVICE_META = [
+const DEVICE_META = [
   { id: 'monitor',  label: 'Monitor'  },
   { id: 'laptop',   label: 'Laptop'   },
   { id: 'ipad',     label: 'iPad'     },
@@ -44,8 +44,8 @@ export const DEVICE_META = [
   { id: 'mouse',    label: 'Mouse'    },
 ]
 
-export const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
-export const POSITION_LABELS = {}  // legacy compat — unused now
+const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
+const POSITION_LABELS = {}  // legacy compat — unused now
 
 // ── Device renderers ──────────────────────────────────────────────────────────
 // Each centered at (0,0), rendered at requested pixel size
