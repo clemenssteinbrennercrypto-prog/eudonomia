@@ -13,6 +13,11 @@ const SLIDES = [
     title: 'One permission needed',
     body: 'Eudaimonia needs your camera to track attention. Your video is processed locally and never stored.',
   },
+  {
+    title: 'One more thing',
+    body: 'Tell us about your workspace — where are your screens? This helps us calibrate tracking to your setup.',
+    cta: 'Set up workspace',
+  },
 ]
 
 export default function Onboarding({ onComplete }) {
@@ -37,7 +42,7 @@ export default function Onboarding({ onComplete }) {
     try {
       await navigator.mediaDevices.getUserMedia({ video: true })
       localStorage.setItem('eudaimonia_onboarded', 'true')
-      onComplete()
+      goNext()
     } catch {
       setError('Camera access is required. Please allow it in your browser settings.')
     } finally {
@@ -108,7 +113,7 @@ export default function Onboarding({ onComplete }) {
 
         {/* CTA button */}
         <button
-          onClick={isLast ? handleAllow : goNext}
+          onClick={isLast ? onComplete : (slide === 2 ? handleAllow : goNext)}
           disabled={loading}
           style={{
             width: '100%', height: 52,
@@ -122,7 +127,7 @@ export default function Onboarding({ onComplete }) {
             transition: 'opacity 0.15s, background 0.15s',
           }}
         >
-          {loading ? 'Requesting access…' : isLast ? 'Allow camera & start' : 'Next →'}
+          {loading ? 'Requesting access…' : current.cta ? current.cta : (slide === 2 ? 'Allow camera & start' : 'Next →')}
         </button>
 
         {/* Dot indicator */}

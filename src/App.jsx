@@ -63,7 +63,10 @@ export default function App() {
   }
 
   if (flow === 'onboarding') {
-    return <Onboarding onComplete={() => setFlow('app')} />
+    return <Onboarding onComplete={() => {
+      setFlow('app')
+      if (loadDevices().length === 0) setScreen('setup')
+    }} />
   }
 
   return (

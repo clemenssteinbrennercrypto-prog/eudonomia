@@ -358,6 +358,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [inFlowState,     setInFlowState]     = useState(false)
+  const [hintVisible,     setHintVisible]     = useState(true)
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -898,6 +899,19 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   // ── Cleanup ambient on unmount ────────────────────────────────────────────
   useEffect(() => () => stopAmbient(), [stopAmbient])
 
+  // Keyboard hint: auto-hide after 5s, show again on keypress
+  useEffect(() => {
+    const timer = setTimeout(() => setHintVisible(false), 5000)
+    const onKey = () => {
+      setHintVisible(true)
+      clearTimeout(timer)
+      const t2 = setTimeout(() => setHintVisible(false), 5000)
+      return () => clearTimeout(t2)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey) }
+  }, [])
+
   const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
   const showStreak = !isCalibrating && currentStreak > 30
 
@@ -1045,12 +1059,20 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         </button>
 
         {/* Keyboard hint */}
-        <p style={{
-          fontSize: 11, color: '#2A2E3A', marginTop: 16, textAlign: 'center',
-          letterSpacing: '0.03em',
+        <div style={{
+          position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 20,
+          opacity: hintVisible ? 1 : 0,
+          transition: 'opacity 0.5s ease',
+          pointerEvents: 'none',
         }}>
-          space pause · esc end · h camera
-        </p>
+          <span style={{
+            background: 'rgba(0,0,0,0.55)', borderRadius: 100, padding: '5px 14px',
+            fontSize: 11, color: '#fff', letterSpacing: '0.04em', fontWeight: 500,
+          }}>
+            space pause · esc end · h camera
+          </span>
+        </div>
       </div>
 
       {/* Ambient sound button */}

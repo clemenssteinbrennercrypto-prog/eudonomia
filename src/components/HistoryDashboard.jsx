@@ -356,6 +356,16 @@ export default function HistoryDashboard({ onClose }) {
   const [sessions, setSessions] = useState(() => loadSessions())
   const [expandedId, setExpandedId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [dateFilter, setDateFilter] = useState('all') // 'all' | 'week' | 'month'
+
+  const filteredSessions = useMemo(() => {
+    if (dateFilter === 'all') return sessions
+    const now = new Date()
+    const cutoff = new Date(now)
+    if (dateFilter === 'week') cutoff.setDate(now.getDate() - 7)
+    else if (dateFilter === 'month') cutoff.setDate(now.getDate() - 30)
+    return sessions.filter(s => new Date(s.timestamp) >= cutoff)
+  }, [sessions, dateFilter])
 
   const handleDelete = (id) => {
     deleteSession(id)
@@ -437,9 +447,27 @@ export default function HistoryDashboard({ onClose }) {
             <WeeklyTrends sessions={sessions} />
             <OverallStats sessions={sessions} />
 
+            {/* Date filter pills */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              {[['all','All time'],['week','This week'],['month','This month']].map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setDateFilter(val)}
+                  style={{
+                    border: dateFilter === val ? '1.5px solid #1a2e4a' : '1.5px solid #E8E3DA',
+                    borderRadius: 100, padding: '6px 16px',
+                    fontSize: 12, fontWeight: 600,
+                    background: dateFilter === val ? '#1a2e4a' : 'transparent',
+                    color: dateFilter === val ? '#fff' : '#6B7280',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+
             {/* CHANGE 1: Date-grouped session list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {groupByDate(sessions).map(group => (
+              {groupByDate(filteredSessions).map(group => (
                 <div key={group.label}>
                   <p style={{
                     fontSize: 11, fontWeight: 700, color: '#9ca3af',

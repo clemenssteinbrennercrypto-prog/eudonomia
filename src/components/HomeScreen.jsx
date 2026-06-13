@@ -63,6 +63,13 @@ export default function HomeScreen({
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
+  const avgFocus = useMemo(() => {
+    const sessions = loadSessions()
+    const last3 = sessions.slice(0, 3).filter(s => s.actualSeconds > 0 && s.focusedSeconds != null)
+    if (last3.length === 0) return null
+    const avg = last3.reduce((sum, s) => sum + Math.round((s.focusedSeconds / s.actualSeconds) * 100), 0) / last3.length
+    return Math.round(avg)
+  }, [])
   const recentTask = useMemo(() => {
     const sessions = loadSessions()
     return sessions[0]?.task || null
@@ -121,7 +128,7 @@ export default function HomeScreen({
                 fontSize: 12, fontWeight: 600, color: '#f97316',
                 letterSpacing: '0.02em',
               }}>
-                🔥 {streak} day streak
+                🔥 {streak} day streak{avgFocus !== null ? ` · avg ${avgFocus}%` : ''}
               </span>
             </div>
           )}

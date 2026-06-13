@@ -8,10 +8,14 @@ function fmt(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function motivational(pct) {
-  if (pct >= 80) return 'Outstanding session.'
-  if (pct >= 60) return 'Solid work.'
-  return 'Keep going. Every session counts.'
+function motivational(pct, distractionEvents, actualSeconds) {
+  if (pct >= 85) return 'Peak focus. Outstanding.'
+  if (pct >= 75) return 'Strong session.'
+  if (pct >= 65 && distractionEvents === 0) return 'Clean run.'
+  if (pct >= 65) return 'Solid work.'
+  if (pct >= 50) return 'Good effort.'
+  if (actualSeconds < 300) return 'Short session — keep going.'
+  return 'Every session counts.'
 }
 
 function fmtSecond(s) {
@@ -66,7 +70,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
             {completed ? 'Session complete' : 'Session ended'}
           </p>
-          <h1 className="end-headline">{motivational(focusPct)}</h1>
+          <h1 className="end-headline">{motivational(focusPct, distractionEvents, actualSeconds)}</h1>
         </div>
 
         {/* Timeline bar */}
