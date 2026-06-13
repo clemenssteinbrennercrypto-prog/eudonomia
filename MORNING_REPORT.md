@@ -98,3 +98,16 @@ Overnight autonomous dev session — June 13 (22:00) → June 14 (01:00 Vienna t
 - Mobile 375px: hero text, CTA, feature cards all readable, no overflow
 - SessionScreen handleFaceResults useCallback deps confirmed complete (all state via refs)
 - Build: ✅ clean (41 modules, ~226KB JS, 7KB CSS)
+
+## Session Update — June 16, 2026
+
+### Features Added
+- **HistoryDashboard — session notes verified** — `SessionNote` component with `+ Add note` button, inline editor, `updateSession` save, and click-to-edit display. Works in expanded cards.
+- **HistoryDashboard — performance memoization** — `groupByDate(filteredSessions)` result memoized into `groupedSessions` const; `getLast7Days` inside `WeeklyTrends` wrapped in `useMemo`. Only recomputes when sessions/filter changes.
+- **SessionScreen — score trend arrow** — `StatusDot` now shows a subtle trend arrow (↑/↓/→) next to the score, 10px, opacity 0.7. Updates every 10s by comparing current vs prev score (±3 threshold). Green/red/gray.
+- **EndScreen — personal best detection** — After session, compares `focusPct` to all previous sessions' max. If new best, shows "New best 🏆" in green below the focus% stat. Uses `loadSessions` filtered by session id.
+- **LandingPage — FAQ section** — Added between privacy section and footer. Background `#F5F4F0`, title "Common questions", 3 Q&A cards (camera storage, webcam required, free). White card with soft shadow, minimal design.
+
+### Build
+- ✅ clean build (42 modules, ~230KB JS, 7KB CSS)
+- Pushed to main
