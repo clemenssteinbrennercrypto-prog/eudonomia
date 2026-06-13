@@ -102,6 +102,28 @@ export default function HomeScreen({
     return goals
   }, [])
 
+  const lastSessionPill = useMemo(() => {
+    const sessions = loadSessions()
+    if (sessions.length === 0) return null
+    const s = sessions[0]
+    if (!s || !s.actualSeconds || s.actualSeconds === 0) return null
+    const focusPct = s.avgFocusScore != null
+      ? s.avgFocusScore
+      : s.focusedSeconds != null
+        ? Math.round((s.focusedSeconds / s.actualSeconds) * 100)
+        : null
+    if (focusPct === null) return null
+    const minsAgo = Math.round((Date.now() - (s.timestamp || 0)) / 60000)
+    let timeStr
+    if (minsAgo < 60) timeStr = `${minsAgo}m ago`
+    else if (minsAgo < 60 * 24) timeStr = `${Math.round(minsAgo / 60)}h ago`
+    else {
+      const d = Math.round(minsAgo / 1440)
+      timeStr = d === 1 ? 'yesterday' : `${d} days ago`
+    }
+    return { focusPct, timeStr }
+  }, [])
+
   const durationSuggestion = useMemo(() => {
     const sessions = loadSessions()
     if (sessions.length === 0) return null
@@ -186,6 +208,22 @@ export default function HomeScreen({
             </div>
           )}
           <p className="app-tagline">Stay present. Stay focused.</p>
+          {lastSessionPill && (
+            <div
+              onClick={onShowHistory}
+              title="View session history"
+              style={{ cursor: 'pointer', marginTop: 6 }}
+            >
+              <span style={{
+                background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.2)',
+                borderRadius: 100, padding: '2px 10px',
+                fontSize: 11, fontWeight: 500, color: '#64748b',
+                letterSpacing: '0.01em',
+              }}>
+                Last session: {lastSessionPill.focusPct}% focus · {lastSessionPill.timeStr}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="home-form">

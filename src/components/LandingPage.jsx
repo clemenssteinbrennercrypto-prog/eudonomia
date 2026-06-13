@@ -154,6 +154,29 @@ export default function LandingPage({ onEnter }) {
         </div>
       </section>
 
+      {/* ── SECTION 2.5: Demo placeholder ────────────────────────────────── */}
+      <section style={{ background: '#0D0F14', padding: '72px 24px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9', marginBottom: 8 }}>
+          See it in action
+        </h2>
+        <p style={{ fontSize: 15, color: '#64748b', marginBottom: 32 }}>
+          A real session walkthrough — coming soon
+        </p>
+        <div style={{
+          maxWidth: 560, margin: '0 auto',
+          aspectRatio: '16 / 9',
+          background: '#111318',
+          border: '1px solid #2A2E3A',
+          borderRadius: 16,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 10,
+        }}>
+          <span style={{ fontSize: 40 }}>🎬</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: '#94a3b8' }}>Demo coming soon</span>
+          <span style={{ fontSize: 13, color: '#475569' }}>Recording a real session to show you</span>
+        </div>
+      </section>
+
       {/* ── SECTION 2.5: Stats ───────────────────────────────────────────── */}
       <section style={{ background: '#FAFAF8', padding: '64px 24px', textAlign: 'center' }}>
         <div style={{

@@ -318,7 +318,7 @@ const STATUS_CONFIG = {
 function SignalBars({ confidence }) {
   // 0..1 → 0, 1, 2, or 3 filled bars
   const filled = confidence >= 0.85 ? 3 : confidence >= 0.5 ? 2 : confidence >= 0.2 ? 1 : 0
-  const barColor = filled === 3 ? '#22c55e' : filled === 2 ? '#f97316' : '#ef4444'
+  const barColor = filled === 3 ? '#22c55e' : filled >= 1 ? '#f97316' : '#6b7280'
   return (
     <div title={`Detection quality: ${Math.round(confidence * 100)}%`} style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
       {[1, 2, 3].map(i => (
@@ -469,6 +469,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const attentionStatusRef     = useRef('focused')
   const currentReasonRef       = useRef('focused')
   const lastAlertReasonRef     = useRef('default')
+  const adaptiveAlertMultRef   = useRef(1.0) // multiplier on alertDelayMs (adaptive fatigue)
+  const alertsInFirst15Ref     = useRef(0)   // alerts fired in first 15 min
+  const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
 
   // ── Session stats refs ────────────────────────────────────────────────────
   const focusedSecondsRef    = useRef(0)
@@ -878,11 +881,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
 
-      if (lowFor >= adjustedAlertMs && !overlayActiveRef.current && cooldownOk) {
+      const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current
+      if (lowFor >= adaptedAlertMs && !overlayActiveRef.current && cooldownOk) {
         overlayActiveRef.current   = true
         lastAlertTimeRef.current   = now
         lastAlertReasonRef.current = primaryReason
         distractionEventsRef.current += 1
+        // Track alerts in first 15 min for adaptive threshold
+        const elapsedMs = now - startTimeRef.current - pausedTotalRef.current
+        if (elapsedMs < 15 * 60 * 1000) alertsInFirst15Ref.current += 1
+        if (alertsInFirst15Ref.current >= 3 && adaptiveAlertMultRef.current < 1.5) {
+          adaptiveAlertMultRef.current = Math.min(1.5, adaptiveAlertMultRef.current * 1.5)
+        }
         const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
         distractionLogRef.current.push({ second: elapsedSecs, reason: primaryReason })
         setAlertReason(primaryReason)
@@ -894,6 +904,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (overlayActiveRef.current) {
         overlayActiveRef.current = false
         setShowOverlay(false)
+      }
+    }
+
+    // ── Adaptive: no alerts in 30 min → increase sensitivity (decrease mult) ─
+    {
+      const sinceLastAlert = now - Math.max(lastAlertTimeRef.current, lastNoAlertCheckRef.current)
+      if (sinceLastAlert >= 30 * 60 * 1000 && adaptiveAlertMultRef.current > 0.8) {
+        adaptiveAlertMultRef.current = Math.max(0.8, adaptiveAlertMultRef.current * 0.8)
+        lastNoAlertCheckRef.current  = now
       }
     }
 
