@@ -385,6 +385,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [hintVisible,     setHintVisible]     = useState(true)
   const [endConfirm,      setEndConfirm]      = useState(false)
   const [faceAbsentPrompt, setFaceAbsentPrompt] = useState(false)
+  const [gazePos,         setGazePos]         = useState(null) // {x, y} normalized 0..1
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -914,6 +915,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setFocusScore(Math.round(focusScoreRef.current))
       setCurrentStreak(currentStreakRef.current)
       setDistractionCount(distractionEventsRef.current)
+      // gaze dot: map yaw (-45..+45) and pitch (-30..+30) to 0..1
+      if (hasFace) {
+        setGazePos({
+          x: Math.max(0.05, Math.min(0.95, 0.5 - yawSigned / 90)),
+          y: Math.max(0.05, Math.min(0.95, 0.5 + pitchDeg / 60)),
+        })
+      } else {
+        setGazePos(null)
+      }
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
         timelineSnapshotsRef.current.push({ second: elapsedSecs, score: Math.round(focusScoreRef.current), focused })
@@ -1182,17 +1192,38 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
             Looking away?
           </div>
         )}
-        <video
-          ref={videoRef}
-          className="webcam-feed"
-          style={{
-            opacity: camHidden ? 0 : 1,
-            height: camHidden ? 0 : 120,
-            marginBottom: camHidden ? 0 : undefined,
-            transition: 'opacity 0.25s ease, height 0.25s ease',
-          }}
-          autoPlay muted playsInline
-        />
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <video
+            ref={videoRef}
+            className="webcam-feed"
+            style={{
+              opacity: camHidden ? 0 : 1,
+              height: camHidden ? 0 : 120,
+              marginBottom: camHidden ? 0 : undefined,
+              transition: 'opacity 0.25s ease, height 0.25s ease',
+              display: 'block',
+            }}
+            autoPlay muted playsInline
+          />
+          {!camHidden && !isCalibrating && gazePos && (
+            <svg
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              <circle
+                cx={gazePos.x * 100}
+                cy={gazePos.y * 100}
+                r="4"
+                fill="none"
+                stroke="rgba(255,255,255,0.6)"
+                strokeWidth="1.5"
+              />
+              <line x1={gazePos.x * 100 - 7} y1={gazePos.y * 100} x2={gazePos.x * 100 + 7} y2={gazePos.y * 100} stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+              <line x1={gazePos.x * 100} y1={gazePos.y * 100 - 7} x2={gazePos.x * 100} y2={gazePos.y * 100 + 7} stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+            </svg>
+          )}
+        </div>
         <button className="cam-toggle" onClick={() => setCamHidden((h) => !h)} aria-label={camHidden ? 'Show webcam' : 'Hide webcam'}>
           {camHidden ? (
             <span style={{ fontSize: 14, lineHeight: 1 }}>👁</span>

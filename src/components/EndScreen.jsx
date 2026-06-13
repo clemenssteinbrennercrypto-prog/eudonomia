@@ -149,6 +149,13 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <span className="stat-value">{fmt(longestFocusedStreak)}</span>
             <span className="stat-label">longest streak</span>
           </div>
+          <div className="stat-divider" />
+          <div className="stat">
+            <span className="stat-value" style={{ color: '#ef4444' }}>
+              {Math.round(Math.max(0, actualSeconds - focusedSeconds) / 60)}m
+            </span>
+            <span className="stat-label">distracted time</span>
+          </div>
         </div>
 
         {/* Goal section */}

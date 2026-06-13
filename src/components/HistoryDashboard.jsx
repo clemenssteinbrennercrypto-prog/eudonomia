@@ -152,10 +152,13 @@ function SessionNote({ session, onNoteUpdate }) {
 }
 
 // ── Session card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, onDelete, onExpand, expanded, onNoteUpdate }) {
+function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNoteUpdate }) {
   const focusPct = session.actualSeconds > 0
     ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
     : 0
+  const prevFocusPct = prevSession && prevSession.actualSeconds > 0
+    ? Math.round((prevSession.focusedSeconds / prevSession.actualSeconds) * 100)
+    : null
   const color = focusColor(focusPct)
 
   return (
@@ -267,6 +270,46 @@ function SessionCard({ session, onDelete, onExpand, expanded, onNoteUpdate }) {
               </div>
             ))}
           </div>
+
+          {/* vs last session comparison */}
+          {prevSession != null && prevFocusPct != null && (
+            <div style={{
+              marginTop: 14,
+              padding: '10px 14px',
+              background: '#F5F4F0',
+              borderRadius: 10,
+              display: 'flex',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: 4 }}>vs last</span>
+              {(() => {
+                const focusDiff = focusPct - prevFocusPct
+                const durDiff = (session.actualSeconds ?? 0) - (prevSession.actualSeconds ?? 0)
+                const alertsDiff = (session.distractionEvents ?? 0) - (prevSession.distractionEvents ?? 0)
+                const sign = (n) => n > 0 ? '+' : ''
+                const color = (n, invert = false) => n === 0 ? '#9ca3af' : (n > 0) !== invert ? '#22c55e' : '#ef4444'
+                const fmtDur = (s) => {
+                  const abs = Math.abs(s)
+                  const m = Math.floor(abs / 60), sec = abs % 60
+                  return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+                }
+                return (
+                  <>
+                    <span style={{ fontSize: 13, color: color(focusDiff) }}>
+                      {sign(focusDiff)}{focusDiff}% focus
+                    </span>
+                    <span style={{ fontSize: 13, color: color(durDiff) }}>
+                      {durDiff >= 0 ? '+' : '-'}{fmtDur(durDiff)} duration
+                    </span>
+                    <span style={{ fontSize: 13, color: color(alertsDiff, true) }}>
+                      {sign(alertsDiff)}{alertsDiff} alerts
+                    </span>
+                  </>
+                )
+              })()}
+            </div>
+          )}
 
           {/* Session note */}
           <SessionNote session={session} onNoteUpdate={onNoteUpdate} />
@@ -677,16 +720,21 @@ export default function HistoryDashboard({ onClose }) {
                     {group.label}
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {group.sessions.map(s => (
-                      <SessionCard
-                        key={s.id}
-                        session={s}
-                        onDelete={handleDelete}
-                        onExpand={handleExpand}
-                        expanded={expandedId === s.id}
-                        onNoteUpdate={handleNoteUpdate}
-                      />
-                    ))}
+                    {group.sessions.map(s => {
+                        const idx = filteredSessions.findIndex(fs => fs.id === s.id)
+                        const prevSession = idx < filteredSessions.length - 1 ? filteredSessions[idx + 1] : null
+                        return (
+                          <SessionCard
+                            key={s.id}
+                            session={s}
+                            prevSession={prevSession}
+                            onDelete={handleDelete}
+                            onExpand={handleExpand}
+                            expanded={expandedId === s.id}
+                            onNoteUpdate={handleNoteUpdate}
+                          />
+                        )
+                      })}
                   </div>
                 </div>
               ))}
