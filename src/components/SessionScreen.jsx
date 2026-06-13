@@ -380,6 +380,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [inFlowState,     setInFlowState]     = useState(false)
+  const [distractionCount, setDistractionCount] = useState(0)
   const [hintVisible,     setHintVisible]     = useState(true)
   const [endConfirm,      setEndConfirm]      = useState(false)
   const [faceAbsentPrompt, setFaceAbsentPrompt] = useState(false)
@@ -904,6 +905,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
       setFocusScore(Math.round(focusScoreRef.current))
       setCurrentStreak(currentStreakRef.current)
+      setDistractionCount(distractionEventsRef.current)
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
         timelineSnapshotsRef.current.push({ second: elapsedSecs, score: Math.round(focusScoreRef.current), focused })
@@ -1081,6 +1083,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
             fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>
             {formatTime(currentStreak)} streak
+          </p>
+        )}
+
+        {/* Distraction event counter */}
+        {!isCalibrating && distractionCount > 0 && (
+          <p style={{
+            fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 4,
+          }}>
+            {distractionCount} {distractionCount === 1 ? 'alert' : 'alerts'}
           </p>
         )}
 

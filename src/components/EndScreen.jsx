@@ -78,9 +78,14 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
         {/* Headline */}
         <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6 }}>
             {completed ? 'Session complete' : 'Session ended'}
           </p>
+          {actualSeconds > 0 && (
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
+              Started at {new Date(Date.now() - actualSeconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
           <h1 className="end-headline">{motivational(focusPct, distractionEvents, actualSeconds)}</h1>
         </div>
 

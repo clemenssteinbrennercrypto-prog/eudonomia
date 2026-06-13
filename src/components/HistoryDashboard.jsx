@@ -15,6 +15,20 @@ function fmtDate(ts) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+function relativeTime(ts) {
+  const now = Date.now()
+  const diff = now - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins || 1} ${mins === 1 ? 'minute' : 'minutes'} ago`
+  const today = new Date(); today.setHours(0,0,0,0)
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  const d = new Date(ts); d.setHours(0,0,0,0)
+  const time = fmtTime(ts)
+  if (d.getTime() === today.getTime()) return `Today, ${time}`
+  if (d.getTime() === yesterday.getTime()) return `Yesterday, ${time}`
+  return null // fall back to existing format
+}
+
 function fmtTime(ts) {
   const d = new Date(ts)
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -165,7 +179,7 @@ function SessionCard({ session, onDelete, onExpand, expanded, onNoteUpdate }) {
             {session.task || 'Untitled session'}
           </p>
           <p style={{ fontSize: 12, color: '#9ca3af' }}>
-            {fmtDate(session.timestamp)} · {fmtTime(session.timestamp)}
+            {relativeTime(session.timestamp) || `${fmtDate(session.timestamp)} · ${fmtTime(session.timestamp)}`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
