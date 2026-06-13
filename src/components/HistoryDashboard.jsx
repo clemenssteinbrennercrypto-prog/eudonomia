@@ -323,13 +323,15 @@ function WeeklyTrends({ sessions }) {
               <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
                 {filled ? `${day.avgFocus}%` : '0'}
               </span>
-              <div style={{
-                width: '100%', height: h,
-                background: color,
-                borderRadius: '6px 6px 0 0',
-                minHeight: 4,
-                transition: 'height 0.3s ease',
-              }} />
+              <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
+                <div style={{
+                  width: '100%', height: h,
+                  background: color,
+                  borderRadius: '6px 6px 0 0',
+                  minHeight: 4,
+                  transition: 'height 0.3s ease',
+                }} />
+              </div>
               <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
             </div>
           )

@@ -31,8 +31,18 @@ export default function LandingPage({ onEnter }) {
         background: '#0D0F14',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '80px 24px',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: 600, width: '100%', textAlign: 'center' }}>
+        {/* Animated gradient overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'radial-gradient(ellipse at 50% 60%, #1a2e4a 0%, transparent 70%)',
+          animation: 'heroGlow 8s ease-in-out infinite',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }} />
+        <div style={{ maxWidth: 600, width: '100%', textAlign: 'center', position: 'relative', zIndex: 1 }}>
 
           {/* Label pill */}
           <div style={{ marginBottom: 24 }}>
@@ -101,16 +111,22 @@ export default function LandingPage({ onEnter }) {
           </h2>
 
           {FEATURES.map((f) => (
-            <div key={f.num} style={{
-              background: '#FFFFFF',
-              borderRadius: 16, padding: 28,
-              boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
-              marginBottom: 16,
-            }}>
+            <div
+              key={f.num}
+              style={{
+                background: '#FFFFFF',
+                borderRadius: 16, padding: 28,
+                boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+                marginBottom: 16,
+                borderLeft: '3px solid #E8E3DA',
+                transition: 'border-color 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderLeftColor = '#1a2e4a'}
+              onMouseLeave={e => e.currentTarget.style.borderLeftColor = '#E8E3DA'}
+            >
               <p style={{
-                fontSize: 11, textTransform: 'uppercase',
-                letterSpacing: '0.1em', color: '#9CA3AF',
-                margin: '0 0 10px',
+                fontSize: 32, fontWeight: 200, color: '#E8E3DA',
+                letterSpacing: '-0.03em', margin: '0 0 8px', lineHeight: 1,
               }}>
                 {f.num}
               </p>

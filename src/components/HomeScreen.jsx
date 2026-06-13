@@ -110,7 +110,8 @@ export default function HomeScreen({
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#22c55e', fontSize: 10 }}>●</span>
                 {summariseDevices(devices)}
               </span>
               <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>Edit →</span>
@@ -121,7 +122,7 @@ export default function HomeScreen({
               style={{
                 width: '100%', padding: '13px 16px',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: '#f9fafb', border: '1.5px dashed #d1d5db',
+                background: '#f9fafb', border: '1.5px solid #E8E3DA',
                 borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
@@ -184,7 +185,7 @@ export default function HomeScreen({
                   min={1} max={180}
                   className="text-input"
                   style={{ width: 120 }}
-                  value={customVal}
+                  value={String(customVal)}
                   onChange={handleCustomChange}
                   placeholder="1–180 min"
                   autoFocus

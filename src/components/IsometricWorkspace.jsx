@@ -82,8 +82,8 @@ function LaptopSVG({ w, h, uid }) {
     <g>
       <ellipse cx={0} cy={screenH/2 + baseH + 4} rx={w * 0.52} ry={baseH * 0.35} fill="black" opacity={0.13}/>
       <rect x={-w/2} y={screenH/2 - baseH * 0.1} width={w} height={baseH * 1.6} rx={4} fill="#A8B0BE"/>
-      {[-3,-2,-1,0,1,2,3].map((ki, i) => [0,1,2].map(row => (
-        <rect key={`k${ki}${row}`} x={ki * w/8 - w/18} y={screenH/2 + 3 + row * (baseH * 0.35)}
+      {[-3,-2,-1,0,1,2,3].flatMap((ki) => [0,1,2].map(row => (
+        <rect key={`k${ki}_${row}`} x={ki * w/8 - w/18} y={screenH/2 + 3 + row * (baseH * 0.35)}
           width={w/9} height={baseH * 0.24} rx={1.5} fill="#8A92A0" opacity={0.65}/>
       )))}
       <rect x={-w * 0.22} y={screenH/2 + baseH * 0.7} width={w * 0.44} height={baseH * 0.55} rx={3} fill="#9098A8" opacity={0.7}/>
@@ -195,7 +195,7 @@ function KeyboardSVG({ w, h, uid }) {
       <ellipse cx={0} cy={h/2 + 4} rx={w * 0.52} ry={5} fill="black" opacity={0.12}/>
       <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#1e293b"/>
       <rect x={-w/2 + 3} y={-h/2 + 3} width={w - 6} height={h - 6} rx={r - 1} fill="#243044"/>
-      {rows.map((cols, ri) =>
+      {rows.flatMap((cols, ri) =>
         cols.map((cx, ci) => (
           <rect key={`${ri}-${ci}`}
             x={-w/2 + w * cx - kw/2} y={-h/2 + h * (0.14 + ri * 0.22) - kh/2}
