@@ -454,15 +454,23 @@ export default function HistoryDashboard({ onClose }) {
   const [expandedId, setExpandedId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [dateFilter, setDateFilter] = useState('all') // 'all' | 'week' | 'month'
+  const [search, setSearch] = useState('')
 
   const filteredSessions = useMemo(() => {
-    if (dateFilter === 'all') return sessions
-    const now = new Date()
-    const cutoff = new Date(now)
-    if (dateFilter === 'week') cutoff.setDate(now.getDate() - 7)
-    else if (dateFilter === 'month') cutoff.setDate(now.getDate() - 30)
-    return sessions.filter(s => new Date(s.timestamp) >= cutoff)
-  }, [sessions, dateFilter])
+    let result = sessions
+    if (dateFilter !== 'all') {
+      const now = new Date()
+      const cutoff = new Date(now)
+      if (dateFilter === 'week') cutoff.setDate(now.getDate() - 7)
+      else if (dateFilter === 'month') cutoff.setDate(now.getDate() - 30)
+      result = result.filter(s => new Date(s.timestamp) >= cutoff)
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter(s => (s.task || '').toLowerCase().includes(q))
+    }
+    return result
+  }, [sessions, dateFilter, search])
 
   const groupedSessions = useMemo(() => groupByDate(filteredSessions), [filteredSessions])
 
@@ -591,6 +599,35 @@ export default function HistoryDashboard({ onClose }) {
                   }}
                 >{label}</button>
               ))}
+            </div>
+
+            {/* Search filter */}
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search sessions..."
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 32px 8px 12px',
+                  background: '#f9fafb', border: '1.5px solid #E8E3DA',
+                  borderRadius: 10, fontSize: 13, color: '#1a2e4a',
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none', border: 'none',
+                    color: '#9ca3af', fontSize: 14, cursor: 'pointer',
+                    lineHeight: 1, padding: 0,
+                  }}
+                >×</button>
+              )}
             </div>
 
             {/* CHANGE 1: Date-grouped session list */}

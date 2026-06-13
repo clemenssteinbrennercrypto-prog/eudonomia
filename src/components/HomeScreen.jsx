@@ -59,6 +59,7 @@ export default function HomeScreen({
   onShowSetup,
 }) {
   const [legalTab, setLegalTab] = useState(null)
+  const [taskFocused, setTaskFocused] = useState(false)
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
@@ -188,14 +189,28 @@ export default function HomeScreen({
           {/* Task input */}
           <div className="field">
             <label className="field-label">What are you working on?</label>
-            <input
-              type="text"
-              className="text-input"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="e.g. Writing my thesis introduction"
-              autoFocus
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                className="text-input"
+                value={task}
+                onChange={(e) => setTask(e.target.value.slice(0, 80))}
+                placeholder="e.g. Writing my thesis introduction"
+                autoFocus
+                maxLength={80}
+                onFocus={() => setTaskFocused(true)}
+                onBlur={() => setTaskFocused(false)}
+              />
+              {(taskFocused || task.length > 60) && (
+                <span style={{
+                  position: 'absolute', bottom: 6, right: 10,
+                  fontSize: 10, color: task.length > 70 ? '#f97316' : '#9ca3af',
+                  pointerEvents: 'none', fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {task.length}/80
+                </span>
+              )}
+            </div>
             {recentTask && recentTask !== task && (
               <button
                 onClick={() => setTask(recentTask)}

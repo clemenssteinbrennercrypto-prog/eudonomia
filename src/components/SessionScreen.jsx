@@ -238,7 +238,7 @@ function formatTime(s) {
 function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0 }) {
   const size   = 220
   const radius = 96
-  const stroke = 9
+  const stroke = 10
   const circ   = 2 * Math.PI * radius
   const fill   = isCalibrating ? calibProgress : score / 100
   const offset = circ * (1 - fill)
@@ -296,18 +296,20 @@ function StatusDot({ status, score, reason, isCalibrating }) {
 
   // Trend arrow — compare score every 10s
   const prevScoreRef = useRef(score)
+  const scoreRef = useRef(score)
+  scoreRef.current = score
   const [trend, setTrend] = useState('→')
   useEffect(() => {
     const interval = setInterval(() => {
       const prev = prevScoreRef.current
-      const curr = score
+      const curr = scoreRef.current
       if (curr - prev >= 3) setTrend('↑')
       else if (prev - curr >= 3) setTrend('↓')
       else setTrend('→')
       prevScoreRef.current = curr
     }, 10000)
     return () => clearInterval(interval)
-  }, [score])
+  }, []) // stable interval — reads via ref
   const trendColor = trend === '↑' ? '#22c55e' : trend === '↓' ? '#ef4444' : '#6b7280'
 
   return (
@@ -1126,6 +1128,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15 }}>
         <button
           onClick={cycleAmbient}
+          aria-label={`Ambient sound: ${AMBIENT_LABELS[ambientMode]}`}
           style={{
             background: ambientMode === 'off' ? '#1C1F28' : '#1C2818',
             border: `1px solid ${ambientMode === 'off' ? '#2A2E3A' : '#22c55e40'}`,
@@ -1161,9 +1164,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           }}
           autoPlay muted playsInline
         />
-        <button className="cam-toggle" onClick={() => setCamHidden((h) => !h)}>
+        <button className="cam-toggle" onClick={() => setCamHidden((h) => !h)} aria-label={camHidden ? 'Show webcam' : 'Hide webcam'}>
           {camHidden ? (
-            <span title="Show camera" style={{ fontSize: 14, lineHeight: 1 }}>👁</span>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>👁</span>
           ) : 'Hide'}
         </button>
       </div>
