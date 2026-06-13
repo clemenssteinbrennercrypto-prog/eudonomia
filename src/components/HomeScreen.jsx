@@ -76,6 +76,7 @@ export default function HomeScreen({
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
+  const sessionCount = useMemo(() => loadSessions().length, [])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
     const last3 = sessions.slice(0, 3).filter(s => s.actualSeconds > 0 && s.focusedSeconds != null)
@@ -191,7 +192,7 @@ export default function HomeScreen({
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
-              History
+              History{sessionCount > 0 ? ` (${sessionCount})` : ''}
             </button>
           </div>
           <h1 className="app-title">Eudaimonia</h1>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import IsometricWorkspace from './IsometricWorkspace'
 
 // ── Step-by-step workspace wizard ─────────────────────────────────────────────
@@ -146,34 +146,69 @@ export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
   }
 
   if (mode === 'advanced') {
-    return (
-      <div style={{ position: 'relative' }}>
-        <IsometricWorkspace
-          devices={devices}
-          setDevices={setDevices}
-          onContinue={onContinue}
-        />
-        <button
-          onClick={() => switchMode('wizard')}
-          style={{
-            position: 'fixed', top: 22, left: 24, zIndex: 999,
-            background: 'rgba(255,255,255,0.9)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid #E8E3DA',
-            borderRadius: 100, padding: '6px 16px',
-            fontSize: 12, fontWeight: 500, color: '#6B7280',
-            cursor: 'pointer',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-            transition: 'color 0.15s',
-          }}
-        >
-          ← Simple mode
-        </button>
-      </div>
-    )
+    return <AdvancedModeWrapper devices={devices} setDevices={setDevices} onContinue={onContinue} onSimple={() => switchMode('wizard')} />
   }
 
   return <Wizard devices={devices} setDevices={setDevices} onContinue={onContinue} onAdvanced={() => switchMode('advanced')} />
+}
+
+function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
+  const HINT_KEY = 'eudaimonia_desk_hint_seen'
+  const [showHint, setShowHint] = useState(() => !localStorage.getItem(HINT_KEY))
+
+  useEffect(() => {
+    if (!showHint) return
+    const t = setTimeout(() => {
+      localStorage.setItem(HINT_KEY, '1')
+      setShowHint(false)
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [showHint])
+
+  function dismissHint() {
+    localStorage.setItem(HINT_KEY, '1')
+    setShowHint(false)
+  }
+
+  return (
+    <div style={{ position: 'relative' }} onClick={showHint ? dismissHint : undefined}>
+      <IsometricWorkspace
+        devices={devices}
+        setDevices={setDevices}
+        onContinue={onContinue}
+      />
+      <button
+        onClick={onSimple}
+        style={{
+          position: 'fixed', top: 22, left: 24, zIndex: 999,
+          background: 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid #E8E3DA',
+          borderRadius: 100, padding: '6px 16px',
+          fontSize: 12, fontWeight: 500, color: '#6B7280',
+          cursor: 'pointer',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+          transition: 'color 0.15s',
+        }}
+      >
+        ← Simple mode
+      </button>
+      {showHint && (
+        <div style={{
+          position: 'fixed', top: 22, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 1000, background: 'rgba(30,30,30,0.92)',
+          backdropFilter: 'blur(10px)',
+          color: '#fff', borderRadius: 12, padding: '10px 18px',
+          fontSize: 13, fontWeight: 500, maxWidth: 380, textAlign: 'center',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+          pointerEvents: 'none',
+        }}>
+          💡 Click a device in the sidebar, then click the desk to place it. Drag to reposition. Click a placed device to remove.
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Wizard ────────────────────────────────────────────────────────────────────
