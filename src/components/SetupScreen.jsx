@@ -3,11 +3,13 @@ import { DEVICE_ICON_MAP } from './DeviceIcons'
 
 // ── Device types ──────────────────────────────────────────────────────────────
 export const DEVICE_TYPES = [
-  { id: 'monitor', label: 'Monitor' },
-  { id: 'laptop',  label: 'Laptop'  },
-  { id: 'ipad',    label: 'iPad'    },
-  { id: 'phone',   label: 'Phone'   },
-  { id: 'camera',  label: 'Camera'  },
+  { id: 'monitor',  label: 'Monitor'  },
+  { id: 'laptop',   label: 'Laptop'   },
+  { id: 'ipad',     label: 'iPad'     },
+  { id: 'phone',    label: 'Phone'    },
+  { id: 'camera',   label: 'Camera'   },
+  { id: 'keyboard', label: 'Keyboard' },
+  { id: 'mouse',    label: 'Mouse'    },
 ]
 
 // 3×3 grid

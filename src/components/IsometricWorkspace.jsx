@@ -35,11 +35,13 @@ function depthScale(row) {
 
 // ── Device metadata ───────────────────────────────────────────────────────────
 export const DEVICE_META = [
-  { id: 'monitor', label: 'Monitor'  },
-  { id: 'laptop',  label: 'Laptop'   },
-  { id: 'ipad',    label: 'iPad'     },
-  { id: 'phone',   label: 'Phone'    },
-  { id: 'camera',  label: 'Webcam'   },
+  { id: 'monitor',  label: 'Monitor'  },
+  { id: 'laptop',   label: 'Laptop'   },
+  { id: 'ipad',     label: 'iPad'     },
+  { id: 'phone',    label: 'Phone'    },
+  { id: 'camera',   label: 'Webcam'   },
+  { id: 'keyboard', label: 'Keyboard' },
+  { id: 'mouse',    label: 'Mouse'    },
 ]
 
 export const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
@@ -179,15 +181,70 @@ function CameraSVG({ w, h, uid }) {
   )
 }
 
-const RENDERERS = { monitor: MonitorSVG, laptop: LaptopSVG, phone: PhoneSVG, ipad: IPadSVG, camera: CameraSVG }
+function KeyboardSVG({ w, h, uid }) {
+  const r = 5
+  const rows = [
+    [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.92],
+    [0.05, 0.18, 0.31, 0.44, 0.57, 0.70, 0.83, 0.96],
+    [0.10, 0.23, 0.36, 0.49, 0.62, 0.75, 0.88],
+    [0.15, 0.28, 0.41, 0.54, 0.67, 0.80],
+  ]
+  const kw = w * 0.115, kh = h * 0.2
+  return (
+    <g>
+      <ellipse cx={0} cy={h/2 + 4} rx={w * 0.52} ry={5} fill="black" opacity={0.12}/>
+      <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#1e293b"/>
+      <rect x={-w/2 + 3} y={-h/2 + 3} width={w - 6} height={h - 6} rx={r - 1} fill="#243044"/>
+      {rows.map((cols, ri) =>
+        cols.map((cx, ci) => (
+          <rect key={`${ri}-${ci}`}
+            x={-w/2 + w * cx - kw/2} y={-h/2 + h * (0.14 + ri * 0.22) - kh/2}
+            width={kw} height={kh} rx={1.5}
+            fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.6}/>
+        ))
+      )}
+      {/* Space bar */}
+      <rect x={-w * 0.22} y={h * 0.28} width={w * 0.44} height={kh} rx={1.5} fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.6}/>
+      <rect x={-w/2 + 3} y={-h/2 + 3} width={w - 6} height={4} rx={2} fill="white" opacity={0.04}/>
+    </g>
+  )
+}
+
+function MouseSVG({ w, h, uid }) {
+  const bw = w * 0.78
+  return (
+    <g>
+      <ellipse cx={0} cy={h * 0.38} rx={bw * 0.48} ry={6} fill="black" opacity={0.14}/>
+      {/* Body shape */}
+      <path d={`M${-bw/2} ${-h * 0.05} C${-bw/2} ${-h * 0.48} ${bw/2} ${-h * 0.48} ${bw/2} ${-h * 0.05} L${bw/2} ${h * 0.32} C${bw/2} ${h * 0.48} ${-bw/2} ${h * 0.48} ${-bw/2} ${h * 0.32} Z`}
+        fill="#1e293b"/>
+      <path d={`M${-bw/2 + 2} ${-h * 0.04} C${-bw/2 + 2} ${-h * 0.46} ${bw/2 - 2} ${-h * 0.46} ${bw/2 - 2} ${-h * 0.04} L${bw/2 - 2} ${h * 0.31} C${bw/2 - 2} ${h * 0.46} ${-bw/2 + 2} ${h * 0.46} ${-bw/2 + 2} ${h * 0.31} Z`}
+        fill="#243044"/>
+      {/* Center split */}
+      <line x1={0} y1={-h * 0.46} x2={0} y2={h * 0.02} stroke="#1a2a3e" strokeWidth={1.5}/>
+      {/* Left button */}
+      <path d={`M${-bw/2 + 2} ${-h * 0.04} C${-bw/2 + 2} ${-h * 0.46} 0 ${-h * 0.46} 0 ${-h * 0.46} L0 ${h * 0.02} C${-bw/2 + 2} ${h * 0.02} ${-bw/2 + 2} ${-h * 0.04} Z`}
+        fill="#2d3f58" opacity={0.7}/>
+      {/* Scroll wheel */}
+      <rect x={-w * 0.08} y={-h * 0.28} width={w * 0.16} height={h * 0.25} rx={w * 0.08} fill="#364a66"/>
+      <rect x={-w * 0.05} y={-h * 0.22} width={w * 0.10} height={h * 0.14} rx={w * 0.05} fill="#4a6080" opacity={0.8}/>
+      {/* Shine */}
+      <ellipse cx={-bw * 0.2} cy={-h * 0.25} rx={bw * 0.15} ry={h * 0.08} fill="white" opacity={0.07} transform={`rotate(-15,${-bw*0.2},${-h*0.25})`}/>
+    </g>
+  )
+}
+
+const RENDERERS = { monitor: MonitorSVG, laptop: LaptopSVG, phone: PhoneSVG, ipad: IPadSVG, camera: CameraSVG, keyboard: KeyboardSVG, mouse: MouseSVG }
 
 // Native dimensions (w x h) for each device type
 const DEVICE_DIMS = {
-  monitor: { w: 130, h: 110 },
-  laptop:  { w: 130, h: 95  },
-  phone:   { w: 44,  h: 88  },
-  ipad:    { w: 82,  h: 110 },
-  camera:  { w: 84,  h: 60  },
+  monitor:  { w: 130, h: 110 },
+  laptop:   { w: 130, h: 95  },
+  phone:    { w: 44,  h: 88  },
+  ipad:     { w: 82,  h: 110 },
+  camera:   { w: 84,  h: 60  },
+  keyboard: { w: 140, h: 52  },
+  mouse:    { w: 52,  h: 80  },
 }
 
 // ── Palette button ────────────────────────────────────────────────────────────

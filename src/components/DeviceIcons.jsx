@@ -171,10 +171,52 @@ export function CameraIcon({ size = 64, dimmed = false }) {
   )
 }
 
+export function KeyboardIcon({ size = 64, dimmed = false }) {
+  const op = dimmed ? 0.35 : 1
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ opacity: op }}>
+      <rect x="4" y="16" width="56" height="32" rx="5" fill="#1e293b"/>
+      <rect x="6" y="18" width="52" height="28" rx="4" fill="#243044"/>
+      {/* Key rows */}
+      {[22, 28, 34, 40].map((y, row) => (
+        [8, 14, 20, 26, 32, 38, 44, 50].slice(0, 8 - row).map(x => (
+          <rect key={`${y}-${x}`} x={x} y={y} width={4} height={4} rx={1} fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.5}/>
+        ))
+      ))}
+      {/* Space bar */}
+      <rect x="18" y="40" width="28" height="4" rx="1.5" fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.5}/>
+      {/* Shine */}
+      <rect x="6" y="18" width="52" height="3" rx="2" fill="white" opacity={0.05}/>
+    </svg>
+  )
+}
+
+export function MouseIcon({ size = 64, dimmed = false }) {
+  const op = dimmed ? 0.35 : 1
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ opacity: op }}>
+      {/* Body */}
+      <path d="M20 28 C20 18 44 18 44 28 L44 46 C44 54 20 54 20 46 Z" fill="#1e293b"/>
+      <path d="M21.5 29 C21.5 20 42.5 20 42.5 29 L42.5 45 C42.5 52.5 21.5 52.5 21.5 45 Z" fill="#243044"/>
+      {/* Center divider */}
+      <line x1="32" y1="20" x2="32" y2="36" stroke="#1a2a3e" strokeWidth="1.5"/>
+      {/* Left button highlight */}
+      <path d="M21.5 29 C21.5 20 32 20 32 20 L32 36 C28 36 21.5 34 21.5 29Z" fill="#2d3f58" opacity="0.6"/>
+      {/* Scroll wheel */}
+      <rect x="29" y="22" width="6" height="10" rx="3" fill="#364a66"/>
+      <rect x="30.5" y="24" width="3" height="6" rx="1.5" fill="#4a6080" opacity="0.8"/>
+      {/* Shine */}
+      <ellipse cx="27" cy="25" rx="4" ry="2.5" fill="white" opacity="0.06" transform="rotate(-15 27 25)"/>
+    </svg>
+  )
+}
+
 export const DEVICE_ICON_MAP = {
-  monitor: MonitorIcon,
-  laptop:  LaptopIcon,
-  phone:   PhoneIcon,
-  ipad:    IPadIcon,
-  camera:  CameraIcon,
+  monitor:  MonitorIcon,
+  laptop:   LaptopIcon,
+  phone:    PhoneIcon,
+  ipad:     IPadIcon,
+  camera:   CameraIcon,
+  keyboard: KeyboardIcon,
+  mouse:    MouseIcon,
 }

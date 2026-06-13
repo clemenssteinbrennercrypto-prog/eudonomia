@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import HomeScreen from './components/HomeScreen'
-import SetupScreen from './components/IsometricWorkspace'
+import SetupScreen from './components/WorkspaceSetup'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
