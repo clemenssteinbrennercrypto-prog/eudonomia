@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import HomeScreen from './components/HomeScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
+import HistoryDashboard from './components/HistoryDashboard'
+import { saveSession } from './lib/storage'
 
 function loadMonitorPositions() {
   try { return JSON.parse(localStorage.getItem('eudaimonia_monitor_positions') || '[]') }
@@ -27,7 +29,6 @@ export default function App() {
     localStorage.setItem('eudaimonia_monitor_positions', JSON.stringify(monitorPositions))
   }, [monitorPositions])
 
-  // When monitor count changes, resize the positions array (default new slots to 'right')
   const setMonitors = useCallback((m) => {
     setMonitorsRaw(m)
     setMonitorPositions((prev) => {
@@ -40,10 +41,13 @@ export default function App() {
 
   const handleStart = () => setScreen('session')
 
-  const handleEnd = (data) => {
-    setSessionData(data)
+  const handleEnd = useCallback((data) => {
+    // Attach task name + save to history
+    const enriched = { ...data, task }
+    saveSession(enriched)
+    setSessionData(enriched)
     setScreen('end')
-  }
+  }, [task])
 
   const handleRestart = () => {
     setTask('')
@@ -65,6 +69,7 @@ export default function App() {
           monitorPositions={monitorPositions}
           setMonitorPositions={setMonitorPositions}
           onStart={handleStart}
+          onShowHistory={() => setScreen('history')}
         />
       )}
       {screen === 'session' && (
@@ -79,7 +84,11 @@ export default function App() {
         <EndScreen
           sessionData={sessionData}
           onRestart={handleRestart}
+          onShowHistory={() => setScreen('history')}
         />
+      )}
+      {screen === 'history' && (
+        <HistoryDashboard onClose={() => setScreen('home')} />
       )}
     </>
   )

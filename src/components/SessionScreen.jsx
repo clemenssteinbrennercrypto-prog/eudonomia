@@ -73,15 +73,25 @@ function analyzeFrame(lms) {
 }
 
 // ── Web Audio soft chime ──────────────────────────────────────────────────────
+// Single shared AudioContext (browsers limit total ctx instances to ~6)
+let _sharedAudioCtx = null
+function getAudioCtx() {
+  if (!_sharedAudioCtx || _sharedAudioCtx.state === 'closed') {
+    _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  }
+  return _sharedAudioCtx
+}
+
 function playAlertSound() {
   try {
-    const ctx  = new (window.AudioContext || window.webkitAudioContext)()
+    const ctx  = getAudioCtx()
+    // Resume if suspended (browser autoplay policy)
+    if (ctx.state === 'suspended') ctx.resume()
     const osc  = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)
     gain.connect(ctx.destination)
     osc.type = 'sine'
-    // 440 Hz → 330 Hz, gentle fade in then out
     osc.frequency.setValueAtTime(440, ctx.currentTime)
     osc.frequency.exponentialRampToValueAtTime(330, ctx.currentTime + 1.5)
     gain.gain.setValueAtTime(0.0001, ctx.currentTime)
@@ -387,10 +397,12 @@ export default function SessionScreen({ task, duration, monitorPositions, onEnd 
         currentStreakRef.current = 0
       }
 
+      // Update displayed score every second (keeps dot + number in sync)
+      setFocusScore(Math.round(focusScoreRef.current))
+
       // Timeline snapshot every 5 seconds
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
         timelineSnapshotsRef.current.push({ second: elapsedSecs, focused })
-        setFocusScore(Math.round(focusScoreRef.current))
       }
     }, 1000)
     return () => clearInterval(tick)

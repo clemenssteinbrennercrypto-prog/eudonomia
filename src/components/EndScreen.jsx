@@ -11,7 +11,7 @@ function motivational(pct) {
   return 'Keep going. Every session counts.'
 }
 
-export default function EndScreen({ sessionData, onRestart }) {
+export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   const {
     actualSeconds        = 0,
     focusedSeconds       = 0,
@@ -91,9 +91,28 @@ export default function EndScreen({ sessionData, onRestart }) {
           </div>
         </div>
 
-        <button className="restart-btn" onClick={onRestart}>
-          New Session
-        </button>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button className="restart-btn" onClick={onRestart}>
+            New Session
+          </button>
+          <button
+            onClick={onShowHistory}
+            style={{
+              padding: '14px 28px',
+              fontSize: 15, fontWeight: 600,
+              background: 'transparent',
+              color: '#1a2e4a',
+              border: '1.5px solid #1a2e4a',
+              borderRadius: 14,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              letterSpacing: '0.01em',
+              transition: 'opacity 0.15s',
+            }}
+          >
+            View History
+          </button>
+        </div>
 
       </div>
     </div>

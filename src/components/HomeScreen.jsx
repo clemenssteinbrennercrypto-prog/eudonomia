@@ -26,6 +26,7 @@ export default function HomeScreen({
   monitors, setMonitors,
   monitorPositions, setMonitorPositions,
   onStart,
+  onShowHistory,
 }) {
   const setPosition = (index, pos) => {
     setMonitorPositions((prev) => {
@@ -38,7 +39,20 @@ export default function HomeScreen({
   return (
     <div className="screen-center">
       <div className="home-content">
-        <div className="home-header">
+        <div className="home-header" style={{ position: 'relative' }}>
+          <button
+            onClick={onShowHistory}
+            style={{
+              position: 'absolute', top: 0, right: 0,
+              background: 'none', border: '1px solid #e5e7eb',
+              borderRadius: 100, padding: '6px 14px',
+              fontSize: 12, fontWeight: 500, color: '#6b7280',
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+          >
+            History
+          </button>
           <h1 className="app-title">Eudaimonia</h1>
           <p className="app-tagline">Stay present. Stay focused.</p>
         </div>
