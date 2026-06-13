@@ -64,7 +64,7 @@ export default function HomeScreen({
 
         {/* Header row */}
         <div className="home-header" style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: 8 }}>
+          <div className="home-header-actions" style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: 8 }}>
             <button
               onClick={onShowSetup}
               style={{

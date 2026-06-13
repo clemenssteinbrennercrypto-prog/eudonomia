@@ -88,7 +88,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value" style={{ fontSize: 72, color: focusPct >= 60 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444' }}>
+            <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct >= 60 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444' }}>
               {focusPct}%
             </span>
             <span className="stat-label">focused</span>
@@ -108,7 +108,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {/* Goal section */}
         {goal && (
           <div style={{
-            width: '100%',
+            width: '100%', boxSizing: 'border-box',
             background: '#FFFFFF',
             border: '1px solid #E8E3DA',
             borderRadius: 14,
@@ -155,7 +155,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
         {/* Distraction log */}
         {distractionLog.length > 0 && (
-          <div style={{ width: '100%' }}>
+          <div style={{ width: '100%', boxSizing: 'border-box' }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
               What distracted you
             </p>

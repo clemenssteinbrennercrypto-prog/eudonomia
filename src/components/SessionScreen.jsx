@@ -733,6 +733,22 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
   return (
     <div className="session-root">
+      {window.innerWidth < 600 && (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#0D0F14',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: 32, textAlign: 'center', zIndex: 999,
+        }}>
+          <p style={{ fontSize: 24, fontWeight: 300, color: '#ffffff', marginBottom: 12 }}>
+            Desktop only
+          </p>
+          <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6 }}>
+            Focus tracking requires a webcam and a fixed screen setup.
+            Please open Eudaimonia on your laptop or desktop.
+          </p>
+        </div>
+      )}
       <div className="progress-track">
         <div className="progress-fill" style={{ width: `${progress * 100}%` }} />
       </div>

@@ -110,7 +110,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
       {/* Quick stats row */}
       <div style={{
         display: 'flex', gap: 20, marginTop: 14,
-        fontSize: 12, color: '#6b7280',
+        fontSize: 12, color: '#6b7280', flexWrap: 'wrap', rowGap: 6,
       }}>
         <span>{fmt(session.actualSeconds)}</span>
         <span>{motivational(focusPct)}</span>
@@ -131,7 +131,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
           {/* Big stats */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: 16,
             textAlign: 'center',
           }}>
@@ -228,7 +228,7 @@ function OverallStats({ sessions }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
+      gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
       gap: 12,
       marginBottom: 32,
     }}>

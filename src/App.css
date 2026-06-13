@@ -452,3 +452,69 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Mobile responsive (max-width: 600px) ─────────────────────────────────── */
+@media (max-width: 600px) {
+
+  /* Home */
+  .home-content {
+    max-width: 100%;
+    gap: 28px;
+  }
+
+  .home-form {
+    padding: 28px 20px;
+    border-radius: 16px;
+  }
+
+  .app-title {
+    font-size: 32px;
+  }
+
+  .duration-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .start-btn {
+    height: 52px;
+    font-size: 15px;
+  }
+
+  /* End screen */
+  .stats-row {
+    flex-direction: column;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .stat-divider {
+    width: 48px;
+    height: 1px;
+  }
+
+  .stat-value {
+    font-size: 36px;
+  }
+
+  .stat-value-large {
+    font-size: 52px !important;
+  }
+
+  .end-content {
+    gap: 32px;
+    padding: 0 4px;
+  }
+
+  .end-headline {
+    font-size: 28px;
+  }
+
+  /* Home header actions — move below tagline on mobile */
+  .home-header-actions {
+    position: static !important;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+}
