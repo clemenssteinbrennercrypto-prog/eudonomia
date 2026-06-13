@@ -18,14 +18,23 @@ const MOUTH_T2    = 312
 const MOUTH_B2    = 317
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
-const EAR_BLINK           = 0.20
-const EAR_HEAVY           = 0.15
-const EAR_PROLONGED_CLOSE = 0.18
-const PROLONGED_CLOSE_MS  = 1500
-const MAR_YAWN            = 0.55
-const YAWN_HOLD_MS        = 1500
-const BLINK_WIN_MS        = 20_000
-const PERCLOS_WIN_MS      = 60_000
+// Science sources:
+//  • EAR blink/heavy: Soukupová & Čech (2016), dlib 68-pt model, EAR < 0.20 = blink
+//  • PROLONGED_CLOSE_MS: fatigue eye closure > 500ms (PMC3836343), microsleep ≥ 1000ms
+//    → 800ms = early fatigue warning; 1500ms = confirmed impairment (kept for penalty trigger)
+//  • MAR_YAWN: 0.50 per Weng et al. (MDPI 2022) — threshold in 20-frame sequence
+//  • BLINK_WIN_MS: 20s window gives ~4 blinks minimum at 12/min — adequate signal
+//  • PERCLOS_WIN_MS: 30s (shortened from 60s) — office/study use responds faster than driving;
+//    Wierwille (1994) 60s was for highway driving. 30s validated in PMC10108649.
+const EAR_BLINK              = 0.20
+const EAR_HEAVY              = 0.15
+const EAR_PROLONGED_CLOSE    = 0.18
+const PROLONGED_CLOSE_MS     = 1500  // confirmed fatigue/microsleep penalty threshold
+const EARLY_MICROSLEEP_MS    = 800   // 500ms+ closures = drowsiness signal (PMC3836343)
+const MAR_YAWN               = 0.50  // Weng et al. MDPI 2022: 0.5 in consecutive frames
+const YAWN_HOLD_MS           = 1500
+const BLINK_WIN_MS           = 20_000
+const PERCLOS_WIN_MS         = 30_000 // shortened: 30s catches fatigue faster for desk work
 const PITCH_NEUTRAL       = 0.50
 const PITCH_UP_THRESH     = 15
 const PHONE_PITCH_THRESH  = 38
@@ -52,8 +61,13 @@ const ALERT_MESSAGES = {
 const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
 
 function computeThresholds(devices = []) {
-  let yawLeft = 30, yawRight = 30, pitchDown = 20, pitchUp = 15
+  // Science: ergonomic laptop posture = 15-20° downward head pitch is NORMAL (Stanford, Pitt).
+  // Default pitchDown starts at 25° to avoid false-positives for laptop users.
+  // Explicit laptop device bumps it further to 30° (user is definitely looking down at screen).
+  let yawLeft = 30, yawRight = 30, pitchDown = 25, pitchUp = 15
   let ignoreBelowPhone = false
+  const hasLaptop = devices.some(d => d.type === 'laptop')
+  if (hasLaptop) pitchDown = 30  // laptop = 15-20° natural downward gaze, 30° is safe threshold
   for (const d of devices) {
     const isScreen = SCREEN_DEVICES.has(d.type)
     const col = d.col ?? 0.5
@@ -61,7 +75,7 @@ function computeThresholds(devices = []) {
     if (isScreen && col < 0.35)  yawLeft   = Math.max(yawLeft,   55)
     if (isScreen && col > 0.65)  yawRight  = Math.max(yawRight,  55)
     if (isScreen && row > 0.6)   pitchUp   = Math.max(pitchUp,   28)
-    if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 30)
+    if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 35)
     if (d.type === 'phone' && row < 0.3) ignoreBelowPhone = true
   }
   return { yawLeft, yawRight, pitchDown, pitchUp, ignoreBelowPhone }
@@ -485,10 +499,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     }
 
     const tenAgo   = now - BLINK_WIN_MS
-    const sixtyAgo = now - PERCLOS_WIN_MS
+    const thirtyAgo = now - PERCLOS_WIN_MS
     const driftAgo = now - HEAD_DRIFT_WIN_MS
     blinkTimestampsRef.current = blinkTimestampsRef.current.filter(t => t > tenAgo)
-    perclosHistRef.current     = perclosHistRef.current.filter(f => f.t > sixtyAgo)
+    perclosHistRef.current     = perclosHistRef.current.filter(f => f.t > thirtyAgo)
     nosePtHistRef.current      = nosePtHistRef.current.filter(p => p.t > driftAgo)
 
     const blinkRate    = blinkTimestampsRef.current.length * 3
@@ -503,6 +517,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       eyesClosedSinceRef.current = null
     }
     const eyesClosedMs = eyesClosedSinceRef.current ? now - eyesClosedSinceRef.current : 0
+    // Early microsleep warning: research shows >500ms slow closure = drowsiness signal
+    // (PMC3836343: sleep-deprived pilots showed increased 500ms+ closures with performance errors)
+    const earlyMicrosleepMs = eyesClosedMs
 
     if (hasFace && mar > MAR_YAWN) {
       if (!yawnStartRef.current) yawnStartRef.current = now
@@ -599,8 +616,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       score = focusScoreRef.current * 0.88
     } else if (hasFace) {
       // ── Positive signals ───────────────────────────────────────────────────
-      // Healthy blink rate: 12–20/min is optimal for screen work (Doughty 2001)
+      // Blink rate science (Doughty 2001; ergonomics.org.uk; frontiersin 2023):
+      //   • 12–20/min = optimal screen work rate → full bonus
+      //   • 5–11/min = blink SUPPRESSION during deep cognitive focus — this is
+      //     a POSITIVE signal of concentration, not fatigue. Brain inhibits blink
+      //     reflex to prevent perceptual blackout during intense information intake.
+      //     Do NOT penalize moderate suppression; small bonus for focus signal.
+      //   • 8–28/min extended normal range → small bonus
+      //   • <3/min = extreme suppression (likely fatigue or glazing, not focus) → penalized below
       if (hasBlinkData && blinkRate >= 12 && blinkRate <= 20) score += 7
+      else if (hasBlinkData && blinkRate >= 5 && blinkRate < 12) score += 4  // focus suppression = good
       else if (hasBlinkData && blinkRate >= 8 && blinkRate <= 28) score += 3
 
       // Stable head position (not fidgeting)
@@ -614,8 +639,14 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // ── Penalties ─────────────────────────────────────────────────────────
       const phonePenalty = ignoreBelowPhone ? 20 : 45
       if (phoneMs >= PHONE_HOLD_MS) { score -= phonePenalty; primaryReason = 'phone' }
+      // Early microsleep signal (800ms): moderate penalty for drowsiness onset
+      // Full prolonged penalty at 1500ms (confirmed microsleep territory)
       if (eyesClosedMs >= PROLONGED_CLOSE_MS) {
         score -= 35
+        if (primaryReason === 'focused') primaryReason = 'prolonged'
+      } else if (earlyMicrosleepMs >= EARLY_MICROSLEEP_MS) {
+        // 800ms+ closure: significant drowsiness warning (PMC3836343)
+        score -= 15
         if (primaryReason === 'focused') primaryReason = 'prolonged'
       }
       if (hasPerclos) {
@@ -630,7 +661,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         score -= 25
         if (primaryReason === 'focused') primaryReason = 'lookingup'
       }
-      if (hasBlinkData && blinkRate > 0 && (blinkRate < 8 || blinkRate > 30)) score -= 15
+      // Penalize only extreme blink suppression (<3/min) — not moderate focus suppression
+      // and high blink rates (>35/min = likely agitation or eye irritation)
+      if (hasBlinkData && blinkRate > 0 && (blinkRate < 3 || blinkRate > 35)) score -= 15
       if (pitchDeg >= pitchDT && headDownSecs >= HEAD_DOWN_HOLD) score -= 25
       else if (pitchDeg >= pitchDT * 0.75) score -= 8
       if (yawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
