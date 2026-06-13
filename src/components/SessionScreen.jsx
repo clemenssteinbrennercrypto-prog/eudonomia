@@ -60,6 +60,17 @@ function getCircadianFactor() {
   return 1.0                           // normal hours
 }
 
+// ── Reason labels (shown below status dot) ───────────────────────────────────
+const REASON_LABELS = {
+  away:       '→ looking away',
+  phone:      '→ phone detected',
+  prolonged:  '→ eyes tired',
+  yawn:       '→ yawning',
+  lookingup:  '→ mind wandering',
+  focused:    null,
+  default:    null,
+}
+
 // ── Alert messages ────────────────────────────────────────────────────────────
 const ALERT_MESSAGES = {
   default:    { text: 'Hey — come back.',        sub: 'Your session is still running' },
@@ -224,12 +235,12 @@ function formatTime(s) {
 }
 
 // ── Focus Ring (SVG) ──────────────────────────────────────────────────────────
-function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
+function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0 }) {
   const size   = 220
   const radius = 96
   const stroke = 9
   const circ   = 2 * Math.PI * radius
-  const fill   = isCalibrating ? 1 : score / 100
+  const fill   = isCalibrating ? calibProgress : score / 100
   const offset = circ * (1 - fill)
 
   const color = isCalibrating
@@ -254,7 +265,6 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
           strokeDasharray={circ}
           strokeDashoffset={offset}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          className={isCalibrating ? 'ring--calibrating' : ''}
           style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.4s ease' }}
         />
       </svg>
@@ -285,30 +295,48 @@ const STATUS_CONFIG = {
 function StatusDot({ status, score, reason, isCalibrating }) {
   const cfg = isCalibrating ? STATUS_CONFIG.calibrating : (STATUS_CONFIG[status] ?? STATUS_CONFIG.focused)
   const { color, label } = cfg
-  const reasonLabel = (!isCalibrating && reason && reason !== 'default') ? reason : label
+  const showReason = !isCalibrating && (status === 'distracted' || status === 'alert')
+  const reasonText = showReason ? (REASON_LABELS[reason] ?? null) : null
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 7,
-      padding: '5px 12px',
-      background: '#1C1F28',
-      border: '1px solid #2A2E3A',
-      borderRadius: 100,
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
       <div style={{
-        width: 7, height: 7, borderRadius: '50%',
-        background: color,
-        boxShadow: `0 0 0 2.5px ${color}28`,
-        flexShrink: 0,
-        animation: status === 'alert' && !isCalibrating ? 'dotPulse 1.1s ease-in-out infinite' : 'none',
-        transition: 'background 0.4s',
-      }} />
-      <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
-        {reasonLabel}
-      </span>
-      <span style={{ fontSize: 11, color: '#2A2E3A' }}>·</span>
-      <span style={{ fontSize: 12, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums', transition: 'color 0.4s' }}>
-        {isCalibrating ? '--' : score}
-      </span>
+        display: 'flex', alignItems: 'center', gap: 7,
+        padding: '5px 12px',
+        background: '#1C1F28',
+        border: '1px solid #2A2E3A',
+        borderRadius: 100,
+      }}>
+        <div style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: color,
+          boxShadow: `0 0 0 2.5px ${color}28`,
+          flexShrink: 0,
+          animation: status === 'alert' && !isCalibrating ? 'dotPulse 1.1s ease-in-out infinite' : 'none',
+          transition: 'background 0.4s',
+        }} />
+        <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
+          {label}
+        </span>
+        <span style={{ fontSize: 11, color: '#2A2E3A' }}>·</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums', transition: 'color 0.4s' }}>
+          {isCalibrating ? '--' : score}
+        </span>
+      </div>
+      {reasonText && (
+        <div style={{
+          padding: '3px 10px',
+          background: '#1C1F28',
+          border: '1px solid #2A2E3A',
+          borderRadius: 100,
+          fontSize: 11,
+          color: '#64748b',
+          fontWeight: 500,
+          letterSpacing: '0.01em',
+          transition: 'opacity 0.3s',
+        }}>
+          {reasonText}
+        </div>
+      )}
     </div>
   )
 }
@@ -328,6 +356,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [camHidden,       setCamHidden]       = useState(false)
   const [isPaused,        setIsPaused]        = useState(false)
   const [isCalibrating,   setIsCalibrating]   = useState(true)
+  const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
   const [currentStreak,   setCurrentStreak]   = useState(0)
   const [ambientMode,     setAmbientMode]     = useState('off')
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
@@ -790,8 +819,12 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
     })
     faceMesh.onResults(handleFaceResults)
+    let lastFrameTime = 0
     const camera = new window.Camera(videoRef.current, {
       onFrame: async () => {
+        const now = Date.now()
+        if (now - lastFrameTime < 67) return // ~15fps cap
+        lastFrameTime = now
         if (videoRef.current && !sessionEndedRef.current) {
           await faceMesh.send({ image: videoRef.current })
         }
@@ -818,9 +851,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
       if (calibrating) {
         setIsCalibrating(true)
+        setCalibProgress(Math.min(elapsedSecs / CALIBRATION_SECS, 1))
         return
       }
       setIsCalibrating(false)
+      setCalibProgress(1)
 
       const focused = focusScoreRef.current >= 40
 
@@ -837,7 +872,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setCurrentStreak(currentStreakRef.current)
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
-        timelineSnapshotsRef.current.push({ second: elapsedSecs, focused })
+        timelineSnapshotsRef.current.push({ second: elapsedSecs, score: Math.round(focusScoreRef.current), focused })
       }
 
       // Break reminders at 25min (1500s), 50min (3000s), 90min (5400s)
@@ -935,10 +970,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         <p className="session-task">{task}</p>
 
         <FocusRing
-          score={isCalibrating ? 100 : focusScore}
+          score={focusScore}
           timeLeft={timeLeft}
           isCalibrating={isCalibrating}
           isPaused={isPaused}
+          calibProgress={calibProgress}
         />
 
         {/* Flow state indicator */}

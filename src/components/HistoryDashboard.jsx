@@ -382,7 +382,7 @@ export default function HistoryDashboard({ onClose }) {
               Session History
             </h1>
             <p style={{ fontSize: 14, color: '#9ca3af', marginTop: 4 }}>
-              {sessions.length} session{sessions.length !== 1 ? 's' : ''} recorded
+              {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} total focused
             </p>
           </div>
           <button

@@ -38,6 +38,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     completed            = false,
     goal                 = '',
     distractionLog       = [],
+    plannedDuration      = 0,
   } = sessionData
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
@@ -66,12 +67,19 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               borderRadius: 6, overflow: 'hidden',
               display: 'flex', background: '#E8E3DA',
             }}>
-              {timeline.map((pt, i) => (
-                <div key={i} style={{
-                  flex: 1, background: pt.focused ? '#22c55e' : '#ef4444', minWidth: 1,
-                  borderRadius: i === 0 ? '6px 0 0 6px' : i === timeline.length - 1 ? '0 6px 6px 0' : 0,
-                }} />
-              ))}
+              {timeline.map((pt, i) => {
+                const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
+                const r = Math.round(239 - (239 - 34) * (s / 100))
+                const g = Math.round(68 + (197 - 68) * (s / 100))
+                const b = Math.round(68 - (68 - 94) * (s / 100))
+                const color = `rgb(${r},${g},${b})`
+                return (
+                  <div key={i} style={{
+                    flex: 1, background: color, minWidth: 1,
+                    borderRadius: i === 0 ? '6px 0 0 6px' : i === timeline.length - 1 ? '0 6px 6px 0' : 0,
+                  }} />
+                )
+              })}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
               <span style={{ fontSize: 11, color: '#9ca3af' }}>Start</span>
@@ -179,6 +187,23 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             </div>
           </div>
         )}
+
+        {/* Smart next session suggestion */}
+        {actualSeconds > 300 && plannedDuration > 0 && (() => {
+          let suggestion = null
+          if (focusPct < 50) {
+            const mins = Math.round(plannedDuration * 0.75)
+            suggestion = `Next time, try ${mins} minutes — a shorter session might keep you sharper.`
+          } else if (focusPct > 80) {
+            const mins = Math.round(plannedDuration * 1.25)
+            suggestion = `You're on a roll. Next time, try ${mins} minutes.`
+          }
+          return suggestion ? (
+            <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
+              {suggestion}
+            </p>
+          ) : null
+        })()}
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button className="restart-btn" onClick={onRestart}>
