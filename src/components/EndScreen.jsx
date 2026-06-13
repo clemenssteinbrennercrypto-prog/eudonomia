@@ -63,6 +63,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     return focusPct > prevMax
   }, [id, focusPct])
   const [copied, setCopied] = useState(false)
+  const [shared, setShared] = useState(false)
 
   function copySummary() {
     const durationMin = Math.round(actualSeconds / 60)
@@ -70,6 +71,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  function shareSession() {
+    const durationMin = Math.round(actualSeconds / 60)
+    const longestStreakMin = Math.round((longestFocusedStreak || 0) / 60)
+    const text = [
+      '📊 Eudaimonia session',
+      `Task: ${task || 'Focus'}`,
+      `Duration: ${durationMin} min · Focus: ${focusPct}%`,
+      longestStreakMin > 0 ? `Longest streak: ${longestStreakMin} min` : null,
+    ].filter(Boolean).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
     })
   }
 
@@ -315,6 +331,20 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           }}
         >
           {copied ? 'Copied!' : 'Copy summary'}
+        </button>
+        <button
+          onClick={shareSession}
+          style={{
+            marginTop: 4,
+            background: 'none', border: 'none',
+            color: shared ? '#22c55e' : '#9ca3af',
+            fontSize: 13, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'inherit',
+            textDecoration: 'underline', textDecorationColor: 'transparent',
+            transition: 'color 0.2s',
+          }}
+        >
+          {shared ? 'Copied!' : '📤 Share'}
         </button>
 
       </div>

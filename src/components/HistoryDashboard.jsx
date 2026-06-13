@@ -1,6 +1,102 @@
 import { useState, useMemo } from 'react'
 import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
 
+// ── Month Calendar ─────────────────────────────────────────────────────────────
+function MonthCalendar({ sessions, onDayClick, selectedDay }) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const firstDay = new Date(year, month, 1).getDay() // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  // Build day → avg focus map
+  const dayMap = useMemo(() => {
+    const map = {}
+    for (const s of sessions) {
+      const d = new Date(s.timestamp)
+      if (d.getFullYear() !== year || d.getMonth() !== month) continue
+      const key = d.getDate()
+      if (!map[key]) map[key] = []
+      const pct = s.actualSeconds > 0 ? Math.round(((s.focusedSeconds || 0) / s.actualSeconds) * 100) : 0
+      map[key].push(pct)
+    }
+    const result = {}
+    for (const [k, arr] of Object.entries(map)) {
+      result[k] = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+    }
+    return result
+  }, [sessions, year, month])
+
+  function dayColor(avg) {
+    if (avg === undefined) return '#f3f4f6'
+    if (avg >= 70) return '#bbf7d0'
+    if (avg >= 45) return '#fde68a'
+    return '#fecaca'
+  }
+  function dayTextColor(avg) {
+    if (avg === undefined) return '#9ca3af'
+    if (avg >= 70) return '#166534'
+    if (avg >= 45) return '#92400e'
+    return '#991b1b'
+  }
+
+  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const dayLabels = ['Su','Mo','Tu','We','Th','Fr','Sa']
+
+  // Build grid cells: blanks + days
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  const selectedDateStr = selectedDay
+    ? new Date(year, month, selectedDay).toDateString()
+    : null
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        {monthName}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+        {dayLabels.map(l => (
+          <div key={l} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#9ca3af', paddingBottom: 4 }}>{l}</div>
+        ))}
+        {cells.map((day, i) => {
+          if (!day) return <div key={`blank-${i}`} />
+          const avg = dayMap[day]
+          const isSelected = selectedDay === day
+          return (
+            <div
+              key={day}
+              onClick={() => onDayClick(day === selectedDay ? null : day)}
+              title={avg !== undefined ? `${avg}% focus` : 'No sessions'}
+              style={{
+                aspectRatio: '1',
+                borderRadius: 6,
+                background: dayColor(avg),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 600,
+                color: dayTextColor(avg),
+                cursor: avg !== undefined ? 'pointer' : 'default',
+                border: isSelected ? '2px solid #1a2e4a' : '2px solid transparent',
+                boxSizing: 'border-box',
+              }}
+            >
+              {day}
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#9ca3af', flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#bbf7d0', display: 'inline-block' }}/> ≥70% focus</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#fde68a', display: 'inline-block' }}/> 45–70%</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#fecaca', display: 'inline-block' }}/> &lt;45%</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#f3f4f6', display: 'inline-block' }}/> none</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(seconds) {
   if (!seconds || seconds < 0) return '0s'
@@ -586,6 +682,7 @@ export default function HistoryDashboard({ onClose }) {
   const [expandedId, setExpandedId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [dateFilter, setDateFilter] = useState('all') // 'all' | 'week' | 'month'
+  const [selectedDay, setSelectedDay] = useState(null) // day of month (number) when in month view
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 10
@@ -596,8 +693,19 @@ export default function HistoryDashboard({ onClose }) {
       const now = new Date()
       const cutoff = new Date(now)
       if (dateFilter === 'week') cutoff.setDate(now.getDate() - 7)
-      else if (dateFilter === 'month') cutoff.setDate(now.getDate() - 30)
+      else if (dateFilter === 'month') {
+        cutoff.setDate(1)
+        cutoff.setHours(0, 0, 0, 0)
+      }
       result = result.filter(s => new Date(s.timestamp) >= cutoff)
+    }
+    // Day filter when in month view
+    if (dateFilter === 'month' && selectedDay !== null) {
+      const now = new Date()
+      result = result.filter(s => {
+        const d = new Date(s.timestamp)
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === selectedDay
+      })
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -724,7 +832,7 @@ export default function HistoryDashboard({ onClose }) {
               {[['all','All time'],['week','This week'],['month','This month']].map(([val, label]) => (
                 <button
                   key={val}
-                  onClick={() => { setDateFilter(val); setPage(0) }}
+                  onClick={() => { setDateFilter(val); setPage(0); setSelectedDay(null) }}
                   style={{
                     border: dateFilter === val ? '1.5px solid #1a2e4a' : '1.5px solid #E8E3DA',
                     borderRadius: 100, padding: '6px 16px',
@@ -736,6 +844,15 @@ export default function HistoryDashboard({ onClose }) {
                 >{label}</button>
               ))}
             </div>
+
+            {/* Month calendar grid */}
+            {dateFilter === 'month' && (
+              <MonthCalendar
+                sessions={sessions}
+                selectedDay={selectedDay}
+                onDayClick={(day) => { setSelectedDay(day); setPage(0) }}
+              />
+            )}
 
             {/* Search filter */}
             <div style={{ position: 'relative', marginBottom: 20 }}>

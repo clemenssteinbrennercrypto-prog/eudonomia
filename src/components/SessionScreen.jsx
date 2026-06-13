@@ -381,6 +381,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [ambientMode,     setAmbientMode]     = useState('off')
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
+  const [milestone,       setMilestone]       = useState(null) // {msg}
   const [inFlowState,     setInFlowState]     = useState(false)
   const [distractionCount, setDistractionCount] = useState(0)
   const [hintVisible,     setHintVisible]     = useState(true)
@@ -945,6 +946,20 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           })
         }
       }
+
+      // Milestone celebrations at 5, 25, 50 min (only when focused)
+      const milestones = [
+        { secs: 5 * 60,  msg: '5 min in — nice start 🌱' },
+        { secs: 25 * 60, msg: '25 min — great work 🔥' },
+        { secs: 50 * 60, msg: '50 min — impressive focus ⚡' },
+      ]
+      for (const m of milestones) {
+        if (elapsedSecs === m.secs && focusScoreRef.current >= 65) {
+          setMilestone({ msg: m.msg })
+          setTimeout(() => setMilestone(null), 3500)
+          break
+        }
+      }
     }, 1000)
     return () => clearInterval(tick)
   }, [])
@@ -1033,6 +1048,25 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       <div className="progress-track">
         <div className="progress-fill" style={{ width: `${progress * 100}%` }} />
       </div>
+
+      {/* Milestone celebration pill */}
+      {milestone && (
+        <div style={{
+          position: 'fixed', top: 40, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 25,
+          background: 'linear-gradient(135deg, #1a3a2a 0%, #1e3a1e 100%)',
+          border: '1px solid #2d6a4f',
+          borderRadius: 100,
+          padding: '8px 20px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          boxShadow: '0 2px 16px rgba(45,106,79,0.4)',
+          fontSize: 13, fontWeight: 600, color: '#6ee7b7',
+          animation: 'milestoneSlide 0.4s ease',
+          pointerEvents: 'none',
+        }}>
+          {milestone.msg}
+        </div>
+      )}
 
       {/* Break reminder banner */}
       {breakBanner && !dismissedBreaks.has(breakBanner.id) && (
