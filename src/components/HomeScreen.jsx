@@ -1,6 +1,34 @@
 import { useState } from 'react'
-import { DEVICE_TYPES, POSITION_LABELS } from './SetupScreen'
-import { DEVICE_ICON_MAP } from './DeviceIcons'
+
+// Summarise devices array into a human-readable string
+function summariseDevices(devices) {
+  if (!devices.length) return null
+  const laptops  = devices.filter(d => d.type === 'laptop').length
+  const monitors = devices.filter(d => d.type === 'monitor')
+  const extra    = monitors.filter(d => d.col !== 0.5 || d.row !== 0.5)
+  const main     = monitors.filter(d => d.col === 0.5 && d.row === 0.5)
+
+  const POSITION_NAME = (d) => {
+    if (d.col < 0.35) return 'Left'
+    if (d.col > 0.65) return 'Right'
+    if (d.row < 0.35) return 'Above'
+    if (d.row > 0.65) return 'Below'
+    return 'Center'
+  }
+
+  const parts = []
+  if (laptops > 0 && main.length > 0) parts.push('Laptop + monitor')
+  else if (laptops > 0) parts.push('Laptop')
+  else if (main.length > 0) parts.push('Desktop monitor')
+
+  if (extra.length === 1) {
+    parts.push(`1 extra monitor (${POSITION_NAME(extra[0])})`)
+  } else if (extra.length === 2) {
+    parts.push(`2 extra monitors (${POSITION_NAME(extra[0])}, ${POSITION_NAME(extra[1])})`)
+  }
+
+  return parts.join(' · ') || 'Workspace configured'
+}
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -71,32 +99,18 @@ export default function HomeScreen({
             <div
               onClick={onShowSetup}
               style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '11px 14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px',
                 background: '#f9fafb',
                 border: '1.5px solid #e5e7eb',
                 borderRadius: 12,
                 cursor: 'pointer',
               }}
             >
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
-                {devices.map((d, i) => {
-                  const dt = DEVICE_TYPES.find(t => t.id === d.type)
-                  const Icon = DEVICE_ICON_MAP[d.type]
-                  return (
-                    <span key={i} style={{
-                      fontSize: 12, fontWeight: 500, color: '#374151',
-                      background: '#fff', border: '1px solid #e5e7eb',
-                      borderRadius: 100, padding: '3px 10px',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}>
-                      {Icon && <Icon size={18} />}
-                      <span style={{ color: '#9ca3af' }}>{POSITION_LABELS[d.position]}</span>
-                    </span>
-                  )
-                })}
-              </div>
-              <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0 }}>Edit →</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                {summariseDevices(devices)}
+              </span>
+              <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>Edit →</span>
             </div>
           ) : (
             <button
