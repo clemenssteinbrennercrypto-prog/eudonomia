@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import HomeScreen from './components/HomeScreen'
-import SetupScreen from './components/WorkspaceSetup'
+import WorkspaceSetup from './components/WorkspaceSetup'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
@@ -69,7 +69,7 @@ export default function App() {
         />
       )}
       {screen === 'setup' && (
-        <SetupScreen
+        <WorkspaceSetup
           devices={devices}
           setDevices={setDevices}
           onContinue={() => setScreen('home')}

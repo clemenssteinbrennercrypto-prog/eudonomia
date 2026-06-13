@@ -730,7 +730,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           boxShadow: '0 2px 12px rgba(249,115,22,0.15)',
           fontSize: 13, fontWeight: 500, color: '#7c3a1c',
         }}>
-          <span>☕ {breakBanner.msg}</span>
+          <span>{breakBanner.msg}</span>
           <button
             onClick={dismissBreak}
             style={{
@@ -765,7 +765,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           <p style={{
             fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>
-            🔥 {formatTime(currentStreak)} streak
+            {formatTime(currentStreak)} streak
           </p>
         )}
 

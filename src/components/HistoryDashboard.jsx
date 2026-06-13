@@ -113,11 +113,11 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
         display: 'flex', gap: 20, marginTop: 14,
         fontSize: 12, color: '#6b7280',
       }}>
-        <span>⏱ {fmt(session.actualSeconds)}</span>
-        <span>🎯 {motivational(focusPct)}</span>
-        <span>🔔 {session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
-        <span>🔥 {fmt(session.longestFocusedStreak)} streak</span>
-        {session.completed && <span style={{ color: '#22c55e' }}>✓ Completed</span>}
+        <span>{fmt(session.actualSeconds)}</span>
+        <span>{motivational(focusPct)}</span>
+        <span>{session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
+        <span>{fmt(session.longestFocusedStreak)} streak</span>
+        {session.completed && <span style={{ color: '#22c55e' }}>Completed</span>}
       </div>
 
       <MiniTimeline timeline={session.timeline} />
