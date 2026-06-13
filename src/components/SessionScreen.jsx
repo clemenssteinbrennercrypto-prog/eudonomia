@@ -594,6 +594,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     if (faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
       score = 0
       primaryReason = 'away'
+      sustainedGoodMsRef.current = 0  // ramp resets when person is clearly away
     } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
       score = focusScoreRef.current * 0.88
     } else if (hasFace) {
