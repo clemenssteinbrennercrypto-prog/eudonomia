@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LegalModal from './LegalModal'
 
 // Summarise devices array into a human-readable string
 function summariseDevices(devices) {
@@ -41,6 +42,7 @@ export default function HomeScreen({
   onShowHistory,
   onShowSetup,
 }) {
+  const [legalTab, setLegalTab] = useState(null)
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
@@ -59,6 +61,7 @@ export default function HomeScreen({
   }
 
   return (
+    <>
     <div className="screen-center">
       <div className="home-content">
 
@@ -201,5 +204,37 @@ export default function HomeScreen({
         </div>
       </div>
     </div>
+
+    {/* Legal footer */}
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0,
+      display: 'flex', justifyContent: 'center', gap: 20,
+      padding: '12px 24px',
+      background: 'linear-gradient(to top, #F5F4F0, transparent)',
+    }}>
+      <button
+        onClick={() => setLegalTab('impressum')}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 11, color: '#9CA3AF', fontFamily: 'inherit',
+          letterSpacing: '0.05em', textTransform: 'uppercase',
+        }}
+      >Impressum</button>
+      <button
+        onClick={() => setLegalTab('datenschutz')}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 11, color: '#9CA3AF', fontFamily: 'inherit',
+          letterSpacing: '0.05em', textTransform: 'uppercase',
+        }}
+      >Datenschutz</button>
+    </div>
+
+    <LegalModal
+      open={legalTab !== null}
+      onClose={() => setLegalTab(null)}
+      initialTab={legalTab ?? 'impressum'}
+    />
+    </>
   )
 }

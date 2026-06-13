@@ -518,3 +518,7 @@ body {
     margin-top: 8px;
   }
 }
+
+.legal-modal-enter {
+  animation: fadeIn 0.2s ease;
+}
