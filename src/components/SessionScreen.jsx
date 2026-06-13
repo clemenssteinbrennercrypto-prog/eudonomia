@@ -201,7 +201,7 @@ function formatTime(s) {
 function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
   const size   = 220
   const radius = 96
-  const stroke = 8
+  const stroke = 9
   const circ   = 2 * Math.PI * radius
   const fill   = isCalibrating ? 1 : score / 100
   const offset = circ * (1 - fill)
@@ -214,10 +214,10 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
 
   return (
     <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0 }}>
+      <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: `drop-shadow(0 0 8px ${color}4D)` }}>
         <circle
           cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="#f1f5f9" strokeWidth={stroke}
+          fill="none" stroke="#1C1F28" strokeWidth={stroke}
         />
         <circle
           cx={size / 2} cy={size / 2} r={radius}
@@ -228,6 +228,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
           strokeDasharray={circ}
           strokeDashoffset={offset}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          className={isCalibrating ? 'ring--calibrating' : ''}
           style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.4s ease' }}
         />
       </svg>
@@ -240,7 +241,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused }) {
         {isPaused ? (
           <span style={{ fontSize: 20, fontWeight: 700, color: '#6b7280', letterSpacing: '0.05em' }}>PAUSED</span>
         ) : (
-          <span className="timer" style={{ fontSize: 42, lineHeight: 1 }}>{formatTime(timeLeft)}</span>
+          <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
         )}
       </div>
     </div>
@@ -263,10 +264,9 @@ function StatusDot({ status, score, reason, isCalibrating }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 7,
       padding: '5px 12px',
-      background: 'rgba(255,255,255,0.92)',
-      border: '1px solid #e5e7eb',
+      background: '#1C1F28',
+      border: '1px solid #2A2E3A',
       borderRadius: 100,
-      backdropFilter: 'blur(8px)',
     }}>
       <div style={{
         width: 7, height: 7, borderRadius: '50%',
@@ -276,10 +276,10 @@ function StatusDot({ status, score, reason, isCalibrating }) {
         animation: status === 'alert' && !isCalibrating ? 'dotPulse 1.1s ease-in-out infinite' : 'none',
         transition: 'background 0.4s',
       }} />
-      <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
         {reasonLabel}
       </span>
-      <span style={{ fontSize: 11, color: '#d1d5db' }}>·</span>
+      <span style={{ fontSize: 11, color: '#2A2E3A' }}>·</span>
       <span style={{ fontSize: 12, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums', transition: 'color 0.4s' }}>
         {isCalibrating ? '--' : score}
       </span>
@@ -763,14 +763,14 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         {/* Streak counter */}
         {showStreak && (
           <p style={{
-            fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 8, fontWeight: 500,
+            fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>
             {formatTime(currentStreak)} streak
           </p>
         )}
 
         {isCalibrating && (
-          <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
+          <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 6, letterSpacing: '0.05em' }}>
             Calibrating…
           </p>
         )}
@@ -781,7 +781,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
         {/* Keyboard hint */}
         <p style={{
-          fontSize: 11, color: '#d1d5db', marginTop: 16, textAlign: 'center',
+          fontSize: 11, color: '#2A2E3A', marginTop: 16, textAlign: 'center',
           letterSpacing: '0.03em',
         }}>
           space pause · esc end · h camera
@@ -793,12 +793,12 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         <button
           onClick={cycleAmbient}
           style={{
-            background: ambientMode === 'off' ? 'rgba(255,255,255,0.9)' : '#f0fdf4',
-            border: `1px solid ${ambientMode === 'off' ? '#e5e7eb' : '#86efac'}`,
+            background: '#1C1F28',
+            border: `1px solid ${ambientMode === 'off' ? '#2A2E3A' : '#22c55e40'}`,
             borderRadius: 100,
             padding: '6px 14px',
             fontSize: 12, fontWeight: 500,
-            color: ambientMode === 'off' ? '#9ca3af' : '#16a34a',
+            color: ambientMode === 'off' ? '#6B7280' : '#22c55e',
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >

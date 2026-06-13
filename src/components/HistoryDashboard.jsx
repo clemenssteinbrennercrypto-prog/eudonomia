@@ -39,7 +39,7 @@ function MiniTimeline({ timeline }) {
   return (
     <div style={{
       width: '100%', height: 5, borderRadius: 3, overflow: 'hidden',
-      display: 'flex', background: '#f1f5f9', marginTop: 8,
+      display: 'flex', background: '#E8E3DA', marginTop: 8,
     }}>
       {timeline.map((pt, i) => (
         <div key={i} style={{
@@ -61,14 +61,13 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
   return (
     <div
       style={{
-        background: '#fff',
-        border: '1.5px solid #e5e7eb',
+        background: '#FFFFFF',
+        border: `1.5px solid ${expanded ? '#1a2e4a' : '#E8E3DA'}`,
         borderRadius: 16,
         padding: '20px 22px',
         cursor: 'pointer',
         transition: 'border-color 0.15s, box-shadow 0.15s',
         boxShadow: expanded ? '0 4px 20px rgba(0,0,0,0.07)' : 'none',
-        borderColor: expanded ? '#1a2e4a' : '#e5e7eb',
       }}
       onClick={() => onExpand(session.id)}
     >
@@ -143,7 +142,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
               { label: 'Best streak', value: fmt(session.longestFocusedStreak) },
             ].map((s) => (
               <div key={s.label} style={{
-                background: '#f9fafb', borderRadius: 12, padding: '14px 8px',
+                background: '#F5F4F0', borderRadius: 12, padding: '14px 8px',
               }}>
                 <p style={{
                   fontSize: 22, fontWeight: 300,
@@ -168,7 +167,7 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
               </p>
               <div style={{
                 width: '100%', height: 10, borderRadius: 5, overflow: 'hidden',
-                display: 'flex', background: '#f1f5f9',
+                display: 'flex', background: '#E8E3DA',
               }}>
                 {session.timeline.map((pt, i) => (
                   <div key={i} style={{
@@ -221,19 +220,20 @@ function OverallStats({ sessions }) {
         { label: 'Sessions completed', value: `${stats.completed}/${sessions.length}` },
       ].map((s) => (
         <div key={s.label} style={{
-          background: '#f9fafb',
-          border: '1px solid #e5e7eb',
-          borderRadius: 14,
+          background: '#FFFFFF',
+          border: 'none',
+          borderRadius: 16,
           padding: '18px 16px',
           textAlign: 'center',
+          boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
         }}>
           <p style={{
             fontSize: 28, fontWeight: 300, letterSpacing: '-0.025em',
-            color: s.color ?? '#111827', marginBottom: 6,
+            color: s.color ?? '#1A1A1A', marginBottom: 6,
           }}>
             {s.value}
           </p>
-          <p style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>
+          <p style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
             {s.label}
           </p>
         </div>
@@ -329,7 +329,7 @@ export default function HistoryDashboard({ onClose }) {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: '#fff',
+      background: '#F5F4F0',
       overflowY: 'auto',
       zIndex: 200,
     }}>

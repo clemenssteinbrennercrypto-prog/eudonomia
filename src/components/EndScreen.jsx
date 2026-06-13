@@ -45,7 +45,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   return (
     <div className="screen-center">
-      <div className="end-content">
+      <div className={`end-content${focusPct >= 80 ? ' end--excellent' : ''}`}>
 
         {/* Headline */}
         <div style={{ textAlign: 'center' }}>
@@ -62,13 +62,14 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               Focus timeline
             </p>
             <div style={{
-              width: '100%', height: 8,
-              borderRadius: 4, overflow: 'hidden',
-              display: 'flex', background: '#f1f5f9',
+              width: '100%', height: 12,
+              borderRadius: 6, overflow: 'hidden',
+              display: 'flex', background: '#E8E3DA',
             }}>
               {timeline.map((pt, i) => (
                 <div key={i} style={{
                   flex: 1, background: pt.focused ? '#22c55e' : '#ef4444', minWidth: 1,
+                  borderRadius: i === 0 ? '6px 0 0 6px' : i === timeline.length - 1 ? '0 6px 6px 0' : 0,
                 }} />
               ))}
             </div>
@@ -87,7 +88,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value" style={{ color: focusPct >= 60 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444' }}>
+            <span className="stat-value" style={{ fontSize: 72, color: focusPct >= 60 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444' }}>
               {focusPct}%
             </span>
             <span className="stat-label">focused</span>
@@ -108,8 +109,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {goal && (
           <div style={{
             width: '100%',
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
+            background: '#FFFFFF',
+            border: '1px solid #E8E3DA',
             borderRadius: 14,
             padding: '16px 18px',
           }}>
@@ -162,7 +163,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               {distractionLog.map((ev, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  background: '#f9fafb', border: '1px solid #e5e7eb',
+                  background: '#FFFFFF', border: '1px solid #E8E3DA',
                   borderRadius: 10, padding: '8px 14px',
                   fontSize: 13, color: '#374151',
                 }}>
