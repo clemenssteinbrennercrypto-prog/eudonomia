@@ -58,26 +58,29 @@ const ALERT_MESSAGES = {
 // Phone in 'below' → don't double-penalise normal desk posture.
 const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
 
+// Zone IDs from IsometricWorkspace map to directions:
+// back-left / mid-left → left,  back-right / mid-right → right
+// back-* → far / behind (above in angular terms)
+// front → below/close
+const LEFT_ZONES  = new Set(['back-left', 'mid-left'])
+const RIGHT_ZONES = new Set(['back-right', 'mid-right'])
+const FAR_ZONES   = new Set(['back-left', 'back-center', 'back-right'])
+const CLOSE_ZONES = new Set(['front'])
+
 function computeThresholds(devices = []) {
   let yawLeft = 30, yawRight = 30, pitchDown = 20, pitchUp = 15
   let ignoreBelowPhone = false
 
   for (const d of devices) {
     const isScreen = SCREEN_DEVICES.has(d.type)
-    const p = d.position
+    const pos = d.position
 
-    // Screens at side → user legitimately looks there → widen yaw threshold
-    if (isScreen && (p === 'left' || p === 'above-left' || p === 'below-left'))  yawLeft  = Math.max(yawLeft,  55)
-    if (isScreen && (p === 'right' || p === 'above-right' || p === 'below-right')) yawRight = Math.max(yawRight, 55)
+    if (isScreen && LEFT_ZONES.has(pos))  yawLeft  = Math.max(yawLeft,  55)
+    if (isScreen && RIGHT_ZONES.has(pos)) yawRight = Math.max(yawRight, 55)
+    if (isScreen && FAR_ZONES.has(pos))   pitchUp  = Math.max(pitchUp,  28)
+    if (isScreen && CLOSE_ZONES.has(pos)) pitchDown = Math.max(pitchDown, 30)
 
-    // Screen below → head-down is normal
-    if (isScreen && (p === 'below' || p === 'below-left' || p === 'below-right')) pitchDown = Math.max(pitchDown, 30)
-
-    // Screen above → looking up is normal
-    if (isScreen && (p === 'above' || p === 'above-left' || p === 'above-right')) pitchUp = Math.max(pitchUp, 30)
-
-    // Phone declared at below → user may hold phone to read (less suspicious)
-    if (d.type === 'phone' && (p === 'below' || p === 'below-left' || p === 'below-right')) ignoreBelowPhone = true
+    if (d.type === 'phone' && CLOSE_ZONES.has(pos)) ignoreBelowPhone = true
   }
 
   return { yawLeft, yawRight, pitchDown, pitchUp, ignoreBelowPhone }
