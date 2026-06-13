@@ -1,4 +1,5 @@
 import { DEVICE_TYPES, POSITION_LABELS } from './SetupScreen'
+import { DEVICE_ICON_MAP } from './DeviceIcons'
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -63,6 +64,7 @@ export default function HomeScreen({
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
                 {devices.map((d, i) => {
                   const dt = DEVICE_TYPES.find(t => t.id === d.type)
+                  const Icon = DEVICE_ICON_MAP[d.type]
                   return (
                     <span key={i} style={{
                       fontSize: 12, fontWeight: 500, color: '#374151',
@@ -70,7 +72,7 @@ export default function HomeScreen({
                       borderRadius: 100, padding: '3px 10px',
                       display: 'flex', alignItems: 'center', gap: 5,
                     }}>
-                      <span>{dt?.icon}</span>
+                      {Icon && <Icon size={18} />}
                       <span style={{ color: '#9ca3af' }}>{POSITION_LABELS[d.position]}</span>
                     </span>
                   )
