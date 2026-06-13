@@ -372,6 +372,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [distractReason,  setDistractReason]  = useState('focused')
   const [focusScore,      setFocusScore]      = useState(68)
   const [camHidden,       setCamHidden]       = useState(false)
+  const [camSize,         setCamSize]         = useState('full') // 'full' | 'mini'
   const [isPaused,        setIsPaused]        = useState(false)
   const [isCalibrating,   setIsCalibrating]   = useState(true)
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
@@ -1196,16 +1197,21 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           <video
             ref={videoRef}
             className="webcam-feed"
+            onClick={() => !camHidden && setCamSize(s => s === 'full' ? 'mini' : 'full')}
             style={{
               opacity: camHidden ? 0 : 1,
-              height: camHidden ? 0 : 120,
+              width: camHidden ? 0 : camSize === 'mini' ? 32 : 160,
+              height: camHidden ? 0 : camSize === 'mini' ? 32 : 120,
+              borderRadius: camSize === 'mini' ? '50%' : 8,
               marginBottom: camHidden ? 0 : undefined,
-              transition: 'opacity 0.25s ease, height 0.25s ease',
+              transition: 'opacity 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease',
               display: 'block',
+              cursor: camHidden ? 'default' : 'pointer',
+              objectFit: 'cover',
             }}
             autoPlay muted playsInline
           />
-          {!camHidden && !isCalibrating && gazePos && (
+          {!camHidden && camSize === 'full' && !isCalibrating && gazePos && (
             <svg
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
               viewBox="0 0 100 100"

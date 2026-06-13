@@ -44,6 +44,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     completed            = false,
     goal                 = '',
     task                 = '',
+    tags                 = [],
     distractionLog       = [],
     plannedDuration      = 0,
   } = sessionData
@@ -203,6 +204,19 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                 {goalAchieved ? '✓ Goal achieved!' : 'Keep working toward it 💪'}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Tags */}
+        {tags && tags.length > 0 && (
+          <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {tags.map(tag => (
+              <span key={tag} style={{
+                padding: '4px 12px', borderRadius: 100,
+                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                color: '#6366f1', fontSize: 12, fontWeight: 500,
+              }}>{tag}</span>
+            ))}
           </div>
         )}
 

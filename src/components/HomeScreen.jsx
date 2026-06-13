@@ -1,6 +1,17 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import LegalModal from './LegalModal'
 import { loadSessions } from '../lib/storage'
+
+const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
+
+const TAG_COLORS = {
+  'Deep work': { bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.3)', text: '#6366f1' },
+  'Reading':   { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', text: '#10b981' },
+  'Writing':   { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)', text: '#f59e0b' },
+  'Coding':    { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)', text: '#3b82f6' },
+  'Study':     { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.3)', text: '#a855f7' },
+  'Meeting':   { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)',  text: '#ef4444' },
+}
 
 function computeStreak() {
   const sessions = loadSessions()
@@ -53,6 +64,7 @@ export default function HomeScreen({
   task, setTask,
   duration, setDuration,
   goal, setGoal,
+  tags, setTags,
   devices,
   onStart,
   onShowHistory,
@@ -74,6 +86,20 @@ export default function HomeScreen({
   const recentTask = useMemo(() => {
     const sessions = loadSessions()
     return sessions[0]?.task || null
+  }, [])
+
+  const recentGoals = useMemo(() => {
+    const sessions = loadSessions()
+    const seen = new Set()
+    const goals = []
+    for (const s of sessions) {
+      if (s.goal && s.goal.trim() && !seen.has(s.goal.trim())) {
+        seen.add(s.goal.trim())
+        goals.push(s.goal.trim())
+        if (goals.length >= 5) break
+      }
+    }
+    return goals
   }, [])
 
   const durationSuggestion = useMemo(() => {
@@ -250,11 +276,47 @@ export default function HomeScreen({
             <label className="field-label">Goal (optional)</label>
             <input
               type="text"
+              list="goal-suggestions"
               className="text-input"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               placeholder="e.g. Finish intro chapter"
             />
+            {recentGoals.length > 0 && (
+              <datalist id="goal-suggestions">
+                {recentGoals.map(g => <option key={g} value={g} />)}
+              </datalist>
+            )}
+          </div>
+
+          {/* Tag chips */}
+          <div className="field">
+            <label className="field-label">Tags (optional)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {QUICK_TAGS.map(tag => {
+                const active = tags.includes(tag)
+                const c = TAG_COLORS[tag] || { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280' }
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: 100,
+                      border: `1.5px solid ${active ? c.border : '#e5e7eb'}`,
+                      background: active ? c.bg : 'transparent',
+                      color: active ? c.text : '#9ca3af',
+                      fontSize: 12, fontWeight: active ? 600 : 400,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Duration */}

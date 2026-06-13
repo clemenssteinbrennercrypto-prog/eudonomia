@@ -31,6 +31,7 @@ export default function App() {
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
   const [duration, setDuration] = useState(30)
+  const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
 
@@ -45,7 +46,7 @@ export default function App() {
   const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    const enriched = { ...data, task, goal }
+    const enriched = { ...data, task, goal, tags }
     saveSession(enriched)
     setSessionData(enriched)
     setScreen('end')
@@ -55,6 +56,7 @@ export default function App() {
     setTask(prefill?.task ?? '')
     setGoal(prefill?.goal ?? '')
     setDuration(prefill?.duration ?? 30)
+    setTags(prefill?.tags ?? [])
     setSessionData(null)
     setScreen('home')
   }
@@ -80,6 +82,8 @@ export default function App() {
           setGoal={setGoal}
           duration={duration}
           setDuration={setDuration}
+          tags={tags}
+          setTags={setTags}
           devices={devices}
           onStart={handleStart}
           onShowHistory={() => setScreen('history')}

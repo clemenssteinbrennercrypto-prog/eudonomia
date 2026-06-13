@@ -225,6 +225,19 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
 
       <MiniTimeline timeline={session.timeline} />
 
+      {/* Tags */}
+      {session.tags && session.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+          {session.tags.map(tag => (
+            <span key={tag} style={{
+              padding: '2px 10px', borderRadius: 100,
+              background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+              color: '#6366f1', fontSize: 11, fontWeight: 500,
+            }}>{tag}</span>
+          ))}
+        </div>
+      )}
+
       {/* Note preview (collapsed) */}
       {!expanded && session.note && (
         <div style={{
@@ -491,35 +504,76 @@ function WeeklyTrends({ sessions }) {
         }}>
           <span style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>70%</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          {days.map((day, i) => {
-            const filled = day.avgFocus !== null
-            const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
-            const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
-            const tooltip = filled
-              ? `${day.label} — ${day.avgFocus}% avg, ${day.count} session${day.count !== 1 ? 's' : ''}`
-              : `${day.label} — no sessions`
-            return (
-              <div key={i} title={tooltip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
-                  {filled ? `${day.avgFocus}%` : '0'}
-                </span>
-                <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
-                  <div style={{
-                    width: '100%', height: h,
-                    background: color,
-                    borderRadius: '6px 6px 0 0',
-                    minHeight: 4,
-                    transition: 'height 0.3s ease',
-                  }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            {days.map((day, i) => {
+              const filled = day.avgFocus !== null
+              const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
+              const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
+              const tooltip = filled
+                ? `${day.label} — ${day.avgFocus}% avg, ${day.count} session${day.count !== 1 ? 's' : ''}`
+                : `${day.label} — no sessions`
+              return (
+                <div key={i} title={tooltip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
+                    {filled ? `${day.avgFocus}%` : '0'}
+                  </span>
+                  <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
+                    <div style={{
+                      width: '100%', height: h,
+                      background: color,
+                      borderRadius: '6px 6px 0 0',
+                      minHeight: 4,
+                      transition: 'height 0.3s ease',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
+                  <span style={{ fontSize: 9, color: filled ? '#cbd5e1' : 'transparent', fontWeight: 500 }}>
+                    {filled ? day.count : '0'}
+                  </span>
                 </div>
-                <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
-                <span style={{ fontSize: 9, color: filled ? '#cbd5e1' : 'transparent', fontWeight: 500 }}>
-                  {filled ? day.count : '0'}
-                </span>
-              </div>
+              )
+            })}
+          </div>
+          {/* Trend line SVG overlay */}
+          {(() => {
+            const filledDays = days.map((d, i) => ({ ...d, i })).filter(d => d.avgFocus !== null)
+            if (filledDays.length < 2) return null
+            // Each day takes 1/7 of width; bar midpoint at (i + 0.5) / 7
+            // Bar top is at: 70 - h px from top of bar area (height=70)
+            // Label area below adds ~24px; score label above adds ~16px
+            // We place SVG over the bar area (height 70, positioned with top offset for score label ~16px)
+            const W = 100; const H = 70
+            const points = filledDays.map(d => {
+              const x = ((d.i + 0.5) / 7) * W
+              const barH = Math.max(4, Math.round((d.avgFocus / 100) * MAX_H))
+              const y = H - barH // midpoint top of bar
+              return `${x},${y}`
+            }).join(' ')
+            return (
+              <svg
+                style={{ position: 'absolute', top: 16, left: 0, width: '100%', height: 70, pointerEvents: 'none' }}
+                viewBox={`0 0 ${W} ${H}`}
+                preserveAspectRatio="none"
+              >
+                <polyline
+                  points={points}
+                  fill="none"
+                  stroke="rgba(99,102,241,0.6)"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="3,2"
+                />
+                {filledDays.map(d => {
+                  const x = ((d.i + 0.5) / 7) * W
+                  const barH = Math.max(4, Math.round((d.avgFocus / 100) * MAX_H))
+                  const y = H - barH
+                  return <circle key={d.i} cx={x} cy={y} r="2" fill="#6366f1" opacity="0.7" />
+                })}
+              </svg>
             )
-          })}
+          })()}
         </div>
       </div>
     </div>
