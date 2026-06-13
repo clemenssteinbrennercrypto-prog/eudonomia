@@ -41,12 +41,16 @@ function MiniTimeline({ timeline }) {
       width: '100%', height: 5, borderRadius: 3, overflow: 'hidden',
       display: 'flex', background: '#E8E3DA', marginTop: 8,
     }}>
-      {timeline.map((pt, i) => (
-        <div key={i} style={{
-          flex: 1, minWidth: 1,
-          background: pt.focused ? '#22c55e' : '#ef4444',
-        }} />
-      ))}
+      {timeline.map((pt, i) => {
+        const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
+        const color = `hsl(${Math.round(s * 1.2)}, 80%, 50%)`
+        return (
+          <div key={i} style={{
+            flex: 1, minWidth: 1,
+            background: color,
+          }} />
+        )
+      })}
     </div>
   )
 }
@@ -164,12 +168,16 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
                 width: '100%', height: 10, borderRadius: 5, overflow: 'hidden',
                 display: 'flex', background: '#E8E3DA',
               }}>
-                {session.timeline.map((pt, i) => (
-                  <div key={i} style={{
-                    flex: 1, minWidth: 2,
-                    background: pt.focused ? '#22c55e' : '#ef4444',
-                  }} />
-                ))}
+                {session.timeline.map((pt, i) => {
+                  const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
+                  const color = `hsl(${Math.round(s * 1.2)}, 80%, 50%)`
+                  return (
+                    <div key={i} style={{
+                      flex: 1, minWidth: 2,
+                      background: color,
+                    }} />
+                  )
+                })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>Start</span>

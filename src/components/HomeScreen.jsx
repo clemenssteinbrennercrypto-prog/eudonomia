@@ -1,5 +1,21 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
+import { loadSessions } from '../lib/storage'
+
+function computeStreak() {
+  const sessions = loadSessions()
+  if (!sessions.length) return 0
+  const days = new Set(sessions.map(s => new Date(s.timestamp).toDateString()))
+  const today = new Date()
+  let streak = 0
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    if (days.has(d.toDateString())) streak++
+    else if (i > 0) break
+  }
+  return streak
+}
 
 // Summarise devices array into a human-readable string
 function summariseDevices(devices) {
@@ -46,6 +62,7 @@ export default function HomeScreen({
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
+  const streak = useMemo(() => computeStreak(), [])
 
   const handleCustomClick = () => {
     setShowCustomInput(true)
@@ -92,6 +109,18 @@ export default function HomeScreen({
             </button>
           </div>
           <h1 className="app-title">Eudaimonia</h1>
+          {streak >= 2 && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <span style={{
+                background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.25)',
+                borderRadius: 100, padding: '2px 10px',
+                fontSize: 12, fontWeight: 600, color: '#f97316',
+                letterSpacing: '0.02em',
+              }}>
+                🔥 {streak} day streak
+              </span>
+            </div>
+          )}
           <p className="app-tagline">Stay present. Stay focused.</p>
         </div>
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { updateSession } from '../lib/storage'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -30,6 +31,7 @@ const DISTRACTION_LABELS = {
 
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   const {
+    id,
     actualSeconds        = 0,
     focusedSeconds       = 0,
     distractionEvents    = 0,
@@ -131,7 +133,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             {goalAchieved === null ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  onClick={() => setGoalAchieved(true)}
+                  onClick={() => { setGoalAchieved(true); if (id) updateSession(id, { goalAchieved: true }) }}
                   style={{
                     padding: '8px 18px', fontSize: 13, fontWeight: 600,
                     background: '#22c55e', color: '#fff',
@@ -142,7 +144,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                   ✓ Achieved
                 </button>
                 <button
-                  onClick={() => setGoalAchieved(false)}
+                  onClick={() => { setGoalAchieved(false); if (id) updateSession(id, { goalAchieved: false }) }}
                   style={{
                     padding: '8px 18px', fontSize: 13, fontWeight: 600,
                     background: 'none', color: '#6b7280',

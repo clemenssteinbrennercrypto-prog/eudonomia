@@ -35,6 +35,13 @@ export function deleteSession(id) {
   } catch {}
 }
 
+export function updateSession(id, patch) {
+  const sessions = loadSessions().map(s => s.id === id ? { ...s, ...patch } : s)
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
+  } catch {}
+}
+
 export function clearAllSessions() {
   localStorage.removeItem(STORAGE_KEY)
 }

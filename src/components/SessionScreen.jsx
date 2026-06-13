@@ -274,11 +274,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
         alignItems: 'center', justifyContent: 'center',
         gap: 0,
       }}>
-        {isPaused ? (
-          <span style={{ fontSize: 20, fontWeight: 700, color: '#6b7280', letterSpacing: '0.05em' }}>PAUSED</span>
-        ) : (
-          <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
-        )}
+        <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? '#4b5563' : '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
       </div>
     </div>
   )
@@ -913,6 +909,39 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
   return (
     <div className="session-root">
+      {/* Pause overlay */}
+      {isPaused && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 20,
+          backdropFilter: 'blur(2px)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', color: '#6b7280', textTransform: 'uppercase' }}>
+            Paused
+          </span>
+          <button
+            onClick={() => {
+              isPausedRef.current = false
+              if (pausedAtRef.current) {
+                pausedTotalRef.current += Date.now() - pausedAtRef.current
+                pausedAtRef.current = null
+              }
+              setIsPaused(false)
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 100, padding: '10px 28px',
+              fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
+              letterSpacing: '0.03em',
+            }}
+          >
+            Resume
+          </button>
+          <span style={{ fontSize: 12, color: '#4b5563' }}>space to resume</span>
+        </div>
+      )}
       {window.innerWidth < 600 && (
         <div style={{
           position: 'fixed', inset: 0, background: '#0D0F14',
