@@ -293,6 +293,23 @@ function StatusDot({ status, score, reason, isCalibrating }) {
   const { color, label } = cfg
   const showReason = !isCalibrating && (status === 'distracted' || status === 'alert')
   const reasonText = showReason ? (REASON_LABELS[reason] ?? null) : null
+
+  // Trend arrow — compare score every 10s
+  const prevScoreRef = useRef(score)
+  const [trend, setTrend] = useState('→')
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const prev = prevScoreRef.current
+      const curr = score
+      if (curr - prev >= 3) setTrend('↑')
+      else if (prev - curr >= 3) setTrend('↓')
+      else setTrend('→')
+      prevScoreRef.current = curr
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [score])
+  const trendColor = trend === '↑' ? '#22c55e' : trend === '↓' ? '#ef4444' : '#6b7280'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
       <div style={{
@@ -317,6 +334,9 @@ function StatusDot({ status, score, reason, isCalibrating }) {
         <span style={{ fontSize: 12, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums', transition: 'color 0.4s' }}>
           {isCalibrating ? '--' : score}
         </span>
+        {!isCalibrating && (
+          <span style={{ fontSize: 10, color: trendColor, opacity: 0.7, lineHeight: 1 }}>{trend}</span>
+        )}
       </div>
       {reasonText && (
         <div style={{

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { updateSession } from '../lib/storage'
+import { useState, useMemo } from 'react'
+import { updateSession, loadSessions } from '../lib/storage'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -50,6 +50,17 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
   const [goalAchieved, setGoalAchieved] = useState(null)
+
+  // Personal best detection
+  const isPersonalBest = useMemo(() => {
+    const prevSessions = loadSessions().filter(s => s.id !== id)
+    if (prevSessions.length === 0) return false
+    const prevMax = Math.max(...prevSessions.map(s => {
+      const a = s.actualSeconds || 0
+      return a > 0 ? Math.round(((s.focusedSeconds || 0) / a) * 100) : 0
+    }))
+    return focusPct > prevMax
+  }, [id, focusPct])
   const [copied, setCopied] = useState(false)
 
   function copySummary() {
@@ -117,6 +128,11 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               {focusPct}%
             </span>
             <span className="stat-label">focused</span>
+            {isPersonalBest && (
+              <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600, marginTop: 4, display: 'block' }}>
+                New best 🏆
+              </span>
+            )}
           </div>
           <div className="stat-divider" />
           <div className="stat">

@@ -199,7 +199,40 @@ export default function LandingPage({ onEnter }) {
         </div>
       </section>
 
-      {/* ── SECTION 4: Footer ────────────────────────────────────────────── */}
+      {/* ── SECTION 4: FAQ ───────────────────────────────────────────────── */}
+      <section style={{ background: '#F5F4F0', padding: '64px 24px' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a1a', marginBottom: 32, textAlign: 'center' }}>
+            Common questions
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              {
+                q: 'Is my camera footage stored?',
+                a: 'Never. All processing happens locally in your browser.',
+              },
+              {
+                q: 'Does it work without a webcam?',
+                a: 'No — the webcam is required for attention tracking.',
+              },
+              {
+                q: 'Is it free?',
+                a: 'Yes, completely free. No account needed.',
+              },
+            ].map(({ q, a }) => (
+              <div key={q} style={{
+                background: '#fff', borderRadius: 12, padding: '20px 24px',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              }}>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a', margin: '0 0 6px' }}>{q}</p>
+                <p style={{ fontSize: 14, color: '#6b7280', margin: 0, lineHeight: 1.6 }}>{a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION 5: Footer ────────────────────────────────────────────── */}
       <footer style={{ background: '#0D0F14', padding: 24 }}>
         <div style={{
           maxWidth: 640, margin: '0 auto',

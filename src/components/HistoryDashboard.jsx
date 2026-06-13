@@ -406,7 +406,7 @@ function getLast7Days(sessions) {
 }
 
 function WeeklyTrends({ sessions }) {
-  const days = getLast7Days(sessions)
+  const days = useMemo(() => getLast7Days(sessions), [sessions])
   const MAX_H = 48
 
   return (
@@ -463,6 +463,8 @@ export default function HistoryDashboard({ onClose }) {
     else if (dateFilter === 'month') cutoff.setDate(now.getDate() - 30)
     return sessions.filter(s => new Date(s.timestamp) >= cutoff)
   }, [sessions, dateFilter])
+
+  const groupedSessions = useMemo(() => groupByDate(filteredSessions), [filteredSessions])
 
   const handleDelete = (id) => {
     deleteSession(id)
@@ -593,7 +595,7 @@ export default function HistoryDashboard({ onClose }) {
 
             {/* CHANGE 1: Date-grouped session list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {groupByDate(filteredSessions).map(group => (
+              {groupedSessions.map(group => (
                 <div key={group.label}>
                   <p style={{
                     fontSize: 11, fontWeight: 700, color: '#9ca3af',
