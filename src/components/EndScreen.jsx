@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
@@ -11,6 +13,21 @@ function motivational(pct) {
   return 'Keep going. Every session counts.'
 }
 
+function fmtSecond(s) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+}
+
+const DISTRACTION_LABELS = {
+  phone: 'Phone check',
+  yawn: 'Fatigue',
+  away: 'Left camera',
+  lookingup: 'Daydreaming',
+  prolonged: 'Eyes closed',
+  default: 'Distracted',
+}
+
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   const {
     actualSeconds        = 0,
@@ -19,9 +36,12 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     longestFocusedStreak = 0,
     timeline             = [],
     completed            = false,
+    goal                 = '',
+    distractionLog       = [],
   } = sessionData
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
+  const [goalAchieved, setGoalAchieved] = useState(null)
 
   return (
     <div className="screen-center">
@@ -44,19 +64,12 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <div style={{
               width: '100%', height: 8,
               borderRadius: 4, overflow: 'hidden',
-              display: 'flex',
-              background: '#f1f5f9',
+              display: 'flex', background: '#f1f5f9',
             }}>
               {timeline.map((pt, i) => (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1,
-                    background: pt.focused ? '#22c55e' : '#ef4444',
-                    minWidth: 1,
-                    transition: 'background 0.2s',
-                  }}
-                />
+                <div key={i} style={{
+                  flex: 1, background: pt.focused ? '#22c55e' : '#ef4444', minWidth: 1,
+                }} />
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
@@ -91,6 +104,81 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
         </div>
 
+        {/* Goal section */}
+        {goal && (
+          <div style={{
+            width: '100%',
+            background: '#f9fafb',
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            padding: '16px 18px',
+          }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+              Session goal
+            </p>
+            <p style={{ fontSize: 15, color: '#111827', fontWeight: 500, marginBottom: 12 }}>
+              {goal}
+            </p>
+            {goalAchieved === null ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setGoalAchieved(true)}
+                  style={{
+                    padding: '8px 18px', fontSize: 13, fontWeight: 600,
+                    background: '#22c55e', color: '#fff',
+                    border: 'none', borderRadius: 100,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  ✓ Achieved
+                </button>
+                <button
+                  onClick={() => setGoalAchieved(false)}
+                  style={{
+                    padding: '8px 18px', fontSize: 13, fontWeight: 600,
+                    background: 'none', color: '#6b7280',
+                    border: '1px solid #e5e7eb', borderRadius: 100,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Not quite
+                </button>
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: goalAchieved ? '#22c55e' : '#f97316', fontWeight: 600 }}>
+                {goalAchieved ? '✓ Goal achieved!' : 'Keep working toward it 💪'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Distraction log */}
+        {distractionLog.length > 0 && (
+          <div style={{ width: '100%' }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+              What distracted you
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {distractionLog.map((ev, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  background: '#f9fafb', border: '1px solid #e5e7eb',
+                  borderRadius: 10, padding: '8px 14px',
+                  fontSize: 13, color: '#374151',
+                }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af', fontSize: 12 }}>
+                    {fmtSecond(ev.second)}
+                  </span>
+                  <span style={{ color: '#d1d5db' }}>·</span>
+                  <span style={{ fontWeight: 500 }}>
+                    {DISTRACTION_LABELS[ev.reason] ?? DISTRACTION_LABELS.default}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button className="restart-btn" onClick={onRestart}>
             New Session
@@ -107,7 +195,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               cursor: 'pointer',
               fontFamily: 'inherit',
               letterSpacing: '0.01em',
-              transition: 'opacity 0.15s',
             }}
           >
             View History

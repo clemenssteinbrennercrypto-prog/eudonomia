@@ -22,6 +22,7 @@ function saveDevices(devices) {
 export default function App() {
   const [screen,   setScreen]   = useState('home')
   const [task,     setTask]     = useState('')
+  const [goal,     setGoal]     = useState('')
   const [duration, setDuration] = useState(30)
   const [sessionData, setSessionData] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
@@ -37,14 +38,15 @@ export default function App() {
   const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    const enriched = { ...data, task }
+    const enriched = { ...data, task, goal }
     saveSession(enriched)
     setSessionData(enriched)
     setScreen('end')
-  }, [task])
+  }, [task, goal])
 
   const handleRestart = () => {
     setTask('')
+    setGoal('')
     setDuration(30)
     setSessionData(null)
     setScreen('home')
@@ -56,6 +58,8 @@ export default function App() {
         <HomeScreen
           task={task}
           setTask={setTask}
+          goal={goal}
+          setGoal={setGoal}
           duration={duration}
           setDuration={setDuration}
           devices={devices}

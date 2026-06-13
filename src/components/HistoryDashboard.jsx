@@ -242,6 +242,68 @@ function OverallStats({ sessions }) {
   )
 }
 
+// ── Weekly Trends chart ───────────────────────────────────────────────────────
+function WeeklyTrends({ sessions }) {
+  const days = []
+  const now = new Date()
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    const label = d.toLocaleDateString('en-US', { weekday: 'short' })
+    const dateStr = d.toDateString()
+    const daySessions = sessions.filter(s => new Date(s.timestamp).toDateString() === dateStr)
+    let avgFocus = null
+    if (daySessions.length > 0) {
+      avgFocus = Math.round(
+        daySessions.reduce((a, s) => {
+          const pct = s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0
+          return a + pct
+        }, 0) / daySessions.length
+      )
+    }
+    days.push({ label, avgFocus })
+  }
+
+  const maxH = 60
+  const barW = 32
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 12 }}>
+        7-Day Focus Trend
+      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: maxH + 28 }}>
+        {days.map((day, i) => {
+          const filled = day.avgFocus !== null
+          const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * maxH)) : 4
+          const color = !filled
+            ? '#e2e8f0'
+            : day.avgFocus >= 70 ? '#22c55e'
+            : day.avgFocus >= 40 ? '#f97316'
+            : '#ef4444'
+
+          return (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+              {filled && (
+                <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>{day.avgFocus}%</span>
+              )}
+              {!filled && <span style={{ fontSize: 10, color: 'transparent' }}>0%</span>}
+              <div style={{
+                width: '100%', maxWidth: barW,
+                height: h,
+                background: color,
+                borderRadius: 4,
+                transition: 'height 0.3s ease',
+              }} />
+              <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function HistoryDashboard({ onClose }) {
   const [sessions, setSessions] = useState(() => loadSessions())
@@ -308,6 +370,7 @@ export default function HistoryDashboard({ onClose }) {
           </div>
         ) : (
           <>
+            <WeeklyTrends sessions={sessions} />
             <OverallStats sessions={sessions} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

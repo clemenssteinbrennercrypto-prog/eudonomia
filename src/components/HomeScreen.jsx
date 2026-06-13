@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { DEVICE_TYPES, POSITION_LABELS } from './SetupScreen'
 import { DEVICE_ICON_MAP } from './DeviceIcons'
 
@@ -6,11 +7,29 @@ const DURATIONS = [15, 30, 60, 90]
 export default function HomeScreen({
   task, setTask,
   duration, setDuration,
+  goal, setGoal,
   devices,
   onStart,
   onShowHistory,
   onShowSetup,
 }) {
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [customVal, setCustomVal] = useState('')
+  const isCustomActive = !DURATIONS.includes(duration)
+
+  const handleCustomClick = () => {
+    setShowCustomInput(true)
+  }
+
+  const handleCustomChange = (e) => {
+    const val = e.target.value
+    setCustomVal(val)
+    const n = parseInt(val, 10)
+    if (!isNaN(n) && n >= 1 && n <= 180) {
+      setDuration(n)
+    }
+  }
+
   return (
     <div className="screen-center">
       <div className="home-content">
@@ -58,7 +77,6 @@ export default function HomeScreen({
                 border: '1.5px solid #e5e7eb',
                 borderRadius: 12,
                 cursor: 'pointer',
-                transition: 'border-color 0.15s',
               }}
             >
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
@@ -88,7 +106,6 @@ export default function HomeScreen({
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 background: '#f9fafb', border: '1.5px dashed #d1d5db',
                 borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'border-color 0.15s',
               }}
             >
               <span style={{ fontSize: 14, color: '#9ca3af', fontWeight: 500 }}>
@@ -111,20 +128,53 @@ export default function HomeScreen({
             />
           </div>
 
+          {/* Goal input */}
+          <div className="field">
+            <label className="field-label">Goal (optional)</label>
+            <input
+              type="text"
+              className="text-input"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder="e.g. Finish intro chapter"
+            />
+          </div>
+
           {/* Duration */}
           <div className="field">
             <label className="field-label">Duration</label>
-            <div className="duration-grid">
+            <div className="duration-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
               {DURATIONS.map((d) => (
                 <button
                   key={d}
                   className={`dur-btn${duration === d ? ' active' : ''}`}
-                  onClick={() => setDuration(d)}
+                  onClick={() => { setDuration(d); setShowCustomInput(false); setCustomVal('') }}
                 >
                   {d} min
                 </button>
               ))}
+              <button
+                className={`dur-btn${isCustomActive ? ' active' : ''}`}
+                onClick={handleCustomClick}
+              >
+                {isCustomActive ? `${duration} min` : 'Custom'}
+              </button>
             </div>
+            {showCustomInput && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="number"
+                  min={1} max={180}
+                  className="text-input"
+                  style={{ width: 120 }}
+                  value={customVal}
+                  onChange={handleCustomChange}
+                  placeholder="1–180 min"
+                  autoFocus
+                />
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>minutes</span>
+              </div>
+            )}
           </div>
 
           <button
