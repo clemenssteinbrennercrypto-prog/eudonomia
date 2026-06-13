@@ -141,6 +141,26 @@ export default function LandingPage({ onEnter }) {
         </div>
       </section>
 
+      {/* ── SECTION 2.5: Stats ───────────────────────────────────────────── */}
+      <section style={{ background: '#FAFAF8', padding: '64px 24px', textAlign: 'center' }}>
+        <div style={{
+          maxWidth: 720, margin: '0 auto',
+          display: 'flex', justifyContent: 'center', gap: 64,
+          flexWrap: 'wrap',
+        }}>
+          {[
+            { value: '100%', label: 'Local processing' },
+            { value: '0',    label: 'Data sent to servers' },
+            { value: 'Free', label: 'No account needed' },
+          ].map(({ value, label }) => (
+            <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 48, fontWeight: 200, color: '#1a2e4a', lineHeight: 1 }}>{value}</span>
+              <span style={{ fontSize: 14, color: '#6B7280', letterSpacing: '0.03em' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── SECTION 3: Privacy callout ───────────────────────────────────── */}
       <section style={{
         background: '#1a2e4a',

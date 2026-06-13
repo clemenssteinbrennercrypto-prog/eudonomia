@@ -359,6 +359,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [inFlowState,     setInFlowState]     = useState(false)
   const [hintVisible,     setHintVisible]     = useState(true)
+  const [endConfirm,      setEndConfirm]      = useState(false)
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -455,6 +456,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     sessionEndedRef.current = true
     stopAmbient()
     const actualSeconds = Math.round((Date.now() - startTimeRef.current - pausedTotalRef.current) / 1000)
+    const snapshots = timelineSnapshotsRef.current
+    const avgFocusScore = snapshots.length > 0
+      ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
+      : Math.round(focusScoreRef.current)
     onEnd({
       plannedDuration:      duration,
       actualSeconds,
@@ -463,6 +468,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       distractionEvents:    distractionEventsRef.current,
       focusedSeconds:       focusedSecondsRef.current,
       longestFocusedStreak: longestStreakRef.current,
+      peakFocusStreak:      longestStreakRef.current,
+      avgFocusScore,
       finalScore:           Math.round(focusScoreRef.current),
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
@@ -1054,9 +1061,22 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           </p>
         )}
 
-        <button className="end-session-btn" onClick={() => endSession(false)}>
-          End session
-        </button>
+        {endConfirm ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
+            <span style={{ fontSize: 13, color: '#94a3b8' }}>End session?</span>
+            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={() => { setEndConfirm(false); endSession(false) }}>Yes</button>
+            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid #334155' }}
+              onClick={() => setEndConfirm(false)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="end-session-btn" onClick={() => {
+            setEndConfirm(true)
+            setTimeout(() => setEndConfirm(false), 3000)
+          }}>
+            End session
+          </button>
+        )}
 
         {/* Keyboard hint */}
         <div style={{

@@ -75,3 +75,14 @@ Overnight autonomous dev session — June 13 (22:00) → June 14 (01:00 Vienna t
 - Post-lunch dip (13:00–15:00): auto-relax fatigue thresholds?
 - EAR drift compensation mid-session (baseline re-calibration every 10 minutes)?
 - Flow state detection: stable gaze + low head movement + healthy blink = bonus boost?
+
+---
+
+## Session Update — June 15, 2026
+
+### Features Added
+- **Onboarding → Setup flow** — After onboarding completes, if no devices configured, auto-navigates to setup screen (connects slide 4 CTA to actual flow)
+- **Session exports enriched** — onEnd payload now includes `avgFocusScore` (average of all timeline snapshot scores) and `peakFocusStreak` (alias for longestFocusedStreak); timeline snapshots already stored `{second, score, focused}`
+- **Setup mode persistence** — WorkspaceSetup remembers last chosen mode (simple/advanced) via `localStorage['eudaimonia_setup_mode']`; restored on next open
+- **Landing stats section** — New section between "How it works" and "Privacy": 3 privacy stats (100% local, 0 server data, Free) with large light numbers (font-weight 200, 48px)
+- **End session confirmation** — Clicking "End session" button shows inline "End session? [Yes] [Cancel]" with 3s auto-cancel timeout; Escape key still ends immediately (no confirmation)

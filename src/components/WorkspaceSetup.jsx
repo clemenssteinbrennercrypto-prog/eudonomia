@@ -116,7 +116,12 @@ function PositionPicker({ label, value, onChange }) {
 
 // ── Root export: wizard or advanced ──────────────────────────────────────────
 export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
-  const [mode, setMode] = useState('wizard')
+  const [mode, setMode] = useState(() => localStorage.getItem('eudaimonia_setup_mode') || 'wizard')
+
+  const switchMode = (m) => {
+    localStorage.setItem('eudaimonia_setup_mode', m)
+    setMode(m)
+  }
 
   if (mode === 'advanced') {
     return (
@@ -127,7 +132,7 @@ export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
           onContinue={onContinue}
         />
         <button
-          onClick={() => setMode('wizard')}
+          onClick={() => switchMode('wizard')}
           style={{
             position: 'fixed', top: 22, left: 24, zIndex: 999,
             background: 'rgba(255,255,255,0.9)',
@@ -146,7 +151,7 @@ export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
     )
   }
 
-  return <Wizard devices={devices} setDevices={setDevices} onContinue={onContinue} onAdvanced={() => setMode('advanced')} />
+  return <Wizard devices={devices} setDevices={setDevices} onContinue={onContinue} onAdvanced={() => switchMode('advanced')} />
 }
 
 // ── Wizard ────────────────────────────────────────────────────────────────────
