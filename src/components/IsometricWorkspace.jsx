@@ -1,535 +1,561 @@
 import { useState } from 'react'
 
-// ── Isometric Projection ──────────────────────────────────────────────────────
-// x-axis → right-down, z-axis → left-down, y-axis → up
-const S  = 30     // px per world unit
-const OX = 310    // SVG origin
-const OY = 260
+// ── Perspective Desk View ──────────────────────────────────────────────────────
+// Single vanishing point at top-center.
+// "You" are at the bottom looking at your desk from a seated position.
+// The desk fills most of the canvas, wider at bottom (near) narrower at top (far).
 
-function px(x, y, z) { return OX + (x - z) * S }
-function py(x, y, z) { return OY + (x + z) * S * 0.5 - y * S }
-function p(x, y, z)  { return `${px(x,y,z).toFixed(1)},${py(x,y,z).toFixed(1)}` }
+const VP = { x: 320, y: 60 }   // vanishing point
+const W  = 640
+const H  = 420
 
-// ── Primitives ────────────────────────────────────────────────────────────────
-function IsoBox({ x, y, z, w, h, d, top, right, front, so = '#00000012', sw = 0.6 }) {
-  const X=x, Y=y, Z=z
-  return (
-    <g>
-      {/* Right face (high-x, lit from right) */}
-      <polygon points={[p(X+w,Y,Z),p(X+w,Y+h,Z),p(X+w,Y+h,Z+d),p(X+w,Y,Z+d)].join(' ')}
-        fill={right} stroke={so} strokeWidth={sw} />
-      {/* Front face (high-z, toward camera) */}
-      <polygon points={[p(X,Y,Z+d),p(X+w,Y,Z+d),p(X+w,Y+h,Z+d),p(X,Y+h,Z+d)].join(' ')}
-        fill={front} stroke={so} strokeWidth={sw} />
-      {/* Top face */}
-      <polygon points={[p(X,Y+h,Z),p(X+w,Y+h,Z),p(X+w,Y+h,Z+d),p(X,Y+h,Z+d)].join(' ')}
-        fill={top} stroke={so} strokeWidth={sw} />
-    </g>
-  )
+// Map desk coordinates (col 0-1, row 0-1) to SVG canvas
+// row=0 = far edge (back of desk), row=1 = near edge (front, closest to you)
+// col=0 = left edge, col=1 = right edge
+const DESK_NEAR_Y = 390   // y of front edge
+const DESK_FAR_Y  = 130   // y of back edge
+const DESK_NEAR_L = 40    // x of front-left corner
+const DESK_NEAR_R = 600   // x of front-right corner
+const DESK_FAR_L  = 155   // x of back-left corner
+const DESK_FAR_R  = 485   // x of back-right corner
+
+function deskX(col, row) {
+  // left edge at col=0, right at col=1
+  const nearX = DESK_NEAR_L + col * (DESK_NEAR_R - DESK_NEAR_L)
+  const farX  = DESK_FAR_L  + col * (DESK_FAR_R  - DESK_FAR_L)
+  return nearX + row * (farX - nearX)
+}
+function deskY(row) {
+  return DESK_NEAR_Y + row * (DESK_FAR_Y - DESK_NEAR_Y)
+}
+function dp(col, row) { return `${deskX(col, row).toFixed(1)},${deskY(row).toFixed(1)}` }
+
+// Scale factor based on row depth (near = big, far = small)
+function depthScale(row) {
+  return 0.45 + (1 - row) * 0.55   // near row=0→1.0, far row=1→0.45
 }
 
-// Flat diamond tile on a surface (for zone highlighting)
-function IsoTile({ x, y, z, w, d, fill, stroke, strokeWidth = 1 }) {
-  return (
-    <polygon
-      points={[p(x,y,z),p(x+w,y,z),p(x+w,y,z+d),p(x,y,z+d)].join(' ')}
-      fill={fill} stroke={stroke} strokeWidth={strokeWidth}
-    />
-  )
+// Center point of a zone on desk (in SVG coords)
+function zoneSVG(col, row) {
+  return { x: deskX(col, row), y: deskY(row) }
 }
 
-// ── Desk ──────────────────────────────────────────────────────────────────────
-// Desk: x=[0,5], z=[1,4], surface at y=DY
-const DY = 2.2
+// ── Zone definitions ──────────────────────────────────────────────────────────
+// Layout: 3 columns × 3 rows on desk
+// row: 0=near/front ... 1=far/back   (inverted: row 0 is near you)
+export const ZONES = [
+  // Back row (furthest from you)
+  { id: 'back-left',   label: 'Back Left',   col: 0.17, row: 0.88, wC: 0.28, wR: 0.18 },
+  { id: 'back-center', label: 'Back Center', col: 0.50, row: 0.88, wC: 0.28, wR: 0.18 },
+  { id: 'back-right',  label: 'Back Right',  col: 0.83, row: 0.88, wC: 0.28, wR: 0.18 },
+  // Middle row
+  { id: 'mid-left',    label: 'Left',        col: 0.17, row: 0.52, wC: 0.28, wR: 0.18 },
+  { id: 'mid-center',  label: 'Center',      col: 0.50, row: 0.52, wC: 0.28, wR: 0.18 },
+  { id: 'mid-right',   label: 'Right',       col: 0.83, row: 0.52, wC: 0.28, wR: 0.18 },
+  // Front row (closest to you)
+  { id: 'front',       label: 'Front',       col: 0.50, row: 0.15, wC: 0.40, wR: 0.14 },
+]
 
-const DESK_TOP   = '#EDE9DF'
-const DESK_RIGHT = '#D5CEBC'
-const DESK_FRONT = '#C4B9A5'
-const LEG_TOP    = '#2E2E2E'
-const LEG_RIGHT  = '#222222'
-const LEG_FRONT  = '#181818'
-const FLOOR_COL  = '#E2DACE'
+// ── Device metadata ───────────────────────────────────────────────────────────
+export const DEVICE_META = [
+  { id: 'monitor', label: 'Monitor',  desc: 'External display' },
+  { id: 'laptop',  label: 'Laptop',   desc: 'MacBook / PC' },
+  { id: 'ipad',    label: 'iPad',     desc: 'Tablet' },
+  { id: 'phone',   label: 'Phone',    desc: 'Smartphone' },
+  { id: 'camera',  label: 'Webcam',   desc: 'External camera' },
+]
 
-function Desk() {
+export const POSITION_LABELS = Object.fromEntries(ZONES.map(z => [z.id, z.label]))
+
+export const DEVICE_TYPES = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
+
+// ── Device SVG components (perspective-scaled) ────────────────────────────────
+// Each rendered at SVG center (cx, cy) with a depth scale
+
+function DeviceMonitor({ cx, cy, scale, id = '' }) {
+  const w = 110 * scale, h = 80 * scale, leg = 22 * scale, base = 36 * scale
+  const gid = `mg_${id}`
   return (
     <g>
-      {/* Floor plane */}
-      <polygon
-        points={[p(-1,0,0),p(7,0,0),p(7,0,6),p(-1,0,6)].join(' ')}
-        fill={FLOOR_COL}
-      />
-      {/* 4 legs */}
-      {[
-        [0.18, 1.15], [4.62, 1.15],
-        [0.18, 3.65], [4.62, 3.65],
-      ].map(([lx, lz], i) => (
-        <IsoBox key={i} x={lx} y={0} z={lz} w={0.2} h={DY} d={0.2}
-          top={LEG_TOP} right={LEG_RIGHT} front={LEG_FRONT} />
-      ))}
-      {/* Desk slab */}
-      <IsoBox x={0} y={DY} z={1} w={5} h={0.18} d={3}
-        top={DESK_TOP} right={DESK_RIGHT} front={DESK_FRONT} />
-    </g>
-  )
-}
-
-// ── Device 3D shapes ──────────────────────────────────────────────────────────
-// All devices placed with (cx, cz) = world center on desk surface
-
-function IsoMonitor({ cx, cz, id = 0 }) {
-  const y = DY + 0.18
-  const bx = cx - 0.55, bz = cz - 0.25
-  const sx = cx - 0.62, sz = cz + 0.02
-  const gradId = `monitorScreen_${id}`
-  return (
-    <g>
-      {/* Base plate */}
-      <IsoBox x={bx} y={y} z={bz} w={1.1} h={0.06} d={0.42}
-        top="#3A3A3A" right="#2A2A2A" front="#222222" />
+      {/* Shadow */}
+      <ellipse cx={cx} cy={cy + h * 0.52} rx={w * 0.5} ry={h * 0.08} fill="black" opacity={0.12} />
+      {/* Base */}
+      <rect x={cx - base/2} y={cy + h/2 - 2} width={base} height={leg * 0.35} rx={3 * scale} fill="#2A2F3A" />
       {/* Neck */}
-      <IsoBox x={cx-0.07} y={y+0.06} z={cz-0.07} w={0.14} h={0.58} d={0.14}
-        top="#333" right="#252525" front="#1C1C1C" />
+      <rect x={cx - 5*scale} y={cy + h/2 - leg} width={10 * scale} height={leg + 2} fill="#1E2330" />
       {/* Screen housing */}
-      <IsoBox x={sx} y={y+0.64} z={sz} w={1.24} h={0.82} d={0.09}
-        top="#1C2030" right="#222838" front="#2A3048" />
-      {/* Screen face glow */}
+      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={6 * scale} fill="#1A1D28" />
+      {/* Bezel inner */}
+      <rect x={cx - w/2 + 4*scale} y={cy - h/2 + 4*scale} width={w - 8*scale} height={h - 8*scale} rx={3 * scale} fill={`url(#${gid})`} />
+      {/* Content lines */}
+      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 22*scale} width={w * 0.35} height={2.5 * scale} rx={1.2*scale} fill="white" opacity={0.18} />
+      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 28*scale} width={w * 0.25} height={2 * scale} rx={1*scale} fill="white" opacity={0.12} />
+      <rect x={cx - w/2 + 14*scale} y={cy - h/2 + 34*scale} width={w * 0.30} height={2 * scale} rx={1*scale} fill="white" opacity={0.12} />
+      {/* Shine */}
+      <rect x={cx - w/2 + 4*scale} y={cy - h/2 + 4*scale} width={w - 8*scale} height={5 * scale} rx={2*scale} fill="white" opacity={0.05} />
       <defs>
-        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#4A7AFF" stopOpacity="0.7" />
-          <stop offset="50%" stopColor="#2A4FCC" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#1A3080" stopOpacity="0.3" />
+        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#2A4ADF" stopOpacity="0.7" />
+          <stop offset="40%" stopColor="#1A2FA0" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#080F30" stopOpacity="0.9" />
         </linearGradient>
       </defs>
-      {/* Screen display surface */}
-      <polygon
-        points={[
-          p(sx+0.07, y+0.67, sz+0.09),
-          p(sx+1.17, y+0.67, sz+0.09),
-          p(sx+1.17, y+0.64+0.75, sz+0.09),
-          p(sx+0.07, y+0.64+0.75, sz+0.09),
-        ].join(' ')}
-        fill={`url(#${gradId})`}
-      />
-      {/* Inner UI lines */}
-      <polygon
-        points={[p(sx+0.15,y+0.72,sz+0.09),p(sx+0.7,y+0.72,sz+0.09),p(sx+0.7,y+0.74,sz+0.09),p(sx+0.15,y+0.74,sz+0.09)].join(' ')}
-        fill="white" opacity="0.15" />
-      <polygon
-        points={[p(sx+0.15,y+0.76,sz+0.09),p(sx+0.55,y+0.76,sz+0.09),p(sx+0.55,y+0.78,sz+0.09),p(sx+0.15,y+0.78,sz+0.09)].join(' ')}
-        fill="white" opacity="0.1" />
     </g>
   )
 }
 
-function IsoLaptop({ cx, cz, id = 0 }) {
-  const y = DY + 0.18
+function DeviceLaptop({ cx, cy, scale, id = '' }) {
+  const w = 120 * scale, screenH = 72 * scale, baseH = 12 * scale
+  const gid = `lg_${id}`
+  const lidAngle = 0.3  // how much the lid recedes (perspective lean)
+  // Screen top edge shifts back visually
+  const topOffset = 18 * scale
   return (
     <g>
-      {/* Base (keyboard) */}
-      <IsoBox x={cx-0.7} y={y} z={cz-0.5} w={1.4} h={0.06} d={1.0}
-        top="#B8BFC8" right="#9AA2AA" front="#8A9298" />
-      {/* Screen lid (angled approximation — leaning box) */}
-      <IsoBox x={cx-0.65} y={y+0.06} z={cz-0.5} w={1.3} h={0.78} d={0.07}
-        top="#A8B0B8" right="#9298A0" front="#B8C0C8" />
-      {/* Screen glow on lid front face */}
-      <defs>
-        <linearGradient id={`laptop_${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#3A6AEF" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#1A3ACC" stopOpacity="0.2" />
-        </linearGradient>
-      </defs>
-      <polygon
-        points={[
-          p(cx-0.58, y+0.1, cz-0.5+0.07),
-          p(cx+0.58, y+0.1, cz-0.5+0.07),
-          p(cx+0.58, y+0.06+0.7, cz-0.5+0.07),
-          p(cx-0.58, y+0.06+0.7, cz-0.5+0.07),
-        ].join(' ')}
-        fill={`url(#laptop_${id})`}
-      />
+      {/* Shadow */}
+      <ellipse cx={cx} cy={cy + screenH/2 + baseH + 4*scale} rx={w*0.52} ry={baseH*0.5} fill="black" opacity={0.12} />
+      {/* Keyboard base */}
+      <rect x={cx - w/2} y={cy + screenH/2 - baseH/2} width={w} height={baseH * 1.8} rx={4*scale} fill="#B0B8C4" />
       {/* Trackpad */}
-      <IsoBox x={cx-0.22} y={y+0.06} z={cz+0.15} w={0.44} h={0.01} d={0.28}
-        top="#A0A8B0" right="#909098" front="#888890" />
+      <rect x={cx - 18*scale} y={cy + screenH/2 + 2*scale} width={36*scale} height={10*scale} rx={3*scale} fill="#9AA2AE" opacity={0.8} />
+      {/* Keyboard rows */}
+      {[0,1,2].map(row => (
+        <g key={row}>
+          {[-36,-22,-8,6,20,34].map(kx => (
+            <rect key={kx} x={cx + kx*scale - 4*scale} y={cy + screenH/2 - baseH/2 + 2*scale + row*3.2*scale}
+              width={7*scale} height={2.2*scale} rx={0.8*scale} fill="#8A9AAA" opacity={0.6} />
+          ))}
+        </g>
+      ))}
+      {/* Screen (trapezoid — leaning back) */}
+      <polygon
+        points={`${cx - w/2 + topOffset},${cy - screenH/2} ${cx + w/2 - topOffset},${cy - screenH/2} ${cx + w/2},${cy + screenH/2} ${cx - w/2},${cy + screenH/2}`}
+        fill="#1A1D28"
+      />
+      {/* Screen glow */}
+      <polygon
+        points={`${cx - w/2 + topOffset + 5*scale},${cy - screenH/2 + 5*scale} ${cx + w/2 - topOffset - 5*scale},${cy - screenH/2 + 5*scale} ${cx + w/2 - 5*scale},${cy + screenH/2 - 5*scale} ${cx - w/2 + 5*scale},${cy + screenH/2 - 5*scale}`}
+        fill={`url(#${gid})`}
+      />
+      {/* Content */}
+      <rect x={cx - w/2 + topOffset + 12*scale} y={cy - screenH/2 + 18*scale} width={w*0.3} height={2.5*scale} rx={1*scale} fill="white" opacity={0.15} />
+      <rect x={cx - w/2 + topOffset + 12*scale} y={cy - screenH/2 + 24*scale} width={w*0.2} height={2*scale} rx={1*scale} fill="white" opacity={0.1} />
+      {/* Hinge */}
+      <rect x={cx - w/2} y={cy + screenH/2 - 3*scale} width={w} height={5*scale} rx={2*scale} fill="#888F9A" />
+      <defs>
+        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#2A4ADF" stopOpacity="0.65" />
+          <stop offset="100%" stopColor="#070C20" stopOpacity="0.9" />
+        </linearGradient>
+      </defs>
     </g>
   )
 }
 
-function IsoPhone({ cx, cz, id = 0 }) {
-  const y = DY + 0.18
+function DevicePhone({ cx, cy, scale, id = '' }) {
+  const w = 38 * scale, h = 72 * scale, r = 7 * scale
+  const gid = `phg_${id}`
   return (
     <g>
+      <ellipse cx={cx} cy={cy + h/2 + 3*scale} rx={w*0.5} ry={4*scale} fill="black" opacity={0.13} />
       {/* Body */}
-      <IsoBox x={cx-0.13} y={y} z={cz-0.07} w={0.26} h={0.52} d={0.14}
-        top="#1A1A1A" right="#111" front="#0D0D0D" />
-      {/* Screen front face */}
-      <polygon
-        points={[
-          p(cx-0.1, y+0.05, cz-0.07+0.14),
-          p(cx+0.1, y+0.05, cz-0.07+0.14),
-          p(cx+0.1, y+0.46, cz-0.07+0.14),
-          p(cx-0.1, y+0.46, cz-0.07+0.14),
-        ].join(' ')}
-        fill="#1E3A6E"
-        opacity="0.85"
-      />
-      {/* Dynamic island */}
-      <polygon
-        points={[
-          p(cx-0.04, y+0.44, cz-0.07+0.14),
-          p(cx+0.04, y+0.44, cz-0.07+0.14),
-          p(cx+0.04, y+0.46, cz-0.07+0.14),
-          p(cx-0.04, y+0.46, cz-0.07+0.14),
-        ].join(' ')}
-        fill="#0A0A0A"
-      />
+      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={r} fill="#17191F" />
+      {/* Screen */}
+      <rect x={cx - w/2 + 3*scale} y={cy - h/2 + 6*scale} width={w - 6*scale} height={h - 12*scale} rx={r - 2*scale} fill={`url(#${gid})`} />
+      {/* Dynamic Island */}
+      <rect x={cx - 8*scale} y={cy - h/2 + 9*scale} width={16*scale} height={5*scale} rx={2.5*scale} fill="#0D0E12" />
+      {/* Home bar */}
+      <rect x={cx - 10*scale} y={cy + h/2 - 10*scale} width={20*scale} height={3*scale} rx={1.5*scale} fill="#2A2D35" />
+      {/* Side button */}
+      <rect x={cx + w/2} y={cy - 8*scale} width={3*scale} height={16*scale} rx={1.5*scale} fill="#222530" />
+      {/* Volume */}
+      <rect x={cx - w/2 - 3*scale} y={cy - 12*scale} width={3*scale} height={10*scale} rx={1.5*scale} fill="#222530" />
+      <rect x={cx - w/2 - 3*scale} y={cy + 2*scale} width={3*scale} height={10*scale} rx={1.5*scale} fill="#222530" />
+      <defs>
+        <linearGradient id={gid} x1="0%" y1="0%" x2="60%" y2="100%">
+          <stop offset="0%" stopColor="#1E3A7A" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#060B1A" stopOpacity="0.95" />
+        </linearGradient>
+      </defs>
     </g>
   )
 }
 
-function IsoIPad({ cx, cz, id = 0 }) {
-  const y = DY + 0.18
+function DeviceIPad({ cx, cy, scale, id = '' }) {
+  const w = 80 * scale, h = 108 * scale, r = 8 * scale
+  const gid = `ipg_${id}`
   return (
     <g>
-      {/* Body - laying flat */}
-      <IsoBox x={cx-0.5} y={y} z={cz-0.35} w={1.0} h={0.05} d={0.7}
-        top="#C8CDD5" right="#A8ADB5" front="#9098A0" />
-      {/* Screen on top */}
-      <polygon
-        points={[
-          p(cx-0.44, y+0.05, cz-0.28),
-          p(cx+0.44, y+0.05, cz-0.28),
-          p(cx+0.44, y+0.05, cz+0.28),
-          p(cx-0.44, y+0.05, cz+0.28),
-        ].join(' ')}
-        fill="#1E2A40"
-        opacity="0.7"
-      />
-    </g>
-  )
-}
-
-function IsoCamera({ cx, cz, id = 0 }) {
-  const y = DY + 0.18
-  return (
-    <g>
+      <ellipse cx={cx} cy={cy + h/2 + 4*scale} rx={w*0.5} ry={5*scale} fill="black" opacity={0.12} />
       {/* Body */}
-      <IsoBox x={cx-0.25} y={y} z={cz-0.2} w={0.5} h={0.35} d={0.38}
-        top="#2C2C2C" right="#222" front="#1C1C1C" />
-      {/* Lens ring */}
-      {(() => {
-        const lx = px(cx, y+0.17, cz-0.2+0.38)
-        const ly = py(cx, y+0.17, cz-0.2+0.38)
-        return (
-          <g transform={`translate(${lx}, ${ly})`}>
-            <ellipse rx={9} ry={5} fill="#111" stroke="#333" strokeWidth={1.5} />
-            <ellipse rx={6} ry={3.3} fill="#1A2840" stroke="#222" strokeWidth={1} />
-            <ellipse rx={3} ry={1.6} fill="#0D1520" />
-            <ellipse cx={-2} cy={-1} rx={1.5} ry={0.8} fill="white" opacity={0.2} />
-          </g>
-        )
-      })()}
+      <rect x={cx - w/2} y={cy - h/2} width={w} height={h} rx={r} fill="#1C1F28" />
+      {/* Screen */}
+      <rect x={cx - w/2 + 5*scale} y={cy - h/2 + 8*scale} width={w - 10*scale} height={h - 16*scale} rx={r - 3*scale} fill={`url(#${gid})`} />
+      {/* FaceID bar */}
+      <rect x={cx - 12*scale} y={cy - h/2 + 4*scale} width={24*scale} height={3*scale} rx={1.5*scale} fill="#0D0E12" />
+      {/* Home bar bottom */}
+      <rect x={cx - 14*scale} y={cy + h/2 - 8*scale} width={28*scale} height={3*scale} rx={1.5*scale} fill="#2A2D35" />
+      {/* Side button */}
+      <rect x={cx + w/2} y={cy - 18*scale} width={3*scale} height={22*scale} rx={1.5*scale} fill="#222530" />
+      {/* Content UI */}
+      <rect x={cx - w/2 + 12*scale} y={cy - h/2 + 20*scale} width={w - 24*scale} height={2*scale} rx={1*scale} fill="white" opacity={0.12} />
+      <rect x={cx - w/2 + 12*scale} y={cy - h/2 + 25*scale} width={(w - 24*scale) * 0.7} height={2*scale} rx={1*scale} fill="white" opacity={0.08} />
+      <defs>
+        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#1F3A8F" stopOpacity="0.75" />
+          <stop offset="100%" stopColor="#060C1E" stopOpacity="0.92" />
+        </linearGradient>
+      </defs>
+    </g>
+  )
+}
+
+function DeviceCamera({ cx, cy, scale, id = '' }) {
+  const bw = 72 * scale, bh = 44 * scale, r = 6 * scale
+  const gid = `cg_${id}`
+  return (
+    <g>
+      <ellipse cx={cx} cy={cy + bh/2 + 3*scale} rx={bw*0.48} ry={4*scale} fill="black" opacity={0.12} />
+      {/* Body */}
+      <rect x={cx - bw/2} y={cy - bh/2} width={bw} height={bh} rx={r} fill="#222530" />
+      {/* Grip texture left */}
+      <rect x={cx - bw/2} y={cy - bh/2} width={12*scale} height={bh} rx={r} fill="#1A1D24" />
+      {/* Shutter bump top */}
+      <rect x={cx - 10*scale} y={cy - bh/2 - 8*scale} width={22*scale} height={10*scale} rx={4*scale} fill="#1E2130" />
+      {/* Lens outer ring */}
+      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={17*scale} fill="#111318" />
+      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={15*scale} fill="#0C0F14" stroke="#2A2D35" strokeWidth={1.5*scale} />
+      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={11*scale} fill={`url(#${gid})`} />
+      <circle cx={cx + 6*scale} cy={cy + 2*scale} r={6*scale} fill="#070A10" />
+      {/* Lens reflection */}
+      <ellipse cx={cx + 1*scale} cy={cy - 3*scale} rx={4*scale} ry={2*scale} fill="white" opacity={0.18} transform={`rotate(-35, ${cx + 1*scale}, ${cy - 3*scale})`} />
       {/* Flash */}
-      <IsoBox x={cx+0.12} y={y+0.23} z={cz-0.2} w={0.08} h={0.08} d={0.04}
-        top="#FFD060" right="#E0B040" front="#C0901C" />
+      <rect x={cx - bw/2 + 16*scale} y={cy - 8*scale} width={10*scale} height={7*scale} rx={2*scale} fill="#FFD060" opacity={0.75} />
+      <rect x={cx - bw/2 + 16*scale} y={cy - 8*scale} width={10*scale} height={7*scale} rx={2*scale} fill="white" opacity={0.1} />
+      {/* Mode dial top */}
+      <circle cx={cx - bw/2 + 26*scale} cy={cy - bh/2 - 3*scale} r={7*scale} fill="#2C303C" />
+      <circle cx={cx - bw/2 + 26*scale} cy={cy - bh/2 - 3*scale} r={4*scale} fill="#383C48" />
+      {/* Top shutter button */}
+      <circle cx={cx - 10*scale} cy={cy - bh/2 - 3*scale} r={5*scale} fill="#383C48" />
+      <circle cx={cx - 10*scale} cy={cy - bh/2 - 3*scale} r={3*scale} fill="#2C3040" />
+      <defs>
+        <radialGradient id={gid} cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stopColor="#1E3560" />
+          <stop offset="60%" stopColor="#0E1830" />
+          <stop offset="100%" stopColor="#050810" />
+        </radialGradient>
+      </defs>
     </g>
   )
 }
 
-// Device registry
-const DEVICE_SHAPES = {
-  monitor: IsoMonitor,
-  laptop:  IsoLaptop,
-  phone:   IsoPhone,
-  ipad:    IsoIPad,
-  camera:  IsoCamera,
+const DEVICE_RENDERERS = {
+  monitor: DeviceMonitor,
+  laptop:  DeviceLaptop,
+  phone:   DevicePhone,
+  ipad:    DeviceIPad,
+  camera:  DeviceCamera,
 }
 
-const DEVICE_META = [
-  { id: 'monitor', label: 'Monitor',   desc: 'External display' },
-  { id: 'laptop',  label: 'Laptop',    desc: 'MacBook / PC laptop' },
-  { id: 'ipad',    label: 'iPad',      desc: 'Tablet / iPad' },
-  { id: 'phone',   label: 'Phone',     desc: 'Smartphone' },
-  { id: 'camera',  label: 'Webcam',    desc: 'External camera' },
-]
-
-// ── Placement Zones ──────────────────────────────────────────────────────────
-const ZONES = [
-  { id: 'back-left',    label: 'Back Left',    cx: 0.8,  cz: 1.6,  w: 1.3, d: 0.9 },
-  { id: 'back-center',  label: 'Back Center',  cx: 2.5,  cz: 1.6,  w: 1.3, d: 0.9 },
-  { id: 'back-right',   label: 'Back Right',   cx: 4.2,  cz: 1.6,  w: 1.3, d: 0.9 },
-  { id: 'mid-left',     label: 'Left',         cx: 0.85, cz: 2.6,  w: 1.3, d: 0.9 },
-  { id: 'mid-center',   label: 'Center',       cx: 2.5,  cz: 2.7,  w: 1.5, d: 1.1 },
-  { id: 'mid-right',    label: 'Right',        cx: 4.15, cz: 2.6,  w: 1.3, d: 0.9 },
-  { id: 'front',        label: 'Front Edge',   cx: 2.5,  cz: 3.6,  w: 2.0, d: 0.6 },
-]
-
-// ── Mini device icon for palette ─────────────────────────────────────────────
-function DevicePaletteIcon({ id, selected, onClick }) {
-  const icons = {
-    monitor: (
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-        <rect x="4" y="4" width="30" height="20" rx="2" fill="#1e293b"/>
-        <rect x="6" y="6" width="26" height="16" rx="1" fill="url(#pm)"/>
-        <rect x="15" y="24" width="8" height="5" rx="1" fill="#334155"/>
-        <rect x="11" y="28" width="16" height="3" rx="1.5" fill="#334155"/>
-        <defs><linearGradient id="pm" x1="0" y1="0" x2="26" y2="16" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3b82f6" stopOpacity=".5"/><stop offset="1" stopColor="#1d4ed8" stopOpacity=".1"/>
-        </linearGradient></defs>
-      </svg>
-    ),
-    laptop: (
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-        <rect x="5" y="6" width="28" height="18" rx="2" fill="#1e293b"/>
-        <rect x="7" y="8" width="24" height="14" rx="1" fill="url(#pl)"/>
-        <path d="M3 24h32l-2 6H5z" fill="#334155"/>
-        <defs><linearGradient id="pl" x1="0" y1="0" x2="24" y2="14" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3b82f6" stopOpacity=".4"/><stop offset="1" stopColor="#1d4ed8" stopOpacity=".1"/>
-        </linearGradient></defs>
-      </svg>
-    ),
-    ipad: (
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-        <rect x="7" y="3" width="24" height="32" rx="3" fill="#1e293b"/>
-        <rect x="9" y="7" width="20" height="24" rx="2" fill="url(#pi)"/>
-        <circle cx="19" cy="34" r="2" fill="#334155"/>
-        <defs><linearGradient id="pi" x1="0" y1="0" x2="20" y2="24" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3b82f6" stopOpacity=".4"/><stop offset="1" stopColor="#1d4ed8" stopOpacity=".1"/>
-        </linearGradient></defs>
-      </svg>
-    ),
-    phone: (
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-        <rect x="11" y="2" width="16" height="34" rx="4" fill="#1e293b"/>
-        <rect x="13" y="6" width="12" height="22" rx="2" fill="url(#pp)"/>
-        <rect x="15" y="4" width="8" height="2" rx="1" fill="#334155"/>
-        <rect x="15" y="30" width="8" height="2" rx="1" fill="#334155"/>
-        <defs><linearGradient id="pp" x1="0" y1="0" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1e40af" stopOpacity=".7"/><stop offset="1" stopColor="#0f172a" stopOpacity=".9"/>
-        </linearGradient></defs>
-      </svg>
-    ),
-    camera: (
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-        <rect x="3" y="10" width="32" height="22" rx="4" fill="#1e293b"/>
-        <rect x="14" y="6" width="10" height="6" rx="2" fill="#1e293b"/>
-        <circle cx="19" cy="21" r="8" fill="#0f172a"/>
-        <circle cx="19" cy="21" r="6" fill="#0a0f1a"/>
-        <circle cx="19" cy="21" r="3.5" fill="url(#pc)"/>
-        <ellipse cx="16.5" cy="18.5" rx="1.5" ry="1" fill="white" opacity=".2"/>
-        <defs><radialGradient id="pc" cx="40%" cy="35%"><stop stopColor="#1e3a5f"/><stop offset="1" stopColor="#0a0f1a"/></radialGradient></defs>
-      </svg>
-    ),
-  }
+// ── Palette icon (small sidebar) ─────────────────────────────────────────────
+function PaletteIcon({ id, selected, onClick }) {
+  const Renderer = DEVICE_RENDERERS[id]
+  const meta = DEVICE_META.find(d => d.id === id)
+  const iconScale = id === 'monitor' ? 0.22 : id === 'laptop' ? 0.2 : id === 'ipad' ? 0.18 : id === 'camera' ? 0.24 : 0.18
   return (
     <button
       onClick={onClick}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-        padding: '10px 8px',
-        background: selected ? '#1a2e4a12' : '#f8fafc',
+        padding: '10px 6px',
+        background: selected ? '#1a2e4a0f' : '#f8fafc',
         border: `2px solid ${selected ? '#1a2e4a' : '#e2e8f0'}`,
         borderRadius: 14,
         cursor: 'pointer',
         fontFamily: 'inherit',
         transition: 'all 0.15s',
-        minWidth: 64,
+        minWidth: 70,
       }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = '#94a3b8' }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = '#e2e8f0' }}
     >
-      {icons[id]}
-      <span style={{ fontSize: 11, fontWeight: 600, color: selected ? '#1a2e4a' : '#475569', letterSpacing: '0.02em' }}>
-        {DEVICE_META.find(d => d.id === id)?.label}
+      <svg width={56} height={46} viewBox="0 0 56 46" overflow="visible">
+        <Renderer cx={28} cy={23} scale={iconScale} id={`pal_${id}`} />
+      </svg>
+      <span style={{
+        fontSize: 11, fontWeight: 600, letterSpacing: '0.02em',
+        color: selected ? '#1a2e4a' : '#64748b',
+      }}>
+        {meta?.label}
       </span>
     </button>
   )
 }
 
-// ── Zone click area (isometric polygon as clickable overlay) ─────────────────
-function ZoneOverlay({ zone, filled, selected, onClick }) {
-  const { cx, cz, w, d } = zone
-  const x = cx - w/2, z = cz - d/2
-  const y = DY + 0.19 // just above desk surface
-  const pts = [p(x,y,z),p(x+w,y,z),p(x+w,y,z+d),p(x,y,z+d)].join(' ')
+// ── Zone polygon for click ────────────────────────────────────────────────────
+function ZonePolygon({ zone, filled, selected, onClick }) {
+  const { col, row, wC, wR } = zone
+  const pts = [
+    dp(col - wC/2, row - wR/2),
+    dp(col + wC/2, row - wR/2),
+    dp(col + wC/2, row + wR/2),
+    dp(col - wC/2, row + wR/2),
+  ].join(' ')
 
   return (
     <polygon
       points={pts}
-      fill={filled ? 'rgba(26,46,74,0.08)' : selected ? 'rgba(26,46,74,0.12)' : 'transparent'}
-      stroke={selected ? '#1a2e4a' : filled ? '#1a2e4a60' : '#1a2e4a30'}
-      strokeWidth={selected ? 1.5 : 1}
-      strokeDasharray={filled ? 'none' : '3,2'}
+      fill={selected ? 'rgba(26,46,74,0.1)' : filled ? 'transparent' : 'rgba(0,0,0,0)'}
+      stroke={selected ? '#1a2e4a' : filled ? 'transparent' : '#94a3b840'}
+      strokeWidth={selected ? 2 : 1}
+      strokeDasharray={selected ? 'none' : '4,3'}
       style={{ cursor: 'pointer' }}
       onClick={onClick}
     />
   )
 }
 
-// ── Zone label in isometric space ─────────────────────────────────────────────
-function ZoneLabel({ zone, filled, selectedZone }) {
-  if (filled) return null
-  const { cx, cz, label } = zone
-  const lx = px(cx, DY+0.19, cz)
-  const ly = py(cx, DY+0.19, cz)
-  return (
-    <text
-      x={lx} y={ly}
-      textAnchor="middle" dominantBaseline="middle"
-      fontSize="9"
-      fontWeight="600"
-      fill={selectedZone === zone.id ? '#1a2e4a' : '#94a3b8'}
-      style={{ pointerEvents: 'none', userSelect: 'none', letterSpacing: '0.04em', textTransform: 'uppercase' }}
-    >
-      {label}
-    </text>
-  )
-}
-
-// ── Placed device label ───────────────────────────────────────────────────────
-function PlacedLabel({ zone, deviceId }) {
-  const lx = px(zone.cx, DY + 1.6, zone.cz)
-  const ly = py(zone.cx, DY + 1.6, zone.cz) - 6
-  const meta = DEVICE_META.find(d => d.id === deviceId)
-  return (
-    <text x={lx} y={ly} textAnchor="middle" fontSize="8.5" fontWeight="700"
-      fill="#1a2e4a" opacity="0.6"
-      style={{ pointerEvents: 'none', userSelect: 'none', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-      {meta?.label}
-    </text>
-  )
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function IsometricWorkspace({ devices, setDevices, onContinue }) {
-  const [selectedDevice, setSelectedDevice] = useState(null) // device type to place
-  const [selectedZone,   setSelectedZone]   = useState(null)
+  const [selectedDevice, setSelectedDevice] = useState(null)
 
-  // Map zone id → device
   const zoneMap = {}
   devices.forEach(d => { zoneMap[d.position] = d.type })
 
   const handleZoneClick = (zoneId) => {
     if (!selectedDevice) {
-      // If a device is here, clicking removes it
       if (zoneMap[zoneId]) {
         setDevices(prev => prev.filter(d => d.position !== zoneId))
-      } else {
-        setSelectedZone(zoneId)
       }
       return
     }
-    // Place selected device in zone (replace if occupied)
     setDevices(prev => {
       const filtered = prev.filter(d => d.position !== zoneId)
       return [...filtered, { position: zoneId, type: selectedDevice }]
     })
-    setSelectedZone(null)
   }
 
-  const handleDeviceSelect = (deviceId) => {
-    setSelectedDevice(prev => prev === deviceId ? null : deviceId)
-    setSelectedZone(null)
+  const handleDeviceSelect = (id) => {
+    setSelectedDevice(prev => prev === id ? null : id)
   }
 
   const hasDevices = devices.length > 0
+  const selectedMeta = DEVICE_META.find(d => d.id === selectedDevice)
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      background: '#FAFAF8', fontFamily: 'inherit',
+      minHeight: '100vh',
+      display: 'flex', flexDirection: 'column',
+      background: '#F7F6F2',
+      fontFamily: 'inherit',
     }}>
-      {/* Header */}
-      <div style={{ padding: '28px 32px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* Top bar */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '24px 32px 16px',
+        borderBottom: '1px solid #E8E4DC',
+        background: '#FAFAF8',
+      }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.025em', margin: 0 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.022em', margin: 0 }}>
             Your Workspace
           </h1>
-          <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 5, margin: '5px 0 0' }}>
+          <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>
             {selectedDevice
-              ? `Click a zone on the desk to place your ${DEVICE_META.find(d=>d.id===selectedDevice)?.label}`
-              : 'Select a device, then click a desk zone to place it'}
+              ? `Click a spot on the desk to place your ${selectedMeta?.label}`
+              : 'Select a device from the list, then click the desk to place it'}
           </p>
         </div>
         <button
           onClick={onContinue}
           style={{
-            padding: '10px 24px', fontSize: 14, fontWeight: 700,
+            padding: '10px 26px', fontSize: 14, fontWeight: 700,
             background: '#1a2e4a', color: '#fff',
             border: 'none', borderRadius: 12,
             cursor: 'pointer', fontFamily: 'inherit',
+            boxShadow: '0 2px 8px #1a2e4a30',
           }}
         >
           {hasDevices ? 'Save & Continue' : 'Skip →'}
         </button>
       </div>
 
-      {/* Main layout */}
-      <div style={{ display: 'flex', flex: 1, gap: 0 }}>
+      {/* Content */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* 3D scene */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 0 32px' }}>
+        {/* Desk scene */}
+        <div style={{
+          flex: 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '24px 0 32px',
+        }}>
           <svg
-            width={640} height={460}
-            viewBox="0 0 640 460"
-            style={{ overflow: 'visible' }}
+            width={W} height={H + 30}
+            viewBox={`0 0 ${W} ${H + 30}`}
+            style={{ overflow: 'visible', maxWidth: '100%' }}
           >
             <defs>
-              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#00000018" />
-              </filter>
+              {/* Desk wood grain gradient */}
+              <linearGradient id="deskTop" x1="20%" y1="0%" x2="80%" y2="100%">
+                <stop offset="0%"   stopColor="#E8E0CE" />
+                <stop offset="40%"  stopColor="#DDD4BC" />
+                <stop offset="70%"  stopColor="#D4C8AA" />
+                <stop offset="100%" stopColor="#C8BAA0" />
+              </linearGradient>
+              {/* Desk edge (near) */}
+              <linearGradient id="deskEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#B8A888" />
+                <stop offset="100%" stopColor="#A09070" />
+              </linearGradient>
+              {/* Floor */}
+              <linearGradient id="floorGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#DEDACE" />
+                <stop offset="100%" stopColor="#C8C4B8" />
+              </linearGradient>
+              {/* Vignette on desk */}
+              <radialGradient id="deskVignette" cx="50%" cy="60%" r="60%">
+                <stop offset="0%" stopColor="transparent" />
+                <stop offset="100%" stopColor="rgba(0,0,0,0.06)" />
+              </radialGradient>
+              {/* Subtle wood grain lines */}
+              <pattern id="grain" x="0" y="0" width="40" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-5)">
+                <rect width="40" height="8" fill="none"/>
+                <line x1="0" y1="2" x2="40" y2="2" stroke="rgba(100,80,40,0.04)" strokeWidth="1"/>
+                <line x1="0" y1="5" x2="40" y2="5" stroke="rgba(100,80,40,0.03)" strokeWidth="0.5"/>
+              </pattern>
             </defs>
 
-            {/* Scene */}
-            <g filter="url(#shadow)">
-              <Desk />
+            {/* Floor */}
+            <rect x={0} y={DESK_NEAR_Y + 18} width={W} height={60} fill="url(#floorGrad)" />
 
-              {/* Placed devices */}
-              {ZONES.map(zone => {
-                const deviceId = zoneMap[zone.id]
-                if (!deviceId) return null
-                const DeviceComp = DEVICE_SHAPES[deviceId]
-                if (!DeviceComp) return null
-                return (
-                  <g key={zone.id} style={{ cursor: 'pointer' }} onClick={() => handleZoneClick(zone.id)}>
-                    <DeviceComp cx={zone.cx} cz={zone.cz} id={zone.id} />
-                    <PlacedLabel zone={zone} deviceId={deviceId} />
-                  </g>
-                )
-              })}
-            </g>
-
-            {/* Zone overlays (rendered on top) */}
-            {ZONES.map(zone => (
-              <g key={`zone-${zone.id}`}>
-                <ZoneOverlay
-                  zone={zone}
-                  filled={!!zoneMap[zone.id]}
-                  selected={selectedZone === zone.id}
-                  onClick={() => handleZoneClick(zone.id)}
+            {/* Desk legs */}
+            {[
+              [DESK_NEAR_L + 20, DESK_NEAR_Y + 4],
+              [DESK_NEAR_R - 20, DESK_NEAR_Y + 4],
+              [DESK_FAR_L + 12, DESK_FAR_Y + 14],
+              [DESK_FAR_R - 12, DESK_FAR_Y + 14],
+            ].map(([lx, ly], i) => (
+              <g key={i}>
+                <rect
+                  x={lx - 7} y={ly}
+                  width={14} height={DESK_NEAR_Y + 20 - ly}
+                  rx={3}
+                  fill={i < 2 ? '#2C2C2C' : '#252525'}
+                  opacity={i >= 2 ? 0.55 : 1}
                 />
-                <ZoneLabel zone={zone} filled={!!zoneMap[zone.id]} selectedZone={selectedZone} />
+                {/* Leg cap */}
+                <rect x={lx - 9} y={DESK_NEAR_Y + 16} width={18} height={6} rx={2} fill="#1A1A1A" opacity={i < 2 ? 1 : 0} />
               </g>
             ))}
 
-            {/* Cursor hint */}
-            {selectedDevice && (
-              <text x={320} y={440} textAnchor="middle" fontSize="11" fill="#94a3b8" fontStyle="italic">
-                Click a dashed zone to place · Click placed device to remove
+            {/* Desk surface — trapezoid */}
+            <polygon
+              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
+              fill="url(#deskTop)"
+            />
+            {/* Wood grain */}
+            <polygon
+              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
+              fill="url(#grain)" opacity={0.8}
+            />
+            {/* Vignette */}
+            <polygon
+              points={`${DESK_FAR_L},${DESK_FAR_Y} ${DESK_FAR_R},${DESK_FAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_L},${DESK_NEAR_Y}`}
+              fill="url(#deskVignette)"
+            />
+
+            {/* Front edge of desk (thickness) */}
+            <polygon
+              points={`${DESK_NEAR_L},${DESK_NEAR_Y} ${DESK_NEAR_R},${DESK_NEAR_Y} ${DESK_NEAR_R + 8},${DESK_NEAR_Y + 18} ${DESK_NEAR_L - 8},${DESK_NEAR_Y + 18}`}
+              fill="url(#deskEdge)"
+            />
+            {/* Edge highlight */}
+            <line x1={DESK_NEAR_L} y1={DESK_NEAR_Y} x2={DESK_NEAR_R} y2={DESK_NEAR_Y} stroke="white" strokeWidth={1.5} opacity={0.3} />
+            {/* Far edge */}
+            <line x1={DESK_FAR_L} y1={DESK_FAR_Y} x2={DESK_FAR_R} y2={DESK_FAR_Y} stroke="white" strokeWidth={0.8} opacity={0.15} />
+
+            {/* Zone click areas */}
+            {ZONES.map(zone => (
+              <ZonePolygon
+                key={zone.id}
+                zone={zone}
+                filled={!!zoneMap[zone.id]}
+                selected={selectedDevice !== null}
+                onClick={() => handleZoneClick(zone.id)}
+              />
+            ))}
+
+            {/* Zone labels (empty zones) */}
+            {ZONES.map(zone => {
+              if (zoneMap[zone.id]) return null
+              const sx = deskX(zone.col, zone.row)
+              const sy = deskY(zone.row)
+              return (
+                <text
+                  key={`lbl_${zone.id}`}
+                  x={sx} y={sy}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={10 + (1 - zone.row) * 3}
+                  fontWeight="700"
+                  fill={selectedDevice ? '#1a2e4a70' : '#a0a8b4'}
+                  style={{ pointerEvents: 'none', userSelect: 'none', letterSpacing: '0.06em', textTransform: 'uppercase' }}
+                  onClick={() => handleZoneClick(zone.id)}
+                >
+                  {zone.label}
+                </text>
+              )
+            })}
+
+            {/* Placed devices */}
+            {ZONES.map(zone => {
+              const deviceId = zoneMap[zone.id]
+              if (!deviceId) return null
+              const Renderer = DEVICE_RENDERERS[deviceId]
+              if (!Renderer) return null
+              const scale = depthScale(1 - zone.row) // row=0 near → scale=1
+              const sx = deskX(zone.col, zone.row)
+              const sy = deskY(zone.row)
+              return (
+                <g key={zone.id} style={{ cursor: 'pointer' }} onClick={() => {
+                  setDevices(prev => prev.filter(d => d.position !== zone.id))
+                }}>
+                  <Renderer cx={sx} cy={sy} scale={scale} id={zone.id} />
+                  {/* Remove hint on hover - invisible large hit area */}
+                  <circle cx={sx} cy={sy} r={40 * scale} fill="transparent" />
+                </g>
+              )
+            })}
+
+            {/* "You are here" indicator at bottom */}
+            <g transform={`translate(${W/2}, ${H + 10})`}>
+              <rect x={-36} y={-10} width={72} height={20} rx={10} fill="#1a2e4a15" />
+              <text textAnchor="middle" dominantBaseline="middle" fontSize={10} fontWeight="700"
+                fill="#1a2e4a80" letterSpacing="0.08em">
+                ↑ YOU ARE HERE
               </text>
-            )}
+            </g>
           </svg>
         </div>
 
-        {/* Device palette sidebar */}
+        {/* Sidebar */}
         <div style={{
-          width: 180,
+          width: 192,
+          display: 'flex', flexDirection: 'column', gap: 6,
           padding: '20px 16px',
-          borderLeft: '1px solid #e2e8f0',
-          display: 'flex', flexDirection: 'column', gap: 8,
+          background: '#FAFAF8',
+          borderLeft: '1px solid #E8E4DC',
+          overflowY: 'auto',
         }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
+          <p style={{
+            fontSize: 10, fontWeight: 800, color: '#94a3b8',
+            textTransform: 'uppercase', letterSpacing: '0.1em',
+            margin: '0 0 6px',
+          }}>
             Devices
           </p>
+
           {DEVICE_META.map(d => (
-            <DevicePaletteIcon
+            <PaletteIcon
               key={d.id}
               id={d.id}
               selected={selectedDevice === d.id}
@@ -537,43 +563,48 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
             />
           ))}
 
-          {/* Legend */}
+          {/* Placed list */}
           {hasDevices && (
             <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                Placed
-              </p>
+              <p style={{
+                fontSize: 10, fontWeight: 800, color: '#94a3b8',
+                textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 8px',
+              }}>Placed</p>
               {devices.map((d, i) => {
                 const meta = DEVICE_META.find(m => m.id === d.type)
                 const zone = ZONES.find(z => z.id === d.position)
                 return (
                   <div key={i} style={{
-                    fontSize: 11, color: '#475569', display: 'flex',
-                    justifyContent: 'space-between', alignItems: 'center',
-                    padding: '3px 0',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '3px 0', fontSize: 11,
                   }}>
-                    <span style={{ fontWeight: 600 }}>{meta?.label}</span>
-                    <span style={{ color: '#94a3b8' }}>{zone?.label}</span>
+                    <span style={{ fontWeight: 600, color: '#374151' }}>{meta?.label}</span>
+                    <span style={{ color: '#94a3b8', fontSize: 10 }}>{zone?.label}</span>
                   </div>
                 )
               })}
               <button
                 onClick={() => setDevices([])}
                 style={{
-                  marginTop: 10, width: '100%', padding: '6px',
-                  fontSize: 11, color: '#94a3b8', background: 'none',
-                  border: '1px solid #e2e8f0', borderRadius: 8,
-                  cursor: 'pointer', fontFamily: 'inherit',
+                  marginTop: 8, width: '100%', padding: '6px',
+                  fontSize: 11, color: '#94a3b8',
+                  background: 'none', border: '1px solid #e2e8f0',
+                  borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
                 Clear all
               </button>
             </div>
           )}
+
+          {/* Hint */}
+          <p style={{
+            fontSize: 10, color: '#b0bac8', marginTop: 8, lineHeight: 1.5, textAlign: 'center',
+          }}>
+            Click a placed device to remove it
+          </p>
         </div>
       </div>
     </div>
   )
 }
-
-export { ZONES as ISO_ZONES, DEVICE_META as ISO_DEVICE_META }
