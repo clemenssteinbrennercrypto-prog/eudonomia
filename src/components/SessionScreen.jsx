@@ -462,6 +462,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       distractionEvents:    distractionEventsRef.current,
       focusedSeconds:       focusedSecondsRef.current,
       longestFocusedStreak: longestStreakRef.current,
+      finalScore:           Math.round(focusScoreRef.current),
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
     })

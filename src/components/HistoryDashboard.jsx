@@ -137,7 +137,8 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
           <div className="history-stats-grid" style={{ textAlign: 'center' }}>
             {[
               { label: 'Total time', value: fmt(session.actualSeconds) },
-              { label: 'Focused', value: `${focusPct}%`, color },
+              { label: 'Focus %', value: `${focusPct}%`, color },
+              ...(session.finalScore != null ? [{ label: 'Focus score', value: session.finalScore, color }] : []),
               { label: 'Alerts', value: session.distractionEvents ?? 0 },
               { label: 'Best streak', value: fmt(session.longestFocusedStreak) },
             ].map((s) => (

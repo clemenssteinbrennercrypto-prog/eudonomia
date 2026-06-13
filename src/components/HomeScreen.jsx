@@ -149,16 +149,22 @@ export default function HomeScreen({
             <button
               onClick={onShowSetup}
               style={{
-                width: '100%', padding: '13px 16px',
+                width: '100%', padding: '16px',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: '#f9fafb', border: '1.5px solid #E8E3DA',
-                borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+                background: '#fff', border: '1.5px solid #E8E3DA',
+                borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+                textAlign: 'left',
               }}
             >
-              <span style={{ fontSize: 14, color: '#9ca3af', fontWeight: 500 }}>
-                Configure your workspace setup
-              </span>
-              <span style={{ fontSize: 13, color: '#c4c9d4' }}>→</span>
+              <div>
+                <span style={{ fontSize: 14, color: '#374151', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                  Set up your workspace for better tracking
+                </span>
+                <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 400 }}>
+                  Tell us where your screens are to improve detection accuracy
+                </span>
+              </div>
+              <span style={{ fontSize: 16, color: '#c4c9d4', marginLeft: 12 }}>→</span>
             </button>
           )}
 
