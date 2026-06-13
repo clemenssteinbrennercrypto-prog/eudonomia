@@ -522,3 +522,7 @@ body {
 .legal-modal-enter {
   animation: fadeIn 0.2s ease;
 }
+
+html {
+  scroll-behavior: smooth;
+}

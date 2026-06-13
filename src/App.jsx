@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
 import WorkspaceSetup from './components/WorkspaceSetup'
@@ -21,6 +22,9 @@ function saveDevices(devices) {
 }
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(
+    () => localStorage.getItem('eudaimonia_onboarded') !== 'true'
+  )
   const [onboarded, setOnboarded] = useState(
     () => localStorage.getItem('eudaimonia_onboarded') === 'true'
   )
@@ -54,6 +58,10 @@ export default function App() {
     setDuration(30)
     setSessionData(null)
     setScreen('home')
+  }
+
+  if (showLanding) {
+    return <LandingPage onEnter={() => setShowLanding(false)} />
   }
 
   return (
