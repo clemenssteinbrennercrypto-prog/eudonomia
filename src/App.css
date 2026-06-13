@@ -567,3 +567,35 @@ html {
   from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ── PRINT / PDF ── */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  .no-print,
+  button,
+  .history-close-btn,
+  canvas {
+    display: none !important;
+  }
+  .history-card {
+    break-inside: avoid;
+    border: 1px solid #d1d5db !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    box-shadow: none !important;
+    margin-bottom: 12px !important;
+  }
+  .stat-tile {
+    background: #f9fafb !important;
+    color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
+  }
+  .history-root,
+  .history-content {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+}

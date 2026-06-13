@@ -959,6 +959,18 @@ export default function HistoryDashboard({ onClose }) {
                     Export CSV
                   </button>
                   <button
+                    onClick={() => window.print()}
+                    className="no-print"
+                    style={{
+                      background: 'none', border: '1px solid #e5e7eb',
+                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    Print / Save PDF
+                  </button>
+                  <button
                     onClick={() => setConfirmClear(true)}
                     style={{
                       background: 'none', border: '1px solid #e5e7eb',

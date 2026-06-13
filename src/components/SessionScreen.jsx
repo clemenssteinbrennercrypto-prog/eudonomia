@@ -73,12 +73,38 @@ const REASON_LABELS = {
 
 // ── Alert messages ────────────────────────────────────────────────────────────
 const ALERT_MESSAGES = {
-  default:    { text: 'Hey — come back.',        sub: 'Your session is still running' },
-  phone:      { text: 'Put the phone down.',     sub: 'Eyes back on the screen' },
-  away:       { text: 'Where did you go?',       sub: 'Come back to your session' },
-  yawn:       { text: 'Stay with it.',           sub: "You've got this" },
-  lookingup:  { text: 'Eyes on the task.',       sub: 'Stop daydreaming' },
-  prolonged:  { text: 'Wake up.',                sub: 'Your eyes have been closed' },
+  default:    { text: 'Hey — come back.',        sub: 'Your session is still running',   icon: null },
+  phone:      { text: 'Put the phone down.',     sub: 'Eyes back on the screen',         icon: 'phone' },
+  away:       { text: 'Come back to your work.', sub: 'Your session is still running',   icon: 'away' },
+  yawn:       { text: 'Take a 2-minute break.',  sub: 'Stand up, stretch, come back strong', icon: 'yawn' },
+  lookingup:  { text: 'Eyes on the task.',       sub: 'Bring your focus back here',      icon: 'lookingup' },
+  prolonged:  { text: 'Take a 2-minute break.',  sub: 'Rest your eyes, then continue',   icon: 'yawn' },
+}
+
+// ── Overlay icons (inline SVG strings) ────────────────────────────────────────
+function OverlayIcon({ type }) {
+  if (type === 'phone') return (
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+      <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+      <line x1="12" y1="18" x2="12.01" y2="18"/>
+    </svg>
+  )
+  if (type === 'away') return (
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+      <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+    </svg>
+  )
+  if (type === 'yawn') return (
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+      <circle cx="12" cy="12" r="10"/><path d="M8 15s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+    </svg>
+  )
+  if (type === 'lookingup') return (
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>
+    </svg>
+  )
+  return null
 }
 
 const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
@@ -288,7 +314,27 @@ const STATUS_CONFIG = {
   calibrating:{ color: '#94a3b8', label: 'Calibrating'},
 }
 
-function StatusDot({ status, score, reason, isCalibrating }) {
+// ── Signal quality bars ───────────────────────────────────────────────────────
+function SignalBars({ confidence }) {
+  // 0..1 → 0, 1, 2, or 3 filled bars
+  const filled = confidence >= 0.85 ? 3 : confidence >= 0.5 ? 2 : confidence >= 0.2 ? 1 : 0
+  const barColor = filled === 3 ? '#22c55e' : filled === 2 ? '#f97316' : '#ef4444'
+  return (
+    <div title={`Detection quality: ${Math.round(confidence * 100)}%`} style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{
+          width: 3,
+          height: 4 + i * 3,
+          borderRadius: 1.5,
+          background: i <= filled ? barColor : '#2A2E3A',
+          transition: 'background 0.4s',
+        }} />
+      ))}
+    </div>
+  )
+}
+
+function StatusDot({ status, score, reason, isCalibrating, confidence = 0 }) {
   const cfg = isCalibrating ? STATUS_CONFIG.calibrating : (STATUS_CONFIG[status] ?? STATUS_CONFIG.focused)
   const { color, label } = cfg
   const showReason = !isCalibrating && (status === 'distracted' || status === 'alert')
@@ -339,6 +385,7 @@ function StatusDot({ status, score, reason, isCalibrating }) {
         {!isCalibrating && (
           <span style={{ fontSize: 10, color: trendColor, opacity: 0.7, lineHeight: 1 }}>{trend}</span>
         )}
+        {!isCalibrating && <SignalBars confidence={confidence} />}
       </div>
       {reasonText && (
         <div style={{
@@ -388,6 +435,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [endConfirm,      setEndConfirm]      = useState(false)
   const [faceAbsentPrompt, setFaceAbsentPrompt] = useState(false)
   const [gazePos,         setGazePos]         = useState(null) // {x, y} normalized 0..1
+  const [detectionConf,   setDetectionConf]   = useState(0)   // 0..1 signal quality
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -434,6 +482,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const earBaselineRef      = useRef(0.28) // fallback default
   const earCalibSamplesRef  = useRef([])
   const lastRecalibTimeRef  = useRef(0)    // timestamp of last EAR re-calibration
+
+  // ── Detection confidence ref ──────────────────────────────────────────────
+  const confidenceRef       = useRef(0) // 0..1
 
   // ── Flow state refs ───────────────────────────────────────────────────────
   const flowGoodSinceRef    = useRef(null) // when flow conditions first met
@@ -845,6 +896,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         setShowOverlay(false)
       }
     }
+
+    // ── Detection confidence ───────────────────────────────────────────────
+    // High confidence: face present, EAR in normal range, low head variance
+    // Low confidence: no face, or EAR extreme (< 0.1 or > 0.5), or high variance
+    let conf = 0
+    if (hasFace) {
+      conf += 0.5  // face present
+      const earOk = avgEar >= 0.15 && avgEar <= 0.45
+      if (earOk) conf += 0.3
+      if (fidgetVariance <= HEAD_DRIFT_THRESH) conf += 0.2
+    }
+    confidenceRef.current = conf
   }, [alertDelayMs, yawLT, yawRT, pitchDT, pitchUpDT, ignoreBelowPhone])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
@@ -917,6 +980,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setFocusScore(Math.round(focusScoreRef.current))
       setCurrentStreak(currentStreakRef.current)
       setDistractionCount(distractionEventsRef.current)
+      setDetectionConf(confidenceRef.current)
       // gaze dot: map yaw (-45..+45) and pitch (-30..+30) to 0..1
       if (hasFace) {
         setGazePos({
@@ -1098,6 +1162,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           score={focusScore}
           reason={distractReason}
           isCalibrating={isCalibrating}
+          confidence={detectionConf}
         />
       </div>
 
@@ -1274,8 +1339,31 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       {showOverlay && (
         <div className="focus-overlay">
           <div className="focus-overlay-inner">
+            {overlayMsg.icon && <OverlayIcon type={overlayMsg.icon} />}
             <p className="focus-overlay-text">{overlayMsg.text}</p>
             <p className="focus-overlay-sub">{overlayMsg.sub}</p>
+            <button
+              onClick={() => {
+                overlayActiveRef.current = false
+                setShowOverlay(false)
+              }}
+              style={{
+                marginTop: 8,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 100,
+                padding: '8px 24px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#94a3b8',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                letterSpacing: '0.03em',
+                transition: 'background 0.15s',
+              }}
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
