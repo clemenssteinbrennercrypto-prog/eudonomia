@@ -1,48 +1,39 @@
 import { useState, useEffect, useCallback } from 'react'
 import HomeScreen from './components/HomeScreen'
+import SetupScreen from './components/SetupScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
 import { saveSession } from './lib/storage'
 
-function loadMonitorPositions() {
-  try { return JSON.parse(localStorage.getItem('eudaimonia_monitor_positions') || '[]') }
+// ── Persist helpers ───────────────────────────────────────────────────────────
+function loadDevices() {
+  try { return JSON.parse(localStorage.getItem('eudaimonia_devices') || '[]') }
   catch { return [] }
+}
+function saveDevices(devices) {
+  try { localStorage.setItem('eudaimonia_devices', JSON.stringify(devices)) }
+  catch {}
 }
 
 export default function App() {
-  const [screen,           setScreen]           = useState('home')
-  const [task,             setTask]             = useState('')
-  const [duration,         setDuration]         = useState(30)
-  const [sessionData,      setSessionData]      = useState(null)
-  const [monitors,         setMonitorsRaw]      = useState(() => {
-    const s = parseInt(localStorage.getItem('eudaimonia_monitors') || '1')
-    return [1, 2, 3].includes(s) ? s : 1
-  })
-  const [monitorPositions, setMonitorPositions] = useState(loadMonitorPositions)
+  const [screen,   setScreen]   = useState('home')
+  const [task,     setTask]     = useState('')
+  const [duration, setDuration] = useState(30)
+  const [sessionData, setSessionData] = useState(null)
+  const [devices,  setDevicesRaw] = useState(loadDevices)
 
-  useEffect(() => {
-    localStorage.setItem('eudaimonia_monitors', String(monitors))
-  }, [monitors])
-
-  useEffect(() => {
-    localStorage.setItem('eudaimonia_monitor_positions', JSON.stringify(monitorPositions))
-  }, [monitorPositions])
-
-  const setMonitors = useCallback((m) => {
-    setMonitorsRaw(m)
-    setMonitorPositions((prev) => {
-      const needed = m - 1
-      if (prev.length === needed) return prev
-      if (prev.length > needed)  return prev.slice(0, needed)
-      return [...prev, ...Array(needed - prev.length).fill('right')]
+  const setDevices = useCallback((val) => {
+    setDevicesRaw(prev => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveDevices(next)
+      return next
     })
   }, [])
 
   const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    // Attach task name + save to history
     const enriched = { ...data, task }
     saveSession(enriched)
     setSessionData(enriched)
@@ -64,19 +55,24 @@ export default function App() {
           setTask={setTask}
           duration={duration}
           setDuration={setDuration}
-          monitors={monitors}
-          setMonitors={setMonitors}
-          monitorPositions={monitorPositions}
-          setMonitorPositions={setMonitorPositions}
+          devices={devices}
           onStart={handleStart}
           onShowHistory={() => setScreen('history')}
+          onShowSetup={() => setScreen('setup')}
+        />
+      )}
+      {screen === 'setup' && (
+        <SetupScreen
+          devices={devices}
+          setDevices={setDevices}
+          onContinue={() => setScreen('home')}
         />
       )}
       {screen === 'session' && (
         <SessionScreen
           task={task}
           duration={duration}
-          monitorPositions={monitorPositions}
+          devices={devices}
           onEnd={handleEnd}
         />
       )}

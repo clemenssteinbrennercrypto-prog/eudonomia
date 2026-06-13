@@ -52,14 +52,35 @@ const ALERT_MESSAGES = {
   prolonged:  { text: 'Wake up.',                sub: 'Your eyes have been closed' },
 }
 
-function computeThresholds(positions) {
-  let yawLeft = 30, yawRight = 30, pitchDown = 20
-  for (const p of positions) {
-    if (p === 'left')  yawLeft   = 55
-    if (p === 'right') yawRight  = 55
-    if (p === 'below') pitchDown = 25
+// Derive detection thresholds from the device layout.
+// Devices with screens (monitor/laptop/ipad) in a direction → relax that threshold.
+// Camera position → we know where tracking originates (future: calibration).
+// Phone in 'below' → don't double-penalise normal desk posture.
+const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
+
+function computeThresholds(devices = []) {
+  let yawLeft = 30, yawRight = 30, pitchDown = 20, pitchUp = 15
+  let ignoreBelowPhone = false
+
+  for (const d of devices) {
+    const isScreen = SCREEN_DEVICES.has(d.type)
+    const p = d.position
+
+    // Screens at side → user legitimately looks there → widen yaw threshold
+    if (isScreen && (p === 'left' || p === 'above-left' || p === 'below-left'))  yawLeft  = Math.max(yawLeft,  55)
+    if (isScreen && (p === 'right' || p === 'above-right' || p === 'below-right')) yawRight = Math.max(yawRight, 55)
+
+    // Screen below → head-down is normal
+    if (isScreen && (p === 'below' || p === 'below-left' || p === 'below-right')) pitchDown = Math.max(pitchDown, 30)
+
+    // Screen above → looking up is normal
+    if (isScreen && (p === 'above' || p === 'above-left' || p === 'above-right')) pitchUp = Math.max(pitchUp, 30)
+
+    // Phone declared at below → user may hold phone to read (less suspicious)
+    if (d.type === 'phone' && (p === 'below' || p === 'below-left' || p === 'below-right')) ignoreBelowPhone = true
   }
-  return { yawLeft, yawRight, pitchDown }
+
+  return { yawLeft, yawRight, pitchDown, pitchUp, ignoreBelowPhone }
 }
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
@@ -218,10 +239,10 @@ function StatusDot({ status, score, reason }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function SessionScreen({ task, duration, monitorPositions, onEnd }) {
+export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const totalSeconds = duration * 60
-  const { yawLeft: yawLT, yawRight: yawRT, pitchDown: pitchDT } = computeThresholds(monitorPositions)
-  const alertDelayMs = monitorPositions.length >= 1 ? 120_000 : 90_000
+  const { yawLeft: yawLT, yawRight: yawRT, pitchDown: pitchDT, pitchUp: pitchUpDT, ignoreBelowPhone } = computeThresholds(devices)
+  const alertDelayMs = devices.length >= 1 ? 120_000 : 90_000
 
   const [timeLeft,        setTimeLeft]        = useState(totalSeconds)
   const [showOverlay,     setShowOverlay]     = useState(false)
@@ -371,7 +392,7 @@ export default function SessionScreen({ task, duration, monitorPositions, onEnd 
     const phoneMs = phoneStartRef.current ? now - phoneStartRef.current : 0
 
     // ── Looking up (at ceiling / daydreaming) ─────────────────────────────
-    if (hasFace && pitchUpDeg >= PITCH_UP_THRESH) {
+    if (hasFace && pitchUpDeg >= pitchUpDT) {
       if (!lookingUpStartRef.current) lookingUpStartRef.current = now
     } else {
       lookingUpStartRef.current = null
@@ -419,8 +440,10 @@ export default function SessionScreen({ task, duration, monitorPositions, onEnd 
     } else if (hasFace) {
 
       // 1. Phone detection (strongest signal — clear intentional distraction)
+      // If user declared a phone below their desk, soften the penalty
+      const phonePenalty = ignoreBelowPhone ? 20 : 45
       if (phoneMs >= PHONE_HOLD_MS) {
-        score -= 45
+        score -= phonePenalty
         primaryReason = 'phone'
       }
 
@@ -442,8 +465,8 @@ export default function SessionScreen({ task, duration, monitorPositions, onEnd 
         if (primaryReason === 'focused') primaryReason = 'yawn'
       }
 
-      // 5. Looking up (daydreaming / ceiling stare)
-      if (lookingUpMs >= 3000) {
+      // 5. Looking up (daydreaming / ceiling stare) — skip if screen above
+      if (lookingUpMs >= 3000 && pitchUpDT <= 15) {
         score -= 25
         if (primaryReason === 'focused') primaryReason = 'lookingup'
       }
