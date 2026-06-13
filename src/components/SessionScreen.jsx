@@ -250,7 +250,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
     : '#ef4444'
 
   return (
-    <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
+    <div className={isCalibrating ? 'ring--calibrating' : ''} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
       <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: `drop-shadow(0 0 8px ${color}4D)` }}>
         <circle
           cx={size / 2} cy={size / 2} r={radius}
@@ -375,6 +375,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [isPaused,        setIsPaused]        = useState(false)
   const [isCalibrating,   setIsCalibrating]   = useState(true)
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
+  const [showReady,       setShowReady]       = useState(false) // brief "Ready" flash
   const [currentStreak,   setCurrentStreak]   = useState(0)
   const [ambientMode,     setAmbientMode]     = useState('off')
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
@@ -889,7 +890,14 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         setCalibProgress(Math.min(elapsedSecs / CALIBRATION_SECS, 1))
         return
       }
-      setIsCalibrating(false)
+      setIsCalibrating(prev => {
+        if (prev) {
+          // Transition: show "Ready" for 1.5s
+          setShowReady(true)
+          setTimeout(() => setShowReady(false), 1500)
+        }
+        return false
+      })
       setCalibProgress(1)
 
       const focused = focusScoreRef.current >= 40
@@ -1096,8 +1104,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         )}
 
         {isCalibrating && (
-          <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 6, letterSpacing: '0.05em' }}>
-            Calibrating…
+          <div style={{ textAlign: 'center', marginTop: 6 }}>
+            <p style={{ fontSize: 12, color: '#94a3b8', letterSpacing: '0.05em', margin: 0 }}>
+              Calibrating…
+            </p>
+            <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0', fontStyle: 'italic' }}>
+              Getting to know your eyes…
+            </p>
+          </div>
+        )}
+        {showReady && !isCalibrating && (
+          <p style={{ fontSize: 13, color: '#22c55e', textAlign: 'center', marginTop: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
+            Ready ✓
           </p>
         )}
 

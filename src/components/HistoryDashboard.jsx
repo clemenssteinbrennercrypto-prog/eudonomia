@@ -414,7 +414,7 @@ function getLast7Days(sessions) {
         ds.reduce((a, s) => a + (s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0), 0) / ds.length
       )
     }
-    days.push({ label, avgFocus })
+    days.push({ label, avgFocus, count: ds.length })
   }
   return days
 }
@@ -422,6 +422,8 @@ function getLast7Days(sessions) {
 function WeeklyTrends({ sessions }) {
   const days = useMemo(() => getLast7Days(sessions), [sessions])
   const MAX_H = 48
+  const GOAL_PCT = 70
+  const goalLineBottom = Math.round((GOAL_PCT / 100) * MAX_H) // px from bottom of bar area
 
   return (
     <div style={{
@@ -434,29 +436,48 @@ function WeeklyTrends({ sessions }) {
       <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16, margin: '0 0 16px' }}>
         Last 7 days
       </p>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-        {days.map((day, i) => {
-          const filled = day.avgFocus !== null
-          const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
-          const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
-          return (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
-                {filled ? `${day.avgFocus}%` : '0'}
-              </span>
-              <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
-                <div style={{
-                  width: '100%', height: h,
-                  background: color,
-                  borderRadius: '6px 6px 0 0',
-                  minHeight: 4,
-                  transition: 'height 0.3s ease',
-                }} />
+      <div style={{ position: 'relative' }}>
+        {/* Goal line at 70% */}
+        <div style={{
+          position: 'absolute',
+          left: 0, right: 0,
+          bottom: 28 + goalLineBottom, // 28px = label height approx
+          borderTop: '1.5px dashed #94a3b8',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}>
+          <span style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>70%</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+          {days.map((day, i) => {
+            const filled = day.avgFocus !== null
+            const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
+            const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
+            const tooltip = filled
+              ? `${day.label} — ${day.avgFocus}% avg, ${day.count} session${day.count !== 1 ? 's' : ''}`
+              : `${day.label} — no sessions`
+            return (
+              <div key={i} title={tooltip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
+                  {filled ? `${day.avgFocus}%` : '0'}
+                </span>
+                <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
+                  <div style={{
+                    width: '100%', height: h,
+                    background: color,
+                    borderRadius: '6px 6px 0 0',
+                    minHeight: 4,
+                    transition: 'height 0.3s ease',
+                  }} />
+                </div>
+                <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
+                <span style={{ fontSize: 9, color: filled ? '#cbd5e1' : 'transparent', fontWeight: 500 }}>
+                  {filled ? day.count : '0'}
+                </span>
               </div>
-              <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

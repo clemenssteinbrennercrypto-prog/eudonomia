@@ -76,6 +76,26 @@ export default function HomeScreen({
     return sessions[0]?.task || null
   }, [])
 
+  const durationSuggestion = useMemo(() => {
+    const sessions = loadSessions()
+    if (sessions.length === 0) return null
+    const last = sessions[0]
+    if (!last || !last.actualSeconds || last.actualSeconds === 0) return null
+    const focusPct = last.focusedSeconds != null
+      ? Math.round((last.focusedSeconds / last.actualSeconds) * 100)
+      : null
+    if (focusPct === null) return null
+    const lastDurMin = Math.round(last.actualSeconds / 60)
+    if (focusPct > 80) {
+      const suggested = Math.min(180, lastDurMin + 15)
+      return `Based on your last session, try ${suggested} min`
+    } else if (focusPct < 50) {
+      const suggested = Math.max(10, Math.min(25, lastDurMin - 10))
+      return `Based on your last session, try ${suggested} min`
+    }
+    return null
+  }, [])
+
   const handleCustomClick = () => {
     setShowCustomInput(true)
   }
@@ -271,6 +291,11 @@ export default function HomeScreen({
                 />
                 <span style={{ fontSize: 12, color: '#9ca3af' }}>minutes</span>
               </div>
+            )}
+            {durationSuggestion && (
+              <p style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', margin: '6px 0 0' }}>
+                {durationSuggestion}
+              </p>
             )}
           </div>
 

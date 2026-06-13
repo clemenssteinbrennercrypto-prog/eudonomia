@@ -327,6 +327,12 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
 
 // ── Step components ───────────────────────────────────────────────────────────
 
+const SETUP_IMPACT = {
+  laptop: 'Laptop screen only → head-down movement is normal for you',
+  monitor: 'Desktop monitor → we\'ll watch for phone usage more actively',
+  both: 'Both → two screens means wider gaze range is expected',
+}
+
 function StepOne({ mainScreen, setMainScreen }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -356,6 +362,11 @@ function StepOne({ mainScreen, setMainScreen }) {
           onClick={() => setMainScreen('both')}
         />
       </div>
+      {mainScreen && (
+        <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
+          {SETUP_IMPACT[mainScreen]}
+        </p>
+      )}
     </div>
   )
 }
