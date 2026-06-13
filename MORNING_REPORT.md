@@ -1,7 +1,7 @@
-# Morning Report — June 15, 2026
+# Morning Report — June 15, 2026 (Session 2)
 
 ## Session Summary
-Autonomous dev session — June 15 (morning Vienna time)
+Stability & polish pass — June 15 (afternoon Vienna time)
 
 ## Total Commits This Session
 1 commit pushed to `main`
@@ -12,32 +12,34 @@ Autonomous dev session — June 15 (morning Vienna time)
 
 ### Task 1: Build verified ✅
 - `npx vite build` clean, no errors
-- Scoring logic and refs in SessionScreen intact
+- All screen transitions verified in App.jsx: landing → onboarding → home → setup → session → end → history ✓
 
-### Task 2: Calibrating ring experience
-- Ring now pulses during 20s calibration (`.ring--calibrating` CSS class applied)
-- Added "Getting to know your eyes…" italic subtext during calibration
-- After calibration completes: shows "Ready ✓" in green for 1.5s before switching to normal score display
+### Task 2: FocusRing quality glow
+- SVG `filter` now maps directly to focus zone:
+  - Green (≥65): `drop-shadow(0 0 12px rgba(34,197,94,0.25))`
+  - Orange (≥38): `drop-shadow(0 0 12px rgba(249,115,22,0.2))`
+  - Red (<38): `drop-shadow(0 0 12px rgba(239,68,68,0.2))`
+  - Calibrating: no glow
+- Feels premium, subtle ambient light effect
 
-### Task 3: WorkspaceSetup impact text
-- After user selects their main screen in the Simple wizard, shows italic explanation:
-  - Laptop → "head-down movement is normal for you"
-  - Monitor → "we'll watch for phone usage more actively"
-  - Both → "wider gaze range is expected"
+### Task 3: WorkspaceSetup simple mode icons
+- Added `LaptopIcon` and `MonitorIcon` inline SVG components (navy, 20px)
+- PillOption now accepts `icon` render prop — icons appear left of label
+- Laptop screen → laptop SVG, Desktop monitor → monitor SVG, Both → laptop + monitor side by side
+- Icons invert to white when pill is selected
 
-### Task 4: History weekly chart improvements
-- Horizontal dashed goal line at 70% with "70%" label
-- Session count per day shown as small number below day label
-- `title` tooltip on hover: "Mon — 72% avg, 3 sessions"
+### Task 4: LandingPage trust signals
+- Replaced plain text "Works in your browser · No download · No account"
+- Now shows 3 pill badges with inline SVG icons: 🔒 Private · ⚡ Fast · ✓ Free
+- Subtle background pills (`rgba(42,46,58,0.07)`), rounded, consistent spacing
 
-### Task 5: HomeScreen duration suggestion
-- Reads last session's focusPct to recommend duration
-- >80% focus → suggests same duration + 15 min
-- <50% focus → suggests -10 min or 25 min cap
-- Shows as small italic text below duration buttons
-- No suggestion on first run
+### Task 5: History pagination
+- Sessions list paginated at 10 per page
+- Shows "← Previous / Next →" buttons + "Showing 1–10 of N sessions" counter
+- Overall stats (OverallStats, WeeklyTrends) always use all sessions regardless of page
+- Page resets on filter or search change
 
 ---
 
 ## Commit
-`4c8fc3a` feat: calibrating ring pulse, Ready flash, setup impact text, chart goal line, duration suggestion
+`005cb85` feat: focus ring quality glow, setup icons, landing trust pills, history pagination
