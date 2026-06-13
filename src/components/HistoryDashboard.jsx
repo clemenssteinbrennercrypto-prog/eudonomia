@@ -188,20 +188,39 @@ function SessionCard({ session, onDelete, onExpand, expanded }) {
   )
 }
 
-// ── Summary stats at top ──────────────────────────────────────────────────────
+// ── CHANGE 3: Smarter overall stats ──────────────────────────────────────────
+function computeCurrentStreak(sessions) {
+  // Count consecutive days (backwards from today) that have at least 1 session
+  if (!sessions.length) return 0
+  const today = new Date(); today.setHours(0,0,0,0)
+  let streak = 0
+  let cursor = new Date(today)
+  const daySet = new Set(sessions.map(s => new Date(s.timestamp).toDateString()))
+  while (daySet.has(cursor.toDateString())) {
+    streak++
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
+}
+
 function OverallStats({ sessions }) {
   const stats = useMemo(() => {
     if (!sessions.length) return null
-    const totalTime = sessions.reduce((a, s) => a + (s.actualSeconds ?? 0), 0)
+    // 1. Total focused seconds (not actual seconds)
+    const totalFocusTime = sessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0)
+    // 2. Rolling avg focus %
     const avgFocus = Math.round(
-      sessions.reduce((a, s) => {
-        const pct = s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0
-        return a + pct
-      }, 0) / sessions.length
+      sessions.reduce((a, s) => a + (s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0), 0) / sessions.length
     )
-    const bestStreak = Math.max(...sessions.map((s) => s.longestFocusedStreak ?? 0))
-    const completed = sessions.filter((s) => s.completed).length
-    return { totalTime, avgFocus, bestStreak, completed }
+    // 3. Current day streak
+    const currentStreak = computeCurrentStreak(sessions)
+    // 4. Best single session focus %
+    const bestSession = sessions.reduce((best, s) => {
+      const pct = s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0
+      return pct > (best.pct ?? -1) ? { ...s, pct } : best
+    }, {})
+    const bestPct = Math.round(bestSession.pct ?? 0)
+    return { totalFocusTime, avgFocus, currentStreak, bestPct }
   }, [sessions])
 
   if (!stats) return null
@@ -214,10 +233,10 @@ function OverallStats({ sessions }) {
       marginBottom: 32,
     }}>
       {[
-        { label: 'Total focus time', value: fmt(stats.totalTime) },
-        { label: 'Avg focus %', value: `${stats.avgFocus}%`, color: focusColor(stats.avgFocus) },
-        { label: 'Best streak ever', value: fmt(stats.bestStreak) },
-        { label: 'Sessions completed', value: `${stats.completed}/${sessions.length}` },
+        { label: 'Total focus time',  value: fmt(stats.totalFocusTime) },
+        { label: 'Avg focus %',       value: `${stats.avgFocus}%`,   color: focusColor(stats.avgFocus) },
+        { label: 'Current streak',    value: `${stats.currentStreak}d` },
+        { label: 'Best session',      value: `${stats.bestPct}%`,    color: focusColor(stats.bestPct) },
       ].map((s) => (
         <div key={s.label} style={{
           background: '#FFFFFF',
@@ -242,57 +261,77 @@ function OverallStats({ sessions }) {
   )
 }
 
-// ── Weekly Trends chart ───────────────────────────────────────────────────────
-function WeeklyTrends({ sessions }) {
+// ── CHANGE 1: Group sessions by date ─────────────────────────────────────────
+function groupByDate(sessions) {
+  const today     = new Date(); today.setHours(0,0,0,0)
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+
+  const groups = []
+  const seen = {}
+
+  for (const s of sessions) {
+    const d = new Date(s.timestamp); d.setHours(0,0,0,0)
+    let label
+    if (d.getTime() === today.getTime())     label = 'Today'
+    else if (d.getTime() === yesterday.getTime()) label = 'Yesterday'
+    else label = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
+
+    if (!seen[label]) { seen[label] = true; groups.push({ label, sessions: [] }) }
+    groups[groups.length - 1].sessions.push(s)
+  }
+  return groups
+}
+
+// ── CHANGE 2: Weekly trend bar chart ─────────────────────────────────────────
+function getLast7Days(sessions) {
   const days = []
   const now = new Date()
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const label = d.toLocaleDateString('en-US', { weekday: 'short' })
+    const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(0,0,0,0)
+    const label = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3)
     const dateStr = d.toDateString()
-    const daySessions = sessions.filter(s => new Date(s.timestamp).toDateString() === dateStr)
+    const ds = sessions.filter(s => new Date(s.timestamp).toDateString() === dateStr)
     let avgFocus = null
-    if (daySessions.length > 0) {
+    if (ds.length > 0) {
       avgFocus = Math.round(
-        daySessions.reduce((a, s) => {
-          const pct = s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0
-          return a + pct
-        }, 0) / daySessions.length
+        ds.reduce((a, s) => a + (s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0), 0) / ds.length
       )
     }
     days.push({ label, avgFocus })
   }
+  return days
+}
 
-  const maxH = 60
-  const barW = 32
+function WeeklyTrends({ sessions }) {
+  const days = getLast7Days(sessions)
+  const MAX_H = 48
 
   return (
-    <div style={{ marginBottom: 32 }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 12 }}>
-        7-Day Focus Trend
+    <div style={{
+      background: '#FFFFFF',
+      borderRadius: 16,
+      padding: '20px 20px 16px',
+      boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+      marginBottom: 24,
+    }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16, margin: '0 0 16px' }}>
+        Last 7 days
       </p>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: maxH + 28 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
         {days.map((day, i) => {
           const filled = day.avgFocus !== null
-          const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * maxH)) : 4
-          const color = !filled
-            ? '#e2e8f0'
-            : day.avgFocus >= 70 ? '#22c55e'
-            : day.avgFocus >= 40 ? '#f97316'
-            : '#ef4444'
-
+          const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
+          const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
           return (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-              {filled && (
-                <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>{day.avgFocus}%</span>
-              )}
-              {!filled && <span style={{ fontSize: 10, color: 'transparent' }}>0%</span>}
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
+                {filled ? `${day.avgFocus}%` : '0'}
+              </span>
               <div style={{
-                width: '100%', maxWidth: barW,
-                height: h,
+                width: '100%', height: h,
                 background: color,
-                borderRadius: 4,
+                borderRadius: '6px 6px 0 0',
+                minHeight: 4,
                 transition: 'height 0.3s ease',
               }} />
               <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
@@ -363,25 +402,56 @@ export default function HistoryDashboard({ onClose }) {
         </div>
 
         {sessions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af' }}>
-            <p style={{ fontSize: 40, marginBottom: 16 }}>📊</p>
-            <p style={{ fontSize: 18, fontWeight: 500, color: '#6b7280' }}>No sessions yet</p>
-            <p style={{ fontSize: 14, marginTop: 8 }}>Complete your first focus session to see your data here.</p>
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <p style={{ fontSize: 32, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>
+              No sessions yet
+            </p>
+            <p style={{ fontSize: 14, color: '#9ca3af', marginTop: 8 }}>
+              Complete your first focus session to see your stats here.
+            </p>
+            <button
+              onClick={onClose}
+              style={{
+                marginTop: 24,
+                border: '1.5px solid #E8E3DA',
+                borderRadius: 100,
+                padding: '10px 24px',
+                fontSize: 14, color: '#6B7280',
+                background: 'transparent',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Start your first session →
+            </button>
           </div>
         ) : (
           <>
             <WeeklyTrends sessions={sessions} />
             <OverallStats sessions={sessions} />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {sessions.map((s) => (
-                <SessionCard
-                  key={s.id}
-                  session={s}
-                  onDelete={handleDelete}
-                  onExpand={handleExpand}
-                  expanded={expandedId === s.id}
-                />
+            {/* CHANGE 1: Date-grouped session list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {groupByDate(sessions).map(group => (
+                <div key={group.label}>
+                  <p style={{
+                    fontSize: 11, fontWeight: 700, color: '#9ca3af',
+                    textTransform: 'uppercase', letterSpacing: '0.08em',
+                    margin: '0 0 8px',
+                  }}>
+                    {group.label}
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {group.sessions.map(s => (
+                      <SessionCard
+                        key={s.id}
+                        session={s}
+                        onDelete={handleDelete}
+                        onExpand={handleExpand}
+                        expanded={expandedId === s.id}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
 
