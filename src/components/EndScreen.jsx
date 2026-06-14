@@ -95,9 +95,20 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
         {/* Headline */}
         <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6 }}>
-            {completed ? 'Session complete' : 'Session ended'}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', margin: 0 }}>
+              {completed ? 'Session complete' : 'Session ended'}
+            </p>
+            {focusPct >= 85 && (
+              <span style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Elite</span>
+            )}
+            {focusPct >= 70 && focusPct < 85 && (
+              <span style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#22c55e', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Strong</span>
+            )}
+            {focusPct >= 50 && focusPct < 70 && (
+              <span style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#3b82f6', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Good</span>
+            )}
+          </div>
           {actualSeconds > 0 && (
             <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
               Started at {new Date(Date.now() - actualSeconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}

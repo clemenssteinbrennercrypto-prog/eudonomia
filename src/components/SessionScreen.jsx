@@ -1364,6 +1364,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
             <button
               onClick={() => {
                 overlayActiveRef.current = false
+                lastAlertTimeRef.current = Date.now()
                 setShowOverlay(false)
               }}
               style={{

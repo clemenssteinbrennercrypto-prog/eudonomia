@@ -209,6 +209,11 @@ export default function HomeScreen({
             </div>
           )}
           <p className="app-tagline">Stay present. Stay focused.</p>
+          {sessionCount === 0 && (
+            <p style={{ fontSize: 12, color: '#9ca3af', margin: '6px 0 0', lineHeight: 1.5 }}>
+              Welcome to Eudaimonia. Set up your workspace and start your first focus session.
+            </p>
+          )}
           {lastSessionPill && (
             <div
               onClick={onShowHistory}

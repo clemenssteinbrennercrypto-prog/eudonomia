@@ -50,7 +50,7 @@ export default function App() {
     saveSession(enriched)
     setSessionData(enriched)
     setScreen('end')
-  }, [task, goal])
+  }, [task, goal, tags])
 
   const handleRestart = (prefill = null) => {
     setTask(prefill?.task ?? '')
