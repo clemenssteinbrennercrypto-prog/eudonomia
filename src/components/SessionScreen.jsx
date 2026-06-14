@@ -659,7 +659,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const eyesClosedMs = eyesClosedSinceRef.current ? now - eyesClosedSinceRef.current : 0
     // Early microsleep warning: research shows >500ms slow closure = drowsiness signal
     // (PMC3836343: sleep-deprived pilots showed increased 500ms+ closures with performance errors)
-    const earlyMicrosleepMs = eyesClosedMs
+    // earlyMicrosleepMs uses EAR_PROLONGED_CLOSE threshold (held below 0.18)
+    // but a shorter time window than PROLONGED_CLOSE_MS to catch onset earlier
+    const earlyMicrosleepMs = hasFace && avgEar < EAR_PROLONGED_CLOSE ? eyesClosedMs : 0
 
     if (hasFace && mar > MAR_YAWN) {
       if (!yawnStartRef.current) yawnStartRef.current = now
@@ -874,7 +876,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
     // ── Circadian-adjusted alert delay ────────────────────────────────────
     const circFactor      = getCircadianFactor()
-    const adjustedAlertMs = alertDelayMs / circFactor  // lenient hours → longer delay
+    const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (0.75) → alert fires sooner
 
     if (focusScoreRef.current < 40) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
