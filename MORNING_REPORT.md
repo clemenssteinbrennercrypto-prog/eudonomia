@@ -1,50 +1,30 @@
-# Morning Report — Session 5
+# Morning Report — Session 6
 
-**Date:** 2025-07-17  
-**Branch:** main  
-**Latest commit:** 423988f
-
----
-
-## What Was Done
-
-### ✅ Build Check
-`npx vite build` — clean, 0 errors. 252KB JS bundle, 7.89KB CSS.
-
-### ✅ Session Data Integrity
-All fields (`task`, `goal`, `tags`, `focusedSeconds`, `distractionEvents`, `timeline`, `distractionLog`, `finalScore`, `avgFocusScore`, `longestFocusedStreak`) are:
-- Properly written via `saveSession` in App.jsx (task/goal/tags merged via `enriched`)
-- All EndScreen destructured fields have `= 0` / `= []` / `= ''` defaults for backward compat
-- HistoryDashboard uses `?? 0` fallbacks — safe for old sessions
-
-### ✅ HomeScreen — History Count Badge
-- `History (12)` style badge now appears next to History button
-- Count computed via `useMemo(() => loadSessions().length, [])`
-- Hidden when 0 sessions (shows plain "History")
-
-### ✅ WorkspaceSetup — Advanced Mode Instruction Overlay
-- First-time users entering Advanced mode see a centered tooltip:
-  *"💡 Click a device in the sidebar, then click the desk to place it. Drag to reposition. Click a placed device to remove."*
-- Auto-dismisses after 5 seconds
-- Dismissed on any click
-- State stored in `localStorage: eudaimonia_desk_hint_seen`
-- `WorkspaceSetup` refactored to use `AdvancedModeWrapper` component with `useEffect`
+**Date:** 2025-07-18  
+**Commit:** c2bb878  
 
 ---
 
-## State of the App
+## What was done
 
-| Area | Status |
-|------|--------|
-| Build | ✅ Clean |
-| Session saving | ✅ All fields written |
-| History count badge | ✅ Done |
-| Advanced mode hint | ✅ Done |
-| Backward compat | ✅ All defaults in place |
+### Bug Fixes
+- **`handleEnd` deps array** — `tags` was missing from `useCallback` deps in App.jsx. Tags could silently stale-close over old values when saving sessions. Fixed.
+- **Dismiss cooldown** — After dismissing the focus overlay, `lastAlertTimeRef.current` was not updated, meaning the overlay could immediately re-trigger on the next analysis frame. Now sets `lastAlertTimeRef.current = Date.now()` on dismiss, enforcing the full 60s cooldown.
+
+### New Features
+- **Welcome message (HomeScreen)** — First-time users (0 sessions) now see a welcoming subtitle: *"Welcome to Eudaimonia. Set up your workspace and start your first focus session."* Shown only when `sessionCount === 0`.
+- **Quality badge (EndScreen)** — A small pill badge appears next to the session label based on `focusPct`:
+  - ≥85%: **Elite** (gold)
+  - ≥70%: **Strong** (green)
+  - ≥50%: **Good** (blue)
+  - <50%: no badge
+
+### Confirmed Working
+- Build: ✅ clean (253.79 kB JS)
+- Dismiss button: ✅ visible, styled, resets cooldown correctly
+- Props flow: `tags` and `goal` properly captured in `handleEnd` closure
 
 ---
 
-## Next Ideas
-- Live session count update (re-check localStorage after session ends → currently uses initial mount value)
-- EndScreen: let user mark goalAchieved and save it back to the session record
-- Landing page: animated focus ring demo / screenshot
+## State of the codebase
+Solid. No regressions. Dead imports/unused state minimal across all components. Bundle size stable.
