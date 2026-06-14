@@ -464,6 +464,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const scoreLowSinceRef       = useRef(null)
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
   const lastFrameTsRef         = useRef(0)
+  const lastDistractionRef     = useRef(0)   // timestamp of last distraction event (alert or prolonged low score)
   const lastAlertTimeRef       = useRef(0)
   const overlayActiveRef       = useRef(false)
   const attentionStatusRef     = useRef('focused')
@@ -827,8 +828,17 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     score = Math.max(0, Math.min(85, score))  // raw capped at 85 — last 15 pts come from ramp
 
     // ── Sustained-focus ramp (+0 to +15 over ~2 min) ──────────────────────
+    // Attention Restoration Theory (Kaplan 1995; Mark et al. 2008):
+    // After a distraction, directed attention recovers gradually — ~2 min to re-engage.
+    // We model this by building the ramp at 40% speed for 2 min post-distraction,
+    // then full speed once recovery window has passed.
+    const RECOVERY_WINDOW_MS = 120_000
+    const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
+    const inRecovery = msSinceDistraction < RECOVERY_WINDOW_MS
+    const rampRate = inRecovery ? 0.4 : 1.0  // 40% speed while recovering
+
     if (score >= 72) {
-      sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta)
+      sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
     }
@@ -878,6 +888,13 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const circFactor      = getCircadianFactor()
     const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (0.75) → alert fires sooner
 
+    // Score dipped below 55 = mark distraction start (even if alert doesn't fire)
+    if (focusScoreRef.current < 55 && !lastDistractionRef.current) {
+      lastDistractionRef.current = now
+    } else if (focusScoreRef.current >= 72) {
+      // Once fully re-focused, don't reset lastDistraction — let the window expire naturally
+    }
+
     if (focusScoreRef.current < 40) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
@@ -887,6 +904,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (lowFor >= adaptedAlertMs && !overlayActiveRef.current && cooldownOk) {
         overlayActiveRef.current   = true
         lastAlertTimeRef.current   = now
+        lastDistractionRef.current = now  // start recovery window
         lastAlertReasonRef.current = primaryReason
         distractionEventsRef.current += 1
         // Track alerts in first 15 min for adaptive threshold
