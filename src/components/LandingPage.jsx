@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import LegalModal from './LegalModal'
 
-const FEATURES = [
+const STEPS = [
   {
     num: '01',
     title: 'Set your task',
@@ -19,57 +19,130 @@ const FEATURES = [
   },
 ]
 
+const font = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif'
+
 export default function LandingPage({ onEnter }) {
   const [legalTab, setLegalTab] = useState(null)
 
   return (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif' }}>
+    <div style={{ fontFamily: font, overflowX: 'hidden' }}>
 
-      {/* ── SECTION 1: Hero ──────────────────────────────────────────────── */}
+      <style>{`
+        @keyframes heroGlow {
+          0%, 100% { opacity: 0.7; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.08); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .hero-cta:hover {
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.15), 0 8px 32px rgba(100,149,237,0.35) !important;
+          transform: translateY(-1px);
+        }
+        .hero-cta:active { transform: translateY(0); }
+        .step-card:hover {
+          border-color: rgba(100,149,237,0.25) !important;
+          background: rgba(255,255,255,0.04) !important;
+        }
+        .faq-card:hover { border-color: rgba(255,255,255,0.1) !important; }
+        .pill-btn:hover { color: #ffffff !important; }
+      `}</style>
+
+      {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <section style={{
         minHeight: '100vh',
-        background: '#0D0F14',
+        background: '#080A0F',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '80px 24px',
-        position: 'relative',
-        overflow: 'hidden',
+        position: 'relative', overflow: 'hidden',
       }}>
-        {/* Animated gradient overlay */}
+
+        {/* Layered glow background */}
         <div style={{
-          position: 'absolute', inset: 0,
-          background: 'radial-gradient(ellipse at 50% 60%, #1a2e4a 0%, transparent 70%)',
-          animation: 'heroGlow 8s ease-in-out infinite',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }} />
-        <div style={{ maxWidth: 600, width: '100%', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
+        }}>
+          {/* Primary blue glow */}
+          <div style={{
+            position: 'absolute',
+            width: '80vw', height: '80vw',
+            maxWidth: 900, maxHeight: 900,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(26,46,74,0.9) 0%, rgba(14,22,44,0.4) 40%, transparent 70%)',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -55%)',
+            animation: 'heroGlow 8s ease-in-out infinite',
+          }} />
+          {/* Secondary accent glow */}
+          <div style={{
+            position: 'absolute',
+            width: '40vw', height: '40vw',
+            maxWidth: 500, maxHeight: 500,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(100,149,237,0.08) 0%, transparent 70%)',
+            top: '40%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+          }} />
+          {/* Grid pattern */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `
+              linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)
+            `,
+            backgroundSize: '48px 48px',
+            maskImage: 'radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%)',
+            WebkitMaskImage: 'radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%)',
+          }} />
+        </div>
+
+        <div style={{
+          maxWidth: 640, width: '100%', textAlign: 'center',
+          position: 'relative', zIndex: 1,
+          animation: 'fadeUp 0.6s ease',
+        }}>
 
           {/* Label pill */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 28 }}>
             <span style={{
-              display: 'inline-block',
-              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
-              color: '#94a3b8',
-              border: '1px solid #2A2E3A', borderRadius: 100,
-              padding: '6px 14px',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em',
+              color: '#6479a0',
+              border: '1px solid rgba(100,121,160,0.25)',
+              borderRadius: 100, padding: '6px 16px',
             }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#6496ed',
+                boxShadow: '0 0 6px #6496ed',
+                display: 'inline-block',
+              }} />
               Focus tracking — powered by your camera
             </span>
           </div>
 
-          {/* Title */}
+          {/* Headline */}
           <h1 style={{
-            fontSize: 'clamp(36px, 6vw, 64px)',
-            fontWeight: 700, letterSpacing: '-0.03em',
-            color: '#ffffff', margin: '0 0 20px', lineHeight: 1.1,
+            fontSize: 'clamp(42px, 7vw, 76px)',
+            fontWeight: 700, letterSpacing: '-0.035em',
+            lineHeight: 1.05, margin: '0 0 24px',
+            background: 'linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.72) 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
           }}>
-            Your silent focus guardian
+            Your silent<br />focus guardian
           </h1>
 
           {/* Subtitle */}
           <p style={{
-            fontSize: 17, color: '#94a3b8', lineHeight: 1.7,
-            maxWidth: 480, margin: '0 auto 40px',
+            fontSize: 18, color: 'rgba(255,255,255,0.42)', lineHeight: 1.75,
+            maxWidth: 440, margin: '0 auto 44px',
+            letterSpacing: '0.01em',
           }}>
             Eudaimonia watches your attention using your webcam.
             No video recorded. No data sent. Everything stays on your device.
@@ -78,141 +151,164 @@ export default function LandingPage({ onEnter }) {
           {/* CTA */}
           <button
             onClick={onEnter}
+            className="hero-cta"
             style={{
-              background: '#ffffff', color: '#0D0F14',
-              border: 'none', height: 56, padding: '0 36px',
+              background: 'linear-gradient(135deg, #1a2e4a 0%, #243d61 100%)',
+              color: '#ffffff',
+              border: '1px solid rgba(100,149,237,0.3)',
+              height: 56, padding: '0 40px',
               borderRadius: 14, fontSize: 16, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-              transition: 'opacity 0.15s',
+              cursor: 'pointer', fontFamily: font,
+              transition: 'all 0.2s ease',
+              boxShadow: '0 0 0 1px rgba(100,149,237,0.1), 0 4px 20px rgba(26,46,74,0.5)',
+              letterSpacing: '0.01em',
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
             Start focusing — it's free
           </button>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {/* Trust pills */}
+          <div style={{
+            display: 'flex', gap: 6, marginTop: 20,
+            justifyContent: 'center', flexWrap: 'wrap',
+          }}>
             {[
-              { icon: <svg width="12" height="14" viewBox="0 0 12 14" fill="none"><rect x="1" y="5" width="10" height="8" rx="1.5" stroke="#2A2E3A" strokeWidth="1.3"/><path d="M3.5 5V3.5a2.5 2.5 0 015 0V5" stroke="#2A2E3A" strokeWidth="1.3" strokeLinecap="round"/></svg>, label: 'Private' },
-              { icon: <svg width="12" height="14" viewBox="0 0 12 14" fill="none"><path d="M6 1l1.5 3.5H11l-2.75 2 1 3.5L6 8l-3.25 2 1-3.5L1 4.5h3.5L6 1z" stroke="#2A2E3A" strokeWidth="1.2" strokeLinejoin="round"/></svg>, label: 'Fast' },
-              { icon: <svg width="14" height="11" viewBox="0 0 14 11" fill="none"><path d="M1 5.5l4 4L13 1" stroke="#2A2E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, label: 'Free' },
+              { icon: '🔒', label: 'Private' },
+              { icon: '⚡', label: 'Instant' },
+              { icon: '✓', label: 'Free forever' },
             ].map(({ icon, label }) => (
               <span key={label} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '5px 12px', borderRadius: 100,
-                background: 'rgba(42,46,58,0.07)',
-                fontSize: 12, color: '#2A2E3A', fontWeight: 500,
+                padding: '5px 13px', borderRadius: 100,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 500,
               }}>
-                {icon} {label}
+                <span style={{ fontSize: 10 }}>{icon}</span> {label}
               </span>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── SECTION 2: How it works ──────────────────────────────────────── */}
+      {/* ── STATS BAR ─────────────────────────────────────────────────────── */}
       <section style={{
-        background: '#F5F4F0',
-        padding: '96px 24px',
+        background: '#0D0F14',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        padding: '44px 24px',
       }}>
-        <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <h2 style={{
-            fontSize: 32, fontWeight: 700, letterSpacing: '-0.025em',
-            color: '#1A1A1A', textAlign: 'center', marginBottom: 56, margin: '0 0 56px',
-          }}>
-            How it works
-          </h2>
-
-          {FEATURES.map((f) => (
-            <div
-              key={f.num}
-              style={{
-                background: '#FFFFFF',
-                borderRadius: 16, padding: 28,
-                boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
-                marginBottom: 16,
-                borderLeft: '3px solid #E8E3DA',
-                transition: 'border-color 0.2s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.borderLeftColor = '#1a2e4a'}
-              onMouseLeave={e => e.currentTarget.style.borderLeftColor = '#E8E3DA'}
-            >
-              <p style={{
-                fontSize: 32, fontWeight: 200, color: '#E8E3DA',
-                letterSpacing: '-0.03em', margin: '0 0 8px', lineHeight: 1,
-              }}>
-                {f.num}
-              </p>
-              <p style={{ fontSize: 17, fontWeight: 700, color: '#1A1A1A', margin: '0 0 8px', letterSpacing: '-0.015em' }}>
-                {f.title}
-              </p>
-              <p style={{ fontSize: 15, color: '#6B7280', lineHeight: 1.65, margin: 0 }}>
-                {f.body}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── SECTION 2.5: Demo placeholder ────────────────────────────────── */}
-      <section style={{ background: '#0D0F14', padding: '72px 24px', textAlign: 'center' }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9', marginBottom: 8 }}>
-          See it in action
-        </h2>
-        <p style={{ fontSize: 15, color: '#64748b', marginBottom: 32 }}>
-          A real session walkthrough — coming soon
-        </p>
-        <div style={{
-          maxWidth: 560, margin: '0 auto',
-          aspectRatio: '16 / 9',
-          background: '#111318',
-          border: '1px solid #2A2E3A',
-          borderRadius: 16,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 10,
-        }}>
-          <span style={{ fontSize: 40 }}>🎬</span>
-          <span style={{ fontSize: 16, fontWeight: 600, color: '#94a3b8' }}>Demo coming soon</span>
-          <span style={{ fontSize: 13, color: '#475569' }}>Recording a real session to show you</span>
-        </div>
-      </section>
-
-      {/* ── SECTION 2.5: Stats ───────────────────────────────────────────── */}
-      <section style={{ background: '#FAFAF8', padding: '64px 24px', textAlign: 'center' }}>
         <div style={{
           maxWidth: 720, margin: '0 auto',
-          display: 'flex', justifyContent: 'center', gap: 64,
-          flexWrap: 'wrap',
+          display: 'flex', justifyContent: 'center',
+          gap: 0, flexWrap: 'wrap',
         }}>
           {[
             { value: '100%', label: 'Local processing' },
             { value: '0',    label: 'Data sent to servers' },
             { value: 'Free', label: 'No account needed' },
-          ].map(({ value, label }) => (
-            <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 48, fontWeight: 200, color: '#1a2e4a', lineHeight: 1 }}>{value}</span>
-              <span style={{ fontSize: 14, color: '#6B7280', letterSpacing: '0.03em' }}>{label}</span>
+          ].map(({ value, label }, i) => (
+            <div key={label} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              gap: 6, flex: '1 1 180px',
+              padding: '16px 24px',
+              borderRight: i < 2 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+            }}>
+              <span style={{
+                fontSize: 42, fontWeight: 200, lineHeight: 1,
+                background: 'linear-gradient(135deg, #ffffff 0%, #6496ed 100%)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>
+                {value}
+              </span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.03em' }}>
+                {label}
+              </span>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── SECTION 3: Privacy callout ───────────────────────────────────── */}
+      {/* ── HOW IT WORKS ──────────────────────────────────────────────────── */}
+      <section style={{ background: '#0A0C12', padding: '100px 24px' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+
+          <div style={{ textAlign: 'center', marginBottom: 64 }}>
+            <span style={{
+              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em',
+              color: '#4a6080', display: 'block', marginBottom: 14,
+            }}>
+              How it works
+            </span>
+            <h2 style={{
+              fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700,
+              letterSpacing: '-0.03em', color: '#ffffff', margin: 0,
+            }}>
+              Three steps to<br />deep focus
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {STEPS.map((s, i) => (
+              <div
+                key={s.num}
+                className="step-card"
+                style={{
+                  display: 'flex', gap: 28, alignItems: 'flex-start',
+                  padding: '28px 32px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  borderRadius: 16,
+                  transition: 'all 0.2s ease',
+                  cursor: 'default',
+                }}
+              >
+                <span style={{
+                  fontSize: 13, fontWeight: 600, color: '#2a3a56',
+                  letterSpacing: '0.05em', flexShrink: 0, marginTop: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {s.num}
+                </span>
+                <div>
+                  <p style={{
+                    fontSize: 17, fontWeight: 600, color: '#ffffff',
+                    margin: '0 0 7px', letterSpacing: '-0.015em',
+                  }}>
+                    {s.title}
+                  </p>
+                  <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.38)', lineHeight: 1.7, margin: 0 }}>
+                    {s.body}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRIVACY CALLOUT ───────────────────────────────────────────────── */}
       <section style={{
-        background: '#1a2e4a',
-        padding: '64px 24px',
+        background: 'linear-gradient(135deg, #0f1e35 0%, #1a2e4a 50%, #0f1e35 100%)',
+        padding: '88px 24px',
         textAlign: 'center',
+        position: 'relative', overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(100,149,237,0.08) 0%, transparent 60%)',
+        }} />
+        <div style={{ maxWidth: 560, margin: '0 auto', position: 'relative', zIndex: 1 }}>
           <h2 style={{
-            fontSize: 28, fontWeight: 700, color: '#ffffff',
-            marginBottom: 16, letterSpacing: '-0.02em',
+            fontSize: 'clamp(26px, 4vw, 40px)', fontWeight: 700,
+            color: '#ffffff', margin: '0 0 18px', letterSpacing: '-0.025em',
           }}>
-            Built for privacy
+            Built for privacy, by design
           </h2>
           <p style={{
-            fontSize: 16, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7,
-            maxWidth: 480, margin: '0 auto 32px',
+            fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.75,
+            margin: '0 auto 36px',
           }}>
             No account. No server. No video storage.
             Your camera feed is processed entirely in your browser
@@ -220,76 +316,77 @@ export default function LandingPage({ onEnter }) {
           </p>
           <button
             onClick={onEnter}
+            className="hero-cta"
             style={{
               background: '#ffffff', color: '#1a2e4a',
               border: 'none', height: 52, padding: '0 32px',
-              borderRadius: 12, fontSize: 15, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-              transition: 'opacity 0.15s',
+              borderRadius: 12, fontSize: 15, fontWeight: 700,
+              cursor: 'pointer', fontFamily: font,
+              transition: 'all 0.2s ease',
+              letterSpacing: '0.01em',
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            Try it now
+            Try it now — free
           </button>
         </div>
       </section>
 
-      {/* ── SECTION 4: FAQ ───────────────────────────────────────────────── */}
-      <section style={{ background: '#F5F4F0', padding: '64px 24px' }}>
-        <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a1a', marginBottom: 32, textAlign: 'center' }}>
+      {/* ── FAQ ───────────────────────────────────────────────────────────── */}
+      <section style={{ background: '#080A0F', padding: '80px 24px' }}>
+        <div style={{ maxWidth: 580, margin: '0 auto' }}>
+          <h2 style={{
+            fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.8)',
+            marginBottom: 32, textAlign: 'center', letterSpacing: '-0.02em',
+          }}>
             Common questions
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
-              {
-                q: 'Is my camera footage stored?',
-                a: 'Never. All processing happens locally in your browser.',
-              },
-              {
-                q: 'Does it work without a webcam?',
-                a: 'No — the webcam is required for attention tracking.',
-              },
-              {
-                q: 'Is it free?',
-                a: 'Yes, completely free. No account needed.',
-              },
+              { q: 'Is my camera footage stored?', a: 'Never. All processing happens locally in your browser using MediaPipe. No frames leave your device.' },
+              { q: 'Does it work without a webcam?', a: 'No — the webcam is required for attention tracking. A built-in laptop camera works perfectly.' },
+              { q: 'Is it free?', a: 'Yes, completely free. No account, no subscription, no credit card.' },
             ].map(({ q, a }) => (
-              <div key={q} style={{
-                background: '#fff', borderRadius: 12, padding: '20px 24px',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              <div key={q} className="faq-card" style={{
+                padding: '20px 24px',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 12,
+                transition: 'border-color 0.2s',
               }}>
-                <p style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a', margin: '0 0 6px' }}>{q}</p>
-                <p style={{ fontSize: 14, color: '#6b7280', margin: 0, lineHeight: 1.6 }}>{a}</p>
+                <p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', margin: '0 0 7px' }}>{q}</p>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', margin: 0, lineHeight: 1.65 }}>{a}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── SECTION 5: Footer ────────────────────────────────────────────── */}
-      <footer style={{ background: '#0D0F14', padding: 24 }}>
+      {/* ── FOOTER ────────────────────────────────────────────────────────── */}
+      <footer style={{
+        background: '#080A0F',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        padding: '20px 24px',
+      }}>
         <div style={{
-          maxWidth: 640, margin: '0 auto',
+          maxWidth: 680, margin: '0 auto',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>
             Eudaimonia
           </span>
-          <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 20 }}>
             {[
               { id: 'impressum',   label: 'Impressum'   },
               { id: 'datenschutz', label: 'Datenschutz' },
             ].map(({ id, label }) => (
               <button
                 key={id}
+                className="pill-btn"
                 onClick={() => setLegalTab(id)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: 11, textTransform: 'uppercase',
-                  letterSpacing: '0.06em', color: '#2A2E3A',
-                  fontFamily: 'inherit',
+                  letterSpacing: '0.07em', color: 'rgba(255,255,255,0.25)',
+                  fontFamily: font, transition: 'color 0.15s',
                 }}
               >
                 {label}
