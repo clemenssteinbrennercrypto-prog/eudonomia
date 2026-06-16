@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import IsometricWorkspace from './IsometricWorkspace'
+import { defaultRoleForType } from '../lib/workspaceObjects'
 
 // ── Step-by-step workspace wizard ─────────────────────────────────────────────
 // Outputs devices in the same {type, col, row} format as before
@@ -20,17 +21,17 @@ function buildDevices(mainScreen, extraCount, extraPositions) {
 
   // Main screen (centered)
   if (mainScreen === 'laptop' || mainScreen === 'both') {
-    devices.push({ id: 'main_laptop', type: 'laptop', col: 0.5, row: 0.5 })
+    devices.push({ id: 'main_laptop', type: 'laptop', col: 0.5, row: 0.5, role: defaultRoleForType('laptop') })
   }
   if (mainScreen === 'monitor' || mainScreen === 'both') {
-    devices.push({ id: 'main_monitor', type: 'monitor', col: 0.5, row: 0.5 })
+    devices.push({ id: 'main_monitor', type: 'monitor', col: 0.5, row: 0.5, role: defaultRoleForType('monitor') })
   }
 
   // Extra monitors
   for (let i = 0; i < extraCount; i++) {
     const pos = extraPositions[i] || 'right'
     const coords = POSITION_COORDS[pos]
-    devices.push({ id: `extra_${i}`, type: 'monitor', ...coords })
+    devices.push({ id: `extra_${i}`, type: 'monitor', ...coords, role: 'secondary_screen' })
   }
 
   return devices

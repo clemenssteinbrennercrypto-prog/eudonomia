@@ -1,16 +1,9 @@
 import { useState } from 'react'
 import { DEVICE_ICON_MAP } from './DeviceIcons'
+import { WORKSPACE_OBJECT_TYPES, defaultRoleForType } from '../lib/workspaceObjects'
 
 // ── Device types ──────────────────────────────────────────────────────────────
-export const DEVICE_TYPES = [
-  { id: 'monitor',  label: 'Monitor'  },
-  { id: 'laptop',   label: 'Laptop'   },
-  { id: 'ipad',     label: 'iPad'     },
-  { id: 'phone',    label: 'Phone'    },
-  { id: 'camera',   label: 'Camera'   },
-  { id: 'keyboard', label: 'Keyboard' },
-  { id: 'mouse',    label: 'Mouse'    },
-]
+export const DEVICE_TYPES = WORKSPACE_OBJECT_TYPES
 
 // 3×3 grid
 const GRID = [
@@ -256,7 +249,7 @@ export default function SetupScreen({ devices, setDevices, onContinue }) {
   const [pickerPos, setPickerPos] = useState(null)
 
   const handleAdd = (position, type) => {
-    setDevices(prev => [...prev, { position, type }])
+    setDevices(prev => [...prev, { position, type, role: defaultRoleForType(type) }])
   }
 
   const handleRemove = (position, type, globalIdx) => {

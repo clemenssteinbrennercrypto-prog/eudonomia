@@ -8,17 +8,18 @@ import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
 import { saveSession } from './lib/storage'
+import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 
 // ── Persist helpers ───────────────────────────────────────────────────────────
 function loadDevices() {
   try {
     const raw = JSON.parse(localStorage.getItem('eudaimonia_devices') || '[]')
     // Migrate: discard old format entries that have `position` string instead of col/row
-    return raw.filter(d => typeof d.col === 'number' && typeof d.row === 'number')
+    return normalizeWorkspaceObjects(raw)
   } catch { return [] }
 }
 function saveDevices(devices) {
-  try { localStorage.setItem('eudaimonia_devices', JSON.stringify(devices)) }
+  try { localStorage.setItem('eudaimonia_devices', JSON.stringify(normalizeWorkspaceObjects(devices))) }
   catch {}
 }
 
@@ -38,8 +39,9 @@ export default function App() {
   const setDevices = useCallback((val) => {
     setDevicesRaw(prev => {
       const next = typeof val === 'function' ? val(prev) : val
-      saveDevices(next)
-      return next
+      const normalized = normalizeWorkspaceObjects(next)
+      saveDevices(normalized)
+      return normalized
     })
   }, [])
 

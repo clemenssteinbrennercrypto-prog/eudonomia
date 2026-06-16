@@ -211,6 +211,50 @@ export function MouseIcon({ size = 64, dimmed = false }) {
   )
 }
 
+export function PaperIcon({ size = 64, dimmed = false }) {
+  const op = dimmed ? 0.35 : 1
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ opacity: op }}>
+      <path d="M18 8h22l8 8v40H18V8Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2"/>
+      <path d="M40 8v10h10" fill="#e2e8f0"/>
+      <rect x="24" y="24" width="22" height="2" rx="1" fill="#94a3b8"/>
+      <rect x="24" y="31" width="18" height="2" rx="1" fill="#94a3b8"/>
+      <rect x="24" y="38" width="21" height="2" rx="1" fill="#94a3b8"/>
+      <rect x="24" y="45" width="14" height="2" rx="1" fill="#94a3b8"/>
+    </svg>
+  )
+}
+
+export function NotebookIcon({ size = 64, dimmed = false }) {
+  const op = dimmed ? 0.35 : 1
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ opacity: op }}>
+      <rect x="16" y="8" width="36" height="48" rx="4" fill="#e0f2fe" stroke="#0284c7" strokeWidth="2"/>
+      <rect x="16" y="8" width="7" height="48" rx="4" fill="#0f172a" opacity="0.16"/>
+      {[17, 25, 33, 41, 49].map(y => (
+        <circle key={y} cx="20" cy={y} r="1.7" fill="#f8fafc" stroke="#94a3b8" strokeWidth="0.8"/>
+      ))}
+      <rect x="28" y="21" width="17" height="2" rx="1" fill="#38bdf8" opacity="0.75"/>
+      <rect x="28" y="29" width="15" height="2" rx="1" fill="#38bdf8" opacity="0.6"/>
+      <rect x="28" y="37" width="18" height="2" rx="1" fill="#38bdf8" opacity="0.6"/>
+    </svg>
+  )
+}
+
+export function BookIcon({ size = 64, dimmed = false }) {
+  const op = dimmed ? 0.35 : 1
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ opacity: op }}>
+      <path d="M14 12h17c4 0 7 3 7 7v37c-1.5-2-4-3-7-3H14V12Z" fill="#fef3c7" stroke="#b45309" strokeWidth="2"/>
+      <path d="M38 19c0-4 3-7 7-7h5v41h-5c-3 0-5.5 1-7 3V19Z" fill="#fde68a" stroke="#b45309" strokeWidth="2"/>
+      <path d="M38 19v37" stroke="#92400e" strokeWidth="2"/>
+      <rect x="20" y="22" width="10" height="2" rx="1" fill="#b45309" opacity="0.45"/>
+      <rect x="20" y="29" width="12" height="2" rx="1" fill="#b45309" opacity="0.35"/>
+      <rect x="20" y="36" width="9" height="2" rx="1" fill="#b45309" opacity="0.35"/>
+    </svg>
+  )
+}
+
 export const DEVICE_ICON_MAP = {
   monitor:  MonitorIcon,
   laptop:   LaptopIcon,
@@ -219,4 +263,7 @@ export const DEVICE_ICON_MAP = {
   camera:   CameraIcon,
   keyboard: KeyboardIcon,
   mouse:    MouseIcon,
+  paper:    PaperIcon,
+  notebook: NotebookIcon,
+  book:     BookIcon,
 }

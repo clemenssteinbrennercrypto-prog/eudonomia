@@ -1,4 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import {
+  WORKSPACE_OBJECT_TYPES,
+  WORKSPACE_ROLES,
+  WORKSPACE_ROLE_LABELS,
+  defaultRoleForType,
+} from '../lib/workspaceObjects'
 
 // ── Perspective mapping ────────────────────────────────────────────────────────
 // Moderate perspective: 25° tilt, not bird's eye.
@@ -34,15 +40,7 @@ function depthScale(row) {
 }
 
 // ── Device metadata ───────────────────────────────────────────────────────────
-const DEVICE_META = [
-  { id: 'monitor',  label: 'Monitor'  },
-  { id: 'laptop',   label: 'Laptop'   },
-  { id: 'ipad',     label: 'iPad'     },
-  { id: 'phone',    label: 'Phone'    },
-  { id: 'camera',   label: 'Webcam'   },
-  { id: 'keyboard', label: 'Keyboard' },
-  { id: 'mouse',    label: 'Mouse'    },
-]
+const DEVICE_META = WORKSPACE_OBJECT_TYPES
 
 const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
 const POSITION_LABELS = {}  // legacy compat — unused now
@@ -234,7 +232,60 @@ function MouseSVG({ w, h, uid }) {
   )
 }
 
-const RENDERERS = { monitor: MonitorSVG, laptop: LaptopSVG, phone: PhoneSVG, ipad: IPadSVG, camera: CameraSVG, keyboard: KeyboardSVG, mouse: MouseSVG }
+function PaperSVG({ w, h, uid }) {
+  return (
+    <g>
+      <ellipse cx={0} cy={h/2 + 3} rx={w * 0.48} ry={5} fill="black" opacity={0.1}/>
+      <path d={`M${-w/2} ${-h/2} H${w * 0.27} L${w/2} ${-h * 0.28} V${h/2} H${-w/2} Z`} fill="#F8FAFC" stroke="#CBD5E1" strokeWidth={2}/>
+      <path d={`M${w * 0.27} ${-h/2} V${-h * 0.28} H${w/2}`} fill="#E2E8F0"/>
+      {[-0.18, -0.02, 0.14, 0.30].map((y, i) => (
+        <rect key={i} x={-w * 0.28} y={h * y} width={w * (i === 3 ? 0.38 : 0.58)} height={2.5} rx={1.2} fill="#94A3B8" opacity={0.7}/>
+      ))}
+    </g>
+  )
+}
+
+function NotebookSVG({ w, h, uid }) {
+  return (
+    <g>
+      <ellipse cx={0} cy={h/2 + 3} rx={w * 0.48} ry={5} fill="black" opacity={0.12}/>
+      <rect x={-w/2} y={-h/2} width={w} height={h} rx={6} fill="#E0F2FE" stroke="#0284C7" strokeWidth={2}/>
+      <rect x={-w/2} y={-h/2} width={w * 0.17} height={h} rx={6} fill="#0F172A" opacity={0.15}/>
+      {[-0.32, -0.16, 0, 0.16, 0.32].map((y, i) => (
+        <circle key={i} cx={-w * 0.38} cy={h * y} r={2.2} fill="#F8FAFC" stroke="#94A3B8" strokeWidth={0.8}/>
+      ))}
+      {[-0.18, 0, 0.18].map((y, i) => (
+        <rect key={i} x={-w * 0.16} y={h * y} width={w * (i === 1 ? 0.34 : 0.45)} height={2.5} rx={1.2} fill="#38BDF8" opacity={0.7}/>
+      ))}
+    </g>
+  )
+}
+
+function BookSVG({ w, h, uid }) {
+  return (
+    <g>
+      <ellipse cx={0} cy={h/2 + 4} rx={w * 0.52} ry={6} fill="black" opacity={0.12}/>
+      <path d={`M${-w/2} ${-h/2} H0 C${w * 0.08} ${-h/2} ${w * 0.12} ${-h * 0.38} ${w * 0.12} ${-h * 0.25} V${h/2} C${w * 0.03} ${h * 0.38} ${-w * 0.14} ${h * 0.34} ${-w/2} ${h * 0.36} Z`} fill="#FEF3C7" stroke="#B45309" strokeWidth={2}/>
+      <path d={`M0 ${-h/2} H${w/2} V${h * 0.36} H${w * 0.12} V${-h * 0.25} C${w * 0.12} ${-h * 0.38} ${w * 0.08} ${-h/2} 0 ${-h/2} Z`} fill="#FDE68A" stroke="#B45309" strokeWidth={2}/>
+      <line x1={w * 0.12} y1={-h * 0.25} x2={w * 0.12} y2={h/2} stroke="#92400E" strokeWidth={2}/>
+      <rect x={-w * 0.32} y={-h * 0.18} width={w * 0.28} height={2.5} rx={1.2} fill="#B45309" opacity={0.45}/>
+      <rect x={-w * 0.32} y={0} width={w * 0.34} height={2.5} rx={1.2} fill="#B45309" opacity={0.35}/>
+    </g>
+  )
+}
+
+const RENDERERS = {
+  monitor: MonitorSVG,
+  laptop: LaptopSVG,
+  phone: PhoneSVG,
+  ipad: IPadSVG,
+  camera: CameraSVG,
+  keyboard: KeyboardSVG,
+  mouse: MouseSVG,
+  paper: PaperSVG,
+  notebook: NotebookSVG,
+  book: BookSVG,
+}
 
 // Native dimensions (w x h) for each device type
 const DEVICE_DIMS = {
@@ -245,6 +296,9 @@ const DEVICE_DIMS = {
   camera:   { w: 84,  h: 60  },
   keyboard: { w: 140, h: 52  },
   mouse:    { w: 52,  h: 80  },
+  paper:    { w: 96,  h: 120 },
+  notebook: { w: 100, h: 126 },
+  book:     { w: 118, h: 92  },
 }
 
 // ── Palette button ────────────────────────────────────────────────────────────
@@ -325,7 +379,7 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
     if (!insideDesk(x, y)) return
     const { col, row } = svgToDeskCoords(x, y)
     const id = `${selectedDevice}_${Date.now()}`
-    setDevices(prev => [...prev, { id, type: selectedDevice, col, row, scale: 1 }])
+    setDevices(prev => [...prev, { id, type: selectedDevice, col, row, scale: 1, role: defaultRoleForType(selectedDevice) }])
   }, [selectedDevice, eventToSVG, setDevices])
 
   // Pointer down on a device → start drag/resize
@@ -376,10 +430,15 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
     if (activeId === id) setActiveId(null)
   }
 
+  const updateDeviceRole = (id, role) => {
+    setDevices(prev => prev.map(d => d.id === id ? { ...d, role } : d))
+  }
+
   // Sort devices by row so far devices render first (behind near ones)
   const sortedDevices = [...devices].sort((a, b) => b.row - a.row)
 
   const hasDevices = devices.length > 0
+  const activeDevice = devices.find(d => d.id === activeId)
 
   return (
     <div style={{
@@ -617,11 +676,50 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                       {meta?.label}
                     </span>
                     <span style={{ fontSize: 10, color: isActive ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
-                      {Math.round(d.scale * 100)}%
+                      {WORKSPACE_ROLE_LABELS[d.role || defaultRoleForType(d.type)] || 'Neutral'}
                     </span>
                   </div>
                 )
               })}
+              {activeDevice && (
+                <div style={{
+                  marginTop: 10,
+                  padding: 8,
+                  border: '1px solid #EDEBE6',
+                  borderRadius: 10,
+                  background: '#fff',
+                }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: '#9ca3af',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: 6,
+                  }}>
+                    Role
+                  </label>
+                  <select
+                    value={activeDevice.role || defaultRoleForType(activeDevice.type)}
+                    onChange={e => updateDeviceRole(activeDevice.id, e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '7px 8px',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 8,
+                      background: '#FAFAF8',
+                      fontSize: 12,
+                      color: '#374151',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {WORKSPACE_ROLES.map(role => (
+                      <option key={role.id} value={role.id}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button
                 onClick={() => { setDevices([]); setActiveId(null) }}
                 style={{

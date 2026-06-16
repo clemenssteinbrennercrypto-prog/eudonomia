@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  defaultRoleForType,
+  isProductiveDownwardRole,
+  isScreenRole,
+  normalizeWorkspaceObjects,
+} from '../lib/workspaceObjects'
 
 // ── FaceMesh landmark indices ──────────────────────────────────────────────────
 const RIGHT_EYE   = [33,  160, 158, 133, 153, 144]
@@ -107,27 +113,59 @@ function OverlayIcon({ type }) {
   return null
 }
 
-const SCREEN_DEVICES = new Set(['monitor', 'laptop', 'ipad'])
-
 function computeThresholds(devices = []) {
   // Science: ergonomic laptop posture = 15-20° downward head pitch is NORMAL (Stanford, Pitt).
   // Default pitchDown starts at 25° to avoid false-positives for laptop users.
   // Explicit laptop device bumps it further to 30° (user is definitely looking down at screen).
   let yawLeft = 30, yawRight = 30, pitchDown = 25, pitchUp = 15
-  let ignoreBelowPhone = false
-  const hasLaptop = devices.some(d => d.type === 'laptop')
+  const workspaceObjects = normalizeWorkspaceObjects(devices)
+  const hasLaptop = workspaceObjects.some(d => d.type === 'laptop')
   if (hasLaptop) pitchDown = 30  // laptop = 15-20° natural downward gaze, 30° is safe threshold
-  for (const d of devices) {
-    const isScreen = SCREEN_DEVICES.has(d.type)
+  for (const d of workspaceObjects) {
+    const role = d.role || defaultRoleForType(d.type)
+    const isScreen = isScreenRole(role)
     const col = d.col ?? 0.5
     const row = d.row ?? 0.5
     if (isScreen && col < 0.35)  yawLeft   = Math.max(yawLeft,   55)
     if (isScreen && col > 0.65)  yawRight  = Math.max(yawRight,  55)
     if (isScreen && row > 0.6)   pitchUp   = Math.max(pitchUp,   28)
     if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 35)
-    if (d.type === 'phone' && row < 0.3) ignoreBelowPhone = true
+    if (isProductiveDownwardRole(role) && row < 0.45) pitchDown = Math.max(pitchDown, 34)
   }
-  return { yawLeft, yawRight, pitchDown, pitchUp, ignoreBelowPhone }
+  return { yawLeft, yawRight, pitchDown, pitchUp }
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value))
+}
+
+function classifyDownwardAttention(devices = [], pitchDeg = 0, yawSigned = 0) {
+  if (pitchDeg < 18) return { kind: 'none' }
+
+  const workspaceObjects = normalizeWorkspaceObjects(devices)
+  const gazeCol = clamp01(0.5 - yawSigned / 90)
+  const downwardObjects = workspaceObjects
+    .filter(d => (d.row ?? 0.5) <= 0.58)
+    .map(d => ({
+      object: d,
+      role: d.role || defaultRoleForType(d.type),
+      colDistance: Math.abs((d.col ?? 0.5) - gazeCol),
+      rowDistance: Math.abs((d.row ?? 0.25) - 0.22),
+    }))
+    .filter(item => item.colDistance <= 0.32)
+    .sort((a, b) => (a.colDistance + a.rowDistance * 0.35) - (b.colDistance + b.rowDistance * 0.35))
+
+  const distraction = downwardObjects.find(item =>
+    item.object.type === 'phone' || item.role === 'distraction_device'
+  )
+  const productive = downwardObjects.find(item => isProductiveDownwardRole(item.role))
+
+  if (distraction && (pitchDeg >= PHONE_PITCH_THRESH * 0.85 || !productive || distraction.colDistance <= productive.colDistance + 0.08)) {
+    return { kind: 'distraction', object: distraction.object, role: distraction.role }
+  }
+  if (productive) return { kind: 'productive', object: productive.object, role: productive.role }
+  if (pitchDeg >= PHONE_PITCH_THRESH) return { kind: 'unknown_phone' }
+  return { kind: 'unknown' }
 }
 
 function dist2d(a, b) {
@@ -334,7 +372,32 @@ function SignalBars({ confidence }) {
   )
 }
 
-function StatusDot({ status, score, reason, isCalibrating, confidence = 0 }) {
+// ── Sparkline ──────────────────────────────────────────────────────────────
+function Sparkline({ scores, scoreColor }) {
+  if (!scores || scores.length < 2) return null
+  const W = 80, H = 24, PAD = 2
+  const pts = scores
+  const mn = 0, mx = 100
+  const points = pts.map((v, i) => {
+    const x = PAD + (i / (pts.length - 1)) * (W - PAD * 2)
+    const y = PAD + (1 - (v - mn) / (mx - mn)) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  return (
+    <svg width={W} height={H} style={{ display: 'block', opacity: 0.7 }}>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={scoreColor}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function StatusDot({ status, score, reason, isCalibrating, confidence = 0, scoreHistory = [] }) {
   const cfg = isCalibrating ? STATUS_CONFIG.calibrating : (STATUS_CONFIG[status] ?? STATUS_CONFIG.focused)
   const { color, label } = cfg
   const showReason = !isCalibrating && (status === 'distracted' || status === 'alert')
@@ -387,6 +450,11 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0 }) {
         )}
         {!isCalibrating && <SignalBars confidence={confidence} />}
       </div>
+      {!isCalibrating && scoreHistory.length >= 2 && (
+        <div style={{ paddingRight: 4 }}>
+          <Sparkline scores={scoreHistory} scoreColor={color} />
+        </div>
+      )}
       {reasonText && (
         <div style={{
           padding: '3px 10px',
@@ -409,7 +477,7 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0 }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const totalSeconds = duration * 60
-  const { yawLeft: yawLT, yawRight: yawRT, pitchDown: pitchDT, pitchUp: pitchUpDT, ignoreBelowPhone } = computeThresholds(devices)
+  const { yawLeft: yawLT, yawRight: yawRT, pitchDown: pitchDT, pitchUp: pitchUpDT } = computeThresholds(devices)
   const alertDelayMs = devices.length >= 1 ? 120_000 : 90_000
 
   const [timeLeft,        setTimeLeft]        = useState(totalSeconds)
@@ -425,7 +493,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
   const [showReady,       setShowReady]       = useState(false) // brief "Ready" flash
   const [currentStreak,   setCurrentStreak]   = useState(0)
-  const [ambientMode,     setAmbientMode]     = useState('off')
+  const [ambientMode,     setAmbientMode]     = useState(() => {
+    try { return localStorage.getItem('eudaimonia_ambient_pref') || 'off' } catch { return 'off' }
+  })
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [milestone,       setMilestone]       = useState(null) // {msg}
@@ -459,6 +529,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const nosePtHistRef          = useRef([])
 
   // ── Score & alert refs ────────────────────────────────────────────────────
+  const scoreHistoryRef        = useRef([68]) // last 60 score values for sparkline
   const focusScoreRef          = useRef(68)
   const rawScoreRef            = useRef(68)
   const scoreLowSinceRef       = useRef(null)
@@ -489,6 +560,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
   // ── Detection confidence ref ──────────────────────────────────────────────
   const confidenceRef       = useRef(0) // 0..1
+  const gazeSignalRef       = useRef({ hasFace: false, pitchDeg: 0, yawSigned: 0 })
 
   // ── Flow state refs ───────────────────────────────────────────────────────
   const flowGoodSinceRef    = useRef(null) // when flow conditions first met
@@ -529,6 +601,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       const idx = AMBIENT_MODES.indexOf(prev)
       const next = AMBIENT_MODES[(idx + 1) % AMBIENT_MODES.length]
       startAmbient(next)
+      try { localStorage.setItem('eudaimonia_ambient_pref', next) } catch {}
       return next
     })
   }, [startAmbient])
@@ -638,6 +711,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       perclosHistRef.current.push({ t: now, heavy: avgEar < earHeavy })
       nosePtHistRef.current.push({ t: now, x: f.nosePt.x, y: f.nosePt.y })
     }
+    gazeSignalRef.current = { hasFace, pitchDeg, yawSigned }
 
     const tenAgo   = now - BLINK_WIN_MS
     const thirtyAgo = now - PERCLOS_WIN_MS
@@ -723,6 +797,12 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
     const fidgetVariance = headVariance(nosePtHistRef.current)
     const eyesRolledUp   = hasFace && irisV > 0.25
+    const downwardContext = hasFace
+      ? classifyDownwardAttention(devices, pitchDeg, yawSigned)
+      : { kind: 'none' }
+    const productiveDownward = downwardContext.kind === 'productive'
+    const distractionDownward = downwardContext.kind === 'distraction'
+    const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
 
     // During calibration: collect EAR samples for personal baseline, then return
     if (calibrating) {
@@ -787,10 +867,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // Work-zone gaze: camera is at top of screen, so pitch 3–15° down = looking at screen
       // pitch ≈ 0 means staring at camera — not a focus signal
       if (pitchDeg >= 3 && pitchDeg < pitchDT * 0.7) score += 5
+      if (productiveDownward) score += 3
 
       // ── Penalties ─────────────────────────────────────────────────────────
-      const phonePenalty = ignoreBelowPhone ? 20 : 45
-      if (phoneMs >= PHONE_HOLD_MS) { score -= phonePenalty; primaryReason = 'phone' }
+      if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
+        score -= 45
+        primaryReason = 'phone'
+      } else if (unknownPhoneDownward) {
+        score -= 18
+        if (primaryReason === 'focused') primaryReason = 'phone'
+      }
       // Early microsleep signal (800ms): moderate penalty for drowsiness onset
       // Full prolonged penalty at 1500ms (confirmed microsleep territory)
       if (eyesClosedMs >= PROLONGED_CLOSE_MS) {
@@ -816,8 +902,13 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // Penalize only extreme blink suppression (<3/min) — not moderate focus suppression
       // and high blink rates (>35/min = likely agitation or eye irritation)
       if (hasBlinkData && blinkRate > 0 && (blinkRate < 3 || blinkRate > 35)) score -= 15
-      if (pitchDeg >= pitchDT && headDownSecs >= HEAD_DOWN_HOLD) score -= 25
-      else if (pitchDeg >= pitchDT * 0.75) score -= 8
+      if (pitchDeg >= pitchDT && headDownSecs >= HEAD_DOWN_HOLD) {
+        if (productiveDownward) score -= 3
+        else score -= 25
+      } else if (pitchDeg >= pitchDT * 0.75) {
+        if (productiveDownward) score -= 1
+        else score -= 8
+      }
       if (yawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
       else if (yawSigned >= yawLT * 0.6) score -= 8
       if (-yawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
@@ -947,7 +1038,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (fidgetVariance <= HEAD_DRIFT_THRESH) conf += 0.2
     }
     confidenceRef.current = conf
-  }, [alertDelayMs, yawLT, yawRT, pitchDT, pitchUpDT, ignoreBelowPhone])
+  }, [alertDelayMs, devices, yawLT, yawRT, pitchDT, pitchUpDT])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -1021,10 +1112,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       setDistractionCount(distractionEventsRef.current)
       setDetectionConf(confidenceRef.current)
       // gaze dot: map yaw (-45..+45) and pitch (-30..+30) to 0..1
-      if (hasFace) {
+      const gazeSignal = gazeSignalRef.current
+      if (gazeSignal.hasFace) {
         setGazePos({
-          x: Math.max(0.05, Math.min(0.95, 0.5 - yawSigned / 90)),
-          y: Math.max(0.05, Math.min(0.95, 0.5 + pitchDeg / 60)),
+          x: Math.max(0.05, Math.min(0.95, 0.5 - gazeSignal.yawSigned / 90)),
+          y: Math.max(0.05, Math.min(0.95, 0.5 + gazeSignal.pitchDeg / 60)),
         })
       } else {
         setGazePos(null)
@@ -1070,6 +1162,12 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   useEffect(() => {
     if (timeLeft === 0) endSession(true)
   }, [timeLeft, endSession])
+
+  // ── Start ambient on mount if pref set ───────────────────────────────────
+  useEffect(() => {
+    if (ambientMode !== 'off') startAmbient(ambientMode)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally run once on mount
 
   // ── Cleanup ambient on unmount ────────────────────────────────────────────
   useEffect(() => () => stopAmbient(), [stopAmbient])
