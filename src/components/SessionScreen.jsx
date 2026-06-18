@@ -45,6 +45,8 @@ const PITCH_NEUTRAL       = 0.50
 const PITCH_UP_THRESH     = 15
 const PHONE_PITCH_THRESH  = 38
 const PHONE_HOLD_MS       = 4000
+const DISTRACTION_DOWN_HOLD_MS = 2500  // hold time before a classified distraction-device
+                                        // glance triggers the severe penalty (avoid 1-frame flicker)
 const HEAD_DOWN_HOLD      = 10
 const HEAD_TURN_HOLD      = 5
 const FACE_ABSENT_HOLD_MS = 4000
@@ -562,6 +564,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const eyesClosedSinceRef     = useRef(null)
   const yawnStartRef           = useRef(null)
   const phoneStartRef          = useRef(null)
+  const distractionDownStartRef = useRef(null)
   const lookingUpStartRef      = useRef(null)
   const faceAbsentSinceRef     = useRef(null)
   const nosePtHistRef          = useRef([])
@@ -851,8 +854,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       ? classifyDownwardAttention(devices, pitchDeg, yawSigned)
       : { kind: 'none' }
     const productiveDownward = downwardContext.kind === 'productive'
-    const distractionDownward = downwardContext.kind === 'distraction'
     const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
+
+    // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
+    // it counts — a momentary downward glance shouldn't trigger the severe penalty
+    if (downwardContext.kind === 'distraction') {
+      if (!distractionDownStartRef.current) distractionDownStartRef.current = now
+    } else {
+      distractionDownStartRef.current = null
+    }
+    const distractionDownward = distractionDownStartRef.current
+      ? (now - distractionDownStartRef.current) >= DISTRACTION_DOWN_HOLD_MS
+      : false
 
     // During calibration: collect EAR samples for personal baseline, then return
     if (calibrating) {
@@ -1027,7 +1040,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
     // ── Circadian-adjusted alert delay ────────────────────────────────────
     const circFactor      = getCircadianFactor()
-    const adjustedAlertMs = alertDelayMs / circFactor  // lenient hours → longer delay
+    const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (0.75) → alert fires sooner
 
     // Score dipped below 55 = mark distraction start (even if alert doesn't fire)
     if (focusScoreRef.current < 55 && !lastDistractionRef.current) {
