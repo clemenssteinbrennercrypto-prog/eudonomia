@@ -51,6 +51,9 @@ const FACE_ABSENT_HOLD_MS = 4000
 const HEAD_DRIFT_WIN_MS   = 3000
 const HEAD_DRIFT_THRESH   = 0.035
 const ALERT_COOLDOWN_MS      = 60_000
+const GENTLE_REMINDER_DELAY_MS = 60_000
+const GENTLE_REMINDER_COOLDOWN_MS = 5 * 60_000
+const GENTLE_REMINDER_SEVERE_BUFFER_MS = 15_000
 const SCORE_UPDATE_SECS      = 5
 const CALIBRATION_SECS       = 20
 const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 min
@@ -246,6 +249,38 @@ function playAlertSound() {
     gain.gain.setValueAtTime(0.15, ctx.currentTime + 1.0)
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.5)
     osc.start(); osc.stop(ctx.currentTime + 2.5)
+  } catch {}
+}
+function playGentleReminderSound() {
+  try {
+    const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') ctx.resume()
+
+    const master = ctx.createGain()
+    master.gain.setValueAtTime(0.0001, ctx.currentTime)
+    master.gain.linearRampToValueAtTime(0.035, ctx.currentTime + 0.08)
+    master.gain.setValueAtTime(0.035, ctx.currentTime + 0.55)
+    master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.25)
+    master.connect(ctx.destination)
+
+    const notes = [
+      { freq: 523.25, start: 0, stop: 0.75 },
+      { freq: 659.25, start: 0.18, stop: 1.15 },
+    ]
+
+    notes.forEach(({ freq, start, stop }) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start)
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + start)
+      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + start + 0.08)
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + stop)
+      osc.connect(gain)
+      gain.connect(master)
+      osc.start(ctx.currentTime + start)
+      osc.stop(ctx.currentTime + stop)
+    })
   } catch {}
 }
 
@@ -496,6 +531,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [ambientMode,     setAmbientMode]     = useState(() => {
     try { return localStorage.getItem('eudaimonia_ambient_pref') || 'off' } catch { return 'off' }
   })
+  const [gentleReminderEnabled, setGentleReminderEnabled] = useState(() => {
+    try { return localStorage.getItem('eudaimonia_gentle_reminder_pref') !== 'off' } catch { return true }
+  })
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [milestone,       setMilestone]       = useState(null) // {msg}
@@ -544,6 +582,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const adaptiveAlertMultRef   = useRef(1.0) // multiplier on alertDelayMs (adaptive fatigue)
   const alertsInFirst15Ref     = useRef(0)   // alerts fired in first 15 min
   const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
+  const distractedSinceRef     = useRef(null)
+  const lastGentleReminderRef  = useRef(0)
+  const gentleReminderEnabledRef = useRef(gentleReminderEnabled)
 
   // ── Session stats refs ────────────────────────────────────────────────────
   const focusedSecondsRef    = useRef(0)
@@ -605,6 +646,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       return next
     })
   }, [startAmbient])
+
+  const toggleGentleReminder = useCallback(() => {
+    setGentleReminderEnabled(prev => {
+      const next = !prev
+      gentleReminderEnabledRef.current = next
+      try { localStorage.setItem('eudaimonia_gentle_reminder_pref', next ? 'on' : 'off') } catch {}
+      return next
+    })
+  }, [])
 
   // ── End session ───────────────────────────────────────────────────────────
   const endSession = useCallback((completed = false) => {
@@ -977,7 +1027,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
     // ── Circadian-adjusted alert delay ────────────────────────────────────
     const circFactor      = getCircadianFactor()
-    const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (0.75) → alert fires sooner
+    const adjustedAlertMs = alertDelayMs / circFactor  // lenient hours → longer delay
 
     // Score dipped below 55 = mark distraction start (even if alert doesn't fire)
     if (focusScoreRef.current < 55 && !lastDistractionRef.current) {
@@ -986,16 +1036,43 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // Once fully re-focused, don't reset lastDistraction — let the window expire naturally
     }
 
+    const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current
+
+    // ── Gentle reminder: earlier, optional nudge before the severe overlay ─
+    if (newStatus !== 'focused') {
+      if (!distractedSinceRef.current) distractedSinceRef.current = now
+      const distractedFor = now - distractedSinceRef.current
+      const gentleCooldownOk = (now - lastGentleReminderRef.current) >= GENTLE_REMINDER_COOLDOWN_MS
+      const lowFor = scoreLowSinceRef.current ? now - scoreLowSinceRef.current : 0
+      const severeAlertSoon = focusScoreRef.current < 40 &&
+        scoreLowSinceRef.current &&
+        (adaptedAlertMs - lowFor) <= GENTLE_REMINDER_SEVERE_BUFFER_MS
+
+      if (
+        gentleReminderEnabledRef.current &&
+        distractedFor >= GENTLE_REMINDER_DELAY_MS &&
+        gentleCooldownOk &&
+        !overlayActiveRef.current &&
+        !severeAlertSoon
+      ) {
+        lastGentleReminderRef.current = now
+        playGentleReminderSound()
+      }
+    } else {
+      distractedSinceRef.current = null
+    }
+
     if (focusScoreRef.current < 40) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
 
-      const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current
       if (lowFor >= adaptedAlertMs && !overlayActiveRef.current && cooldownOk) {
         overlayActiveRef.current   = true
         lastAlertTimeRef.current   = now
         lastDistractionRef.current = now  // start recovery window
+        lastGentleReminderRef.current = now
+        distractedSinceRef.current = null
         lastAlertReasonRef.current = primaryReason
         distractionEventsRef.current += 1
         // Track alerts in first 15 min for adaptive threshold
@@ -1400,8 +1477,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         </div>
       </div>
 
-      {/* Ambient sound button */}
-      <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15 }}>
+      {/* Audio controls */}
+      <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
         <button
           onClick={cycleAmbient}
           aria-label={`Ambient sound: ${AMBIENT_LABELS[ambientMode]}`}
@@ -1416,6 +1493,22 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           }}
         >
           {AMBIENT_LABELS[ambientMode]}
+        </button>
+        <button
+          onClick={toggleGentleReminder}
+          aria-pressed={gentleReminderEnabled}
+          aria-label={`Gentle reminder ${gentleReminderEnabled ? 'on' : 'off'}`}
+          style={{
+            background: gentleReminderEnabled ? '#1C2818' : '#1C1F28',
+            border: `1px solid ${gentleReminderEnabled ? '#22c55e40' : '#2A2E3A'}`,
+            borderRadius: 100,
+            padding: '6px 16px',
+            fontSize: 12, fontWeight: 600,
+            color: gentleReminderEnabled ? '#22c55e' : '#6b7280',
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Reminder {gentleReminderEnabled ? 'On' : 'Off'}
         </button>
       </div>
 
