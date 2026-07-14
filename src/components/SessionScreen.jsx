@@ -546,6 +546,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [faceAbsentPrompt, setFaceAbsentPrompt] = useState(false)
   const [gazePos,         setGazePos]         = useState(null) // {x, y} normalized 0..1
   const [detectionConf,   setDetectionConf]   = useState(0)   // 0..1 signal quality
+  const [scoreHistory,    setScoreHistory]    = useState([68])
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -587,6 +588,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
   const distractedSinceRef     = useRef(null)
   const lastGentleReminderRef  = useRef(0)
+  // Ref stays in sync with state via useEffect to avoid stale closure in handleFaceResults
   const gentleReminderEnabledRef = useRef(gentleReminderEnabled)
 
   // ── Session stats refs ────────────────────────────────────────────────────
@@ -650,10 +652,14 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     })
   }, [startAmbient])
 
+  // Keep ref in sync whenever state changes
+  useEffect(() => {
+    gentleReminderEnabledRef.current = gentleReminderEnabled
+  }, [gentleReminderEnabled])
+
   const toggleGentleReminder = useCallback(() => {
     setGentleReminderEnabled(prev => {
       const next = !prev
-      gentleReminderEnabledRef.current = next
       try { localStorage.setItem('eudaimonia_gentle_reminder_pref', next ? 'on' : 'off') } catch {}
       return next
     })
@@ -1040,13 +1046,13 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
     // ── Circadian-adjusted alert delay ────────────────────────────────────
     const circFactor      = getCircadianFactor()
-    const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (0.75) → alert fires sooner
+    const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (< 1.0) → alert fires sooner
 
-    // Score dipped below 55 = mark distraction start (even if alert doesn't fire)
-    if (focusScoreRef.current < 55 && !lastDistractionRef.current) {
+    // Score dipped below 55 = mark latest distraction timestamp (reset on each new dip)
+    // This ensures the recovery ramp is measured from the MOST RECENT distraction,
+    // not stuck on the first one from an hour ago.
+    if (focusScoreRef.current < 55) {
       lastDistractionRef.current = now
-    } else if (focusScoreRef.current >= 72) {
-      // Once fully re-focused, don't reset lastDistraction — let the window expire naturally
     }
 
     const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current
@@ -1197,7 +1203,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         currentStreakRef.current = 0
       }
 
-      setFocusScore(Math.round(focusScoreRef.current))
+      const roundedScore = Math.round(focusScoreRef.current)
+      setFocusScore(roundedScore)
+      // Keep sparkline history (max 60 values = last 5 min at 5s intervals)
+      scoreHistoryRef.current = [...scoreHistoryRef.current, roundedScore].slice(-60)
+      setScoreHistory(scoreHistoryRef.current)
       setCurrentStreak(currentStreakRef.current)
       setDistractionCount(distractionEventsRef.current)
       setDetectionConf(confidenceRef.current)
@@ -1390,6 +1400,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           reason={distractReason}
           isCalibrating={isCalibrating}
           confidence={detectionConf}
+          scoreHistory={scoreHistory}
         />
       </div>
 
