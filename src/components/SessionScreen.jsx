@@ -902,13 +902,15 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   }, [focusModeEnabled])
 
   useEffect(() => {
+    localStorage.setItem('eudaimonia_session_active', 'true')
+    localStorage.setItem('eudaimonia_session_end_ts', String(Date.now() + duration * 60 * 1000))
     focusAppsConfigRef.current = loadFocusAppsConfig()
     startActivityPolling((activity) => {
       activityRef.current = activity
       setActivityStatus(activity)
     })
     return () => stopActivityPolling()
-  }, [])
+  }, [duration])
 
   const toggleGentleReminder = useCallback(() => {
     setGentleReminderEnabled(prev => {
@@ -922,6 +924,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const endSession = useCallback((completed = false) => {
     if (sessionEndedRef.current) return
     sessionEndedRef.current = true
+    localStorage.removeItem('eudaimonia_session_active')
+    localStorage.removeItem('eudaimonia_session_end_ts')
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Stay Focused - Eudonomia</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: #0D0F14;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 40px;
+      text-align: center;
+    }
+    .icon { font-size: 64px; line-height: 1; }
+    h1 { font-size: 32px; font-weight: 700; letter-spacing: 0; }
+    p { font-size: 16px; color: #94a3b8; max-width: 400px; line-height: 1.6; }
+    .blocked-site {
+      font-family: monospace;
+      background: rgba(255,255,255,0.08);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 14px;
+      color: #ef4444;
+    }
+    .back-btn {
+      margin-top: 8px;
+      padding: 12px 32px;
+      background: #1a2e4a;
+      color: white;
+      border: none;
+      border-radius: 100px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .back-btn:hover { opacity: 0.85; }
+    .timer { font-size: 13px; color: #4b5563; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="icon">🎯</div>
+  <h1>Stay in focus.</h1>
+  <div class="blocked-site" id="blocked-site">this site</div>
+  <p>This site is on your distraction list. Your session is still running - get back to work.</p>
+  <button class="back-btn" onclick="history.back()">← Go back</button>
+  <p class="timer" id="timer"></p>
+  <script>
+    const params = new URLSearchParams(location.search)
+    const blocked = params.get('blocked') || 'this site'
+    document.getElementById('blocked-site').textContent = blocked
+
+    function showRemaining(stored) {
+      if (!stored) return
+      const remaining = Math.max(0, Math.round((parseInt(stored, 10) - Date.now()) / 60000))
+      if (remaining > 0) {
+        document.getElementById('timer').textContent = `${remaining} minutes left in your session`
+      }
+    }
+
+    const stored = localStorage.getItem('eudaimonia_session_end_ts')
+    showRemaining(stored)
+    if (!stored && typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.get('eudaimonia_session_end_ts', (result) => {
+        showRemaining(result.eudaimonia_session_end_ts)
+      })
+    }
+  </script>
+</body>
+</html>

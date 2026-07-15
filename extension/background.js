@@ -6,6 +6,29 @@ function extractDomain(url) {
   }
 }
 
+function normalizeDomain(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) return ''
+  try {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+    return new URL(withProtocol).hostname.replace(/^www\./, '')
+  } catch {
+    return raw
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0]
+      .split('?')[0]
+      .trim()
+  }
+}
+
+function domainMatches(domain, blockedDomains) {
+  const normalizedDomain = normalizeDomain(domain)
+  if (!normalizedDomain) return false
+  return blockedDomains.has(normalizedDomain) ||
+    [...blockedDomains].some(blockedDomain => normalizedDomain.endsWith(`.${blockedDomain}`))
+}
+
 function canTrackUrl(url) {
   return Boolean(url) &&
     !url.startsWith('chrome://') &&
@@ -38,6 +61,33 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.active) {
     updateActivity(tab)
   }
+})
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'loading') return
+  if (!tab.url || !canTrackUrl(tab.url)) return
+
+  const domain = extractDomain(tab.url)
+  const normalizedUrl = tab.url.toLowerCase()
+
+  chrome.storage.local.get(['eudaimonia_focus_apps_config', 'eudaimonia_session_active'], (result) => {
+    const sessionActive = result.eudaimonia_session_active === true
+    if (!sessionActive) return
+
+    const config = result.eudaimonia_focus_apps_config || { distractionApps: [], distractionDomains: [] }
+    const blockedDomains = new Set([
+      ...(config.distractionApps || []),
+      ...(config.distractionDomains || []),
+    ].map(normalizeDomain).filter(Boolean))
+    const blockedEntries = new Set(
+      (config.distractionApps || []).map(app => String(app || '').trim().toLowerCase()).filter(Boolean)
+    )
+
+    if (domainMatches(domain, blockedDomains) || blockedEntries.has(normalizedUrl)) {
+      const blockUrl = `${chrome.runtime.getURL('blocked.html')}?blocked=${encodeURIComponent(domain)}`
+      chrome.tabs.update(tabId, { url: blockUrl })
+    }
+  })
 })
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
