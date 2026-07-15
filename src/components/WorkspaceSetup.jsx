@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import IsometricWorkspace from './IsometricWorkspace'
+import WorkspacePreview from './WorkspacePreview'
 import { defaultRoleForType } from '../lib/workspaceObjects'
 
 // ── Step-by-step workspace wizard ─────────────────────────────────────────────
@@ -234,6 +235,8 @@ function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
 function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   // Derive initial state from existing devices if any
   const [step, setStep] = useState(1)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewDevices, setPreviewDevices] = useState(devices || [])
   const [mainScreen,      setMainScreen]      = useState(null)   // 'laptop' | 'monitor' | 'both'
   const [cameraPosition,  setCameraPosition]  = useState(null)
   const [extraCount,      setExtraCount]      = useState(null)   // 0 | 1 | 2
@@ -268,7 +271,13 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   const finish = (count, positions, camera) => {
     const devs = buildDevices(mainScreen, count, positions, camera)
     setDevices(devs)
-    onContinue()
+    setPreviewDevices(devs)
+    setShowPreview(true)
+  }
+
+  const editSetup = () => {
+    setShowPreview(false)
+    setStep(1)
   }
 
   const handleBack = () => {
@@ -298,6 +307,16 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   const stepLabel = mainScreen === 'both'
     ? 'Step 1 of 1'
     : `Step ${step} of ${extraCount === null ? '?' : totalSteps}`
+
+  if (showPreview) {
+    return (
+      <WorkspacePreview
+        devices={previewDevices}
+        onConfirm={onContinue}
+        onEditSetup={editSetup}
+      />
+    )
+  }
 
   return (
     <div style={{
