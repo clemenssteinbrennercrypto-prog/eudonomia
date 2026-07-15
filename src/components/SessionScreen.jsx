@@ -118,8 +118,6 @@ function OverlayIcon({ type }) {
   return null
 }
 
-let lastThresholdLogKey = ''
-
 function computeThresholds(devices = []) {
   // Science: ergonomic laptop posture = 15-20° downward head pitch is NORMAL (Stanford, Pitt).
   // Default pitchDown starts at 25° to avoid false-positives for laptop users.
@@ -129,15 +127,6 @@ function computeThresholds(devices = []) {
   const camera = workspaceObjects.find(d => d.type === 'camera')
   const hasLaptop = workspaceObjects.some(d => d.type === 'laptop')
   if (hasLaptop) pitchDown = 30  // laptop = 15-20° natural downward gaze, 30° is safe threshold
-
-  if (camera) {
-    const cameraCol = camera.col ?? 0.5
-    const cameraRow = camera.row ?? 0.0
-    if (cameraRow > 0.5) pitchDown = Math.max(12, pitchDown - 8)
-    if (cameraRow < 0) pitchDown = Math.max(pitchDown, pitchDown + 5)
-    if (cameraCol < 0.2) yawNeutral = 12
-    if (cameraCol > 0.8) yawNeutral = -12
-  }
 
   for (const d of workspaceObjects) {
     const role = d.role || defaultRoleForType(d.type)
@@ -152,19 +141,22 @@ function computeThresholds(devices = []) {
   }
 
   const cameraRow = camera?.row ?? 0.0
-  const workZonePitchMin = cameraRow > 0.5 ? 0 : cameraRow < 0 ? 5 : 3
+  const cameraCol = camera?.col ?? 0.5
+  if (camera) {
+    if (cameraRow > 0.6) pitchDown = Math.max(12, pitchDown - 8)
+    if (cameraCol < 0.2) yawLeft = Math.max(12, yawLeft - 15)
+    if (cameraCol > 0.8) yawRight = Math.max(12, yawRight - 15)
+  }
+
+  const workZonePitchMin = cameraRow > 0.5 ? 8 : 3
   const workZonePitchMax = Math.max(
     workZonePitchMin + 4,
-    pitchDown * (cameraRow > 0.5 ? 0.55 : cameraRow < 0 ? 0.8 : 0.7)
+    pitchDown * (cameraRow > 0.5 ? 0.85 : 0.7)
   )
   const thresholds = { yawLeft, yawRight, yawNeutral, pitchDown, pitchUp, workZonePitchMin, workZonePitchMax }
 
   if (import.meta.env.DEV) {
-    const logKey = JSON.stringify(thresholds)
-    if (logKey !== lastThresholdLogKey) {
-      lastThresholdLogKey = logKey
-      console.log('[Eudaimonia] focus thresholds', thresholds)
-    }
+    console.log('[thresholds]', { yawLeft, yawRight, pitchDown, pitchUp, cameraRow: camera?.row, cameraCol: camera?.col })
   }
 
   return thresholds

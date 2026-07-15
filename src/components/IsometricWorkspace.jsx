@@ -44,6 +44,8 @@ const DEVICE_META = WORKSPACE_OBJECT_TYPES
 
 const DEVICE_TYPES    = DEVICE_META.map(d => ({ id: d.id, label: d.label }))
 const POSITION_LABELS = {}  // legacy compat — unused now
+const CAMERA_META = DEVICE_META.find(d => d.id === 'camera')
+const NON_CAMERA_META = DEVICE_META.filter(d => d.id !== 'camera')
 
 // ── Device renderers ──────────────────────────────────────────────────────────
 // Each centered at (0,0), rendered at requested pixel size
@@ -334,6 +336,15 @@ function PaletteBtn({ id, selected, onClick }) {
   )
 }
 
+function cameraPositionDescription(camera) {
+  if (!camera) return ''
+  const col = camera.col ?? 0.5
+  const row = camera.row ?? 0.5
+  const horizontal = col < 0.2 ? 'far left' : col < 0.4 ? 'left' : col > 0.8 ? 'far right' : col > 0.6 ? 'right' : 'center'
+  const vertical = row > 0.6 ? 'low angle' : row < 0.15 ? 'high/monitor height' : 'mid height'
+  return `${horizontal}, ${vertical}`
+}
+
 // ── Resize handle ─────────────────────────────────────────────────────────────
 function ResizeHandle({ x, y, onPointerDown }) {
   return (
@@ -439,6 +450,12 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
 
   const hasDevices = devices.length > 0
   const activeDevice = devices.find(d => d.id === activeId)
+  const cameraDevice = devices.find(d => d.type === 'camera')
+  const listedDevices = [...devices].sort((a, b) => {
+    if (a.type === 'camera' && b.type !== 'camera') return -1
+    if (a.type !== 'camera' && b.type === 'camera') return 1
+    return 0
+  })
 
   return (
     <div style={{
@@ -643,7 +660,33 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
             Devices
           </p>
 
-          {DEVICE_META.map(d => (
+          <div style={{
+            padding: '8px 8px 9px',
+            borderRadius: 10,
+            border: `1px solid ${cameraDevice ? '#B7E4C7' : '#FCD34D'}`,
+            background: cameraDevice ? '#ECFDF3' : '#FFFBEB',
+            color: cameraDevice ? '#166534' : '#92400E',
+            fontSize: 11,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            margin: '0 0 8px',
+          }}>
+            {cameraDevice
+              ? `Camera: ${cameraPositionDescription(cameraDevice)}`
+              : 'Camera not configured — tracking accuracy reduced'}
+          </div>
+
+          {CAMERA_META && (
+            <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #EDEBE6' }}>
+              <PaletteBtn
+                id={CAMERA_META.id}
+                selected={selectedDevice === CAMERA_META.id}
+                onClick={() => { setSelectedDevice(prev => prev === CAMERA_META.id ? null : CAMERA_META.id); setActiveId(null) }}
+              />
+            </div>
+          )}
+
+          {NON_CAMERA_META.map(d => (
             <PaletteBtn
               key={d.id} id={d.id}
               selected={selectedDevice === d.id}
@@ -658,7 +701,7 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                 textTransform: 'uppercase', letterSpacing: '0.1em',
                 margin: '0 4px 8px',
               }}>On desk</p>
-              {devices.map(d => {
+              {listedDevices.map(d => {
                 const meta = DEVICE_META.find(m => m.id === d.type)
                 const isActive = d.id === activeId
                 return (

@@ -158,21 +158,44 @@ function PositionPicker({ label, value, onChange }) {
 
 // ── Root export: wizard or advanced ──────────────────────────────────────────
 export default function WorkspaceSetup({ devices, setDevices, onContinue }) {
-  const [mode, setMode] = useState(() => localStorage.getItem('eudaimonia_setup_mode') || 'wizard')
+  const [mode, setMode] = useState('wizard')
 
   const switchMode = (m) => {
-    localStorage.setItem('eudaimonia_setup_mode', m)
     setMode(m)
   }
 
   if (mode === 'advanced') {
-    return <AdvancedModeWrapper devices={devices} setDevices={setDevices} onContinue={onContinue} onSimple={() => switchMode('wizard')} />
+    return (
+      <AdvancedModeWrapper
+        devices={devices}
+        setDevices={setDevices}
+        onReturnToPreview={() => switchMode('preview')}
+        onSimple={() => switchMode('preview')}
+      />
+    )
   }
 
-  return <Wizard devices={devices} setDevices={setDevices} onContinue={onContinue} onAdvanced={() => switchMode('advanced')} />
+  if (mode === 'preview') {
+    return (
+      <WorkspacePreview
+        devices={devices}
+        onConfirm={onContinue}
+        onEditSetup={() => switchMode('wizard')}
+        onFineTune={() => switchMode('advanced')}
+      />
+    )
+  }
+
+  return (
+    <Wizard
+      setDevices={setDevices}
+      onContinue={onContinue}
+      onPreview={() => switchMode('preview')}
+    />
+  )
 }
 
-function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
+function AdvancedModeWrapper({ devices, setDevices, onReturnToPreview, onSimple }) {
   const HINT_KEY = 'eudaimonia_desk_hint_seen'
   const [showHint, setShowHint] = useState(() => !localStorage.getItem(HINT_KEY))
 
@@ -195,7 +218,7 @@ function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
       <IsometricWorkspace
         devices={devices}
         setDevices={setDevices}
-        onContinue={onContinue}
+        onContinue={onReturnToPreview}
       />
       <button
         onClick={onSimple}
@@ -211,7 +234,7 @@ function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
           transition: 'color 0.15s',
         }}
       >
-        ← Simple mode
+        ← Preview
       </button>
       {showHint && (
         <div style={{
@@ -232,11 +255,9 @@ function AdvancedModeWrapper({ devices, setDevices, onContinue, onSimple }) {
 }
 
 // ── Wizard ────────────────────────────────────────────────────────────────────
-function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
+function Wizard({ setDevices, onContinue, onPreview }) {
   // Derive initial state from existing devices if any
   const [step, setStep] = useState(1)
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewDevices, setPreviewDevices] = useState(devices || [])
   const [mainScreen,      setMainScreen]      = useState(null)   // 'laptop' | 'monitor' | 'both'
   const [cameraPosition,  setCameraPosition]  = useState(null)
   const [extraCount,      setExtraCount]      = useState(null)   // 0 | 1 | 2
@@ -271,13 +292,7 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   const finish = (count, positions, camera) => {
     const devs = buildDevices(mainScreen, count, positions, camera)
     setDevices(devs)
-    setPreviewDevices(devs)
-    setShowPreview(true)
-  }
-
-  const editSetup = () => {
-    setShowPreview(false)
-    setStep(1)
+    onPreview()
   }
 
   const handleBack = () => {
@@ -308,16 +323,6 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
     ? 'Step 1 of 1'
     : `Step ${step} of ${extraCount === null ? '?' : totalSteps}`
 
-  if (showPreview) {
-    return (
-      <WorkspacePreview
-        devices={previewDevices}
-        onConfirm={onContinue}
-        onEditSetup={editSetup}
-      />
-    )
-  }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -328,10 +333,10 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif',
     }}>
 
-      {/* Back + Advanced row */}
+      {/* Back row */}
       <div style={{
         width: '100%', maxWidth: 460, marginBottom: 14,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'flex-start', alignItems: 'center',
       }}>
         <button
           onClick={handleBack}
@@ -342,19 +347,6 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
           }}
         >
           ← Back
-        </button>
-        <button
-          onClick={onAdvanced}
-          style={{
-            background: 'none',
-            border: '1px solid #E8E3DA',
-            borderRadius: 100, padding: '5px 14px',
-            fontSize: 12, fontWeight: 500,
-            color: '#6B7280', cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          Advanced mode →
         </button>
       </div>
 

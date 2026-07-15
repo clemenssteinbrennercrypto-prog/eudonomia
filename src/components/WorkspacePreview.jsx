@@ -163,6 +163,94 @@ function buildSummary(devices) {
   return [mainScreen, sideText, cameraText, downText, phoneText]
 }
 
+function statusColor(status) {
+  if (status === 'green') return green
+  if (status === 'red') return red
+  return amber
+}
+
+function StatusIcon({ status }) {
+  const color = statusColor(status)
+  if (status === 'red') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9 9l6 6M15 9l-6 6" />
+      </svg>
+    )
+  }
+  if (status === 'amber') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3l9 16H3L12 3z" />
+        <path d="M12 9v4M12 17h.01" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12.5l2.5 2.5L16 9" />
+    </svg>
+  )
+}
+
+function buildAccuracyChecks(devices) {
+  const mainScreen = devices.some(device => (device.role || defaultRoleForType(device.type)) === 'primary_screen')
+  const camera = devices.find(device => device.type === 'camera')
+  const secondaryScreens = devices.filter(device => (device.role || defaultRoleForType(device.type)) === 'secondary_screen')
+  const hasOverlaps = devices.some((device, index) =>
+    devices.slice(index + 1).some(other =>
+      Math.abs((device.col ?? 0.5) - (other.col ?? 0.5)) <= 0.05 &&
+      Math.abs((device.row ?? 0.5) - (other.row ?? 0.5)) <= 0.05
+    )
+  )
+  const cameraCol = camera?.col ?? 0.5
+  const sideScreensReasonable = secondaryScreens.every(device => {
+    const col = device.col ?? 0.5
+    return col < 0.35 || col > 0.65
+  })
+
+  return [
+    {
+      key: 'main-screen',
+      label: 'Main screen configured',
+      status: mainScreen ? 'green' : 'red',
+      detail: mainScreen ? 'Primary focus target is set.' : 'Add a primary laptop or monitor.',
+    },
+    {
+      key: 'camera-configured',
+      label: 'Camera configured',
+      status: camera ? 'green' : 'red',
+      detail: camera ? 'Camera angle can adjust tracking.' : 'Add your webcam position.',
+    },
+    {
+      key: 'camera-position',
+      label: 'Camera position reasonable',
+      status: !camera || cameraCol < 0.2 || cameraCol > 0.8 ? 'amber' : 'green',
+      detail: !camera
+        ? 'Camera position cannot be checked yet.'
+        : cameraCol < 0.2 || cameraCol > 0.8
+          ? 'Side cameras can make yaw calibration less stable.'
+          : 'Camera is not at an extreme side angle.',
+    },
+    {
+      key: 'side-monitors',
+      label: 'Side monitors are clear',
+      status: sideScreensReasonable ? 'green' : 'amber',
+      detail: secondaryScreens.length
+        ? 'Side screens are far enough from center.'
+        : 'No side monitors configured.',
+    },
+    {
+      key: 'overlaps',
+      label: 'No overlapping devices',
+      status: hasOverlaps ? 'amber' : 'green',
+      detail: hasOverlaps ? 'Move stacked devices apart for cleaner zones.' : 'Device positions are distinct.',
+    },
+  ]
+}
+
 function LegendItem({ color, children }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
@@ -172,10 +260,18 @@ function LegendItem({ color, children }) {
   )
 }
 
-export default function WorkspacePreview({ devices, onConfirm, onEditSetup }) {
+export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFineTune }) {
   const workspaceDevices = normalizeWorkspaceObjects(devices)
   const screens = workspaceDevices.filter(device => isScreenRole(device.role || defaultRoleForType(device.type)))
   const summary = buildSummary(workspaceDevices)
+  const accuracyChecks = buildAccuracyChecks(workspaceDevices)
+  const greenCount = accuracyChecks.filter(check => check.status === 'green').length
+  const accuracyScore = Math.round((greenCount / accuracyChecks.length) * 100)
+  const accuracyMessage = greenCount === accuracyChecks.length
+    ? 'Great setup — tracking should be accurate'
+    : greenCount >= 3
+      ? 'Good setup — minor improvements possible'
+      : 'Setup incomplete — tracking may be unreliable'
 
   return (
     <div style={{
@@ -313,6 +409,61 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup }) {
           {summary.map(item => <li key={item}>{item}</li>)}
         </ul>
 
+        <div style={{
+          border: '1px solid #E8E3DA',
+          borderRadius: 16,
+          padding: '16px 16px 14px',
+          background: '#FAFAF8',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px', fontSize: 16, color: '#0f172a', letterSpacing: 0 }}>
+                Setup accuracy
+              </h3>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.35 }}>
+                {accuracyMessage}
+              </p>
+            </div>
+            <div style={{
+              minWidth: 72,
+              textAlign: 'right',
+              fontSize: 24,
+              fontWeight: 800,
+              color: statusColor(greenCount === accuracyChecks.length ? 'green' : greenCount >= 3 ? 'amber' : 'red'),
+              lineHeight: 1,
+            }}>
+              {accuracyScore}%
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {accuracyChecks.map(check => (
+              <div key={check.key} style={{
+                display: 'grid',
+                gridTemplateColumns: '22px 1fr',
+                gap: 8,
+                alignItems: 'flex-start',
+                color: '#334155',
+              }}>
+                <StatusIcon status={check.status} />
+                <div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1f2937' }}>
+                    {check.label}
+                  </p>
+                  {check.status !== 'green' && (
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
+                      {check.detail}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
           <button
             type="button"
@@ -349,6 +500,23 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup }) {
             }}
           >
             Edit setup
+          </button>
+          <button
+            type="button"
+            onClick={onFineTune}
+            style={{
+              flex: '1 1 100%',
+              minHeight: 46,
+              border: 'none',
+              background: 'transparent',
+              color: '#64748b',
+              fontFamily: 'inherit',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Fine-tune in 3D →
           </button>
         </div>
       </section>
