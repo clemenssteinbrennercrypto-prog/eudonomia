@@ -4,7 +4,7 @@ import { defaultRoleForType } from '../lib/workspaceObjects'
 
 // ── Step-by-step workspace wizard ─────────────────────────────────────────────
 // Outputs devices in the same {type, col, row} format as before
-// so SessionScreen.jsx detection thresholds are unaffected.
+// so SessionScreen.jsx can adapt detection thresholds to the workspace.
 
 const navy = '#1a2e4a'
 
@@ -16,7 +16,16 @@ const POSITION_COORDS = {
   below: { col: 0.5, row: 0.8 },
 }
 
-function buildDevices(mainScreen, extraCount, extraPositions) {
+const CAMERA_POSITIONS = {
+  laptop:       { label: 'Laptop built-in', col: 0.5, row: 0.0 },
+  externalTop:  { label: 'External monitor top', col: 0.5, row: 0.05 },
+  sideLeft:     { label: 'Side-left', col: 0.05, row: 0.35 },
+  sideRight:    { label: 'Side-right', col: 0.95, row: 0.35 },
+  low:          { label: 'Low angle', col: 0.5, row: 0.7 },
+  high:         { label: 'High angle', col: 0.5, row: -0.1 },
+}
+
+function buildDevices(mainScreen, extraCount, extraPositions, cameraPosition) {
   const devices = []
 
   // Main screen (centered)
@@ -33,6 +42,15 @@ function buildDevices(mainScreen, extraCount, extraPositions) {
     const coords = POSITION_COORDS[pos]
     devices.push({ id: `extra_${i}`, type: 'monitor', ...coords, role: 'secondary_screen' })
   }
+
+  const cameraCoords = CAMERA_POSITIONS[cameraPosition] || CAMERA_POSITIONS.laptop
+  devices.push({
+    id: 'camera_main',
+    type: 'camera',
+    col: cameraCoords.col,
+    row: cameraCoords.row,
+    role: defaultRoleForType('camera'),
+  })
 
   return devices
 }
@@ -217,35 +235,38 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
   // Derive initial state from existing devices if any
   const [step, setStep] = useState(1)
   const [mainScreen,      setMainScreen]      = useState(null)   // 'laptop' | 'monitor' | 'both'
+  const [cameraPosition,  setCameraPosition]  = useState(null)
   const [extraCount,      setExtraCount]      = useState(null)   // 0 | 1 | 2
   const [extraPositions,  setExtraPositions]  = useState(['right', 'right'])
 
   // Compute total steps based on answers
   const totalSteps = mainScreen === 'both'
-    ? 1                            // both → no need to ask about extras
-    : extraCount > 0 ? 3 : 2      // if extras → show position step
+    ? 2                            // both → ask main screen + camera
+    : extraCount > 0 ? 4 : 3      // if extras → show position step
 
   const handleNext = () => {
     if (step === 1) {
-      if (mainScreen === 'both') {
-        // Done — no extras possible
-        finish(0, [])
-        return
-      }
       setStep(2)
     } else if (step === 2) {
-      if (extraCount === 0) {
-        finish(0, [])
-      } else {
-        setStep(3)
+      if (mainScreen === 'both') {
+        // Done — no extras possible
+        finish(0, [], cameraPosition)
+        return
       }
+      setStep(3)
     } else if (step === 3) {
-      finish(extraCount, extraPositions)
+      if (extraCount === 0) {
+        finish(0, [], cameraPosition)
+      } else {
+        setStep(4)
+      }
+    } else if (step === 4) {
+      finish(extraCount, extraPositions, cameraPosition)
     }
   }
 
-  const finish = (count, positions) => {
-    const devs = buildDevices(mainScreen, count, positions)
+  const finish = (count, positions, camera) => {
+    const devs = buildDevices(mainScreen, count, positions, camera)
     setDevices(devs)
     onContinue()
   }
@@ -260,8 +281,9 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
 
   const canAdvance = () => {
     if (step === 1) return mainScreen !== null
-    if (step === 2) return extraCount !== null
-    if (step === 3) return extraPositions.slice(0, extraCount).every(p => p !== null)
+    if (step === 2) return cameraPosition !== null
+    if (step === 3) return extraCount !== null
+    if (step === 4) return extraPositions.slice(0, extraCount).every(p => p !== null)
     return false
   }
 
@@ -344,12 +366,18 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
           />
         )}
         {step === 2 && (
+          <StepCamera
+            cameraPosition={cameraPosition}
+            setCameraPosition={setCameraPosition}
+          />
+        )}
+        {step === 3 && (
           <StepTwo
             extraCount={extraCount}
             setExtraCount={setExtraCount}
           />
         )}
-        {step === 3 && (
+        {step === 4 && (
           <StepThree
             extraCount={extraCount}
             extraPositions={extraPositions}
@@ -373,11 +401,45 @@ function Wizard({ devices, setDevices, onContinue, onAdvanced }) {
             transition: 'background 0.15s, color 0.15s',
           }}
         >
-          {step === 1 && mainScreen === 'both' ? 'Done' :
-           step === 2 && extraCount === 0 ? 'Done' :
-           step === 3 ? 'Done' : 'Next →'}
+          {step === 2 && mainScreen === 'both' ? 'Done' :
+           step === 3 && extraCount === 0 ? 'Done' :
+           step === 4 ? 'Done' : 'Next →'}
         </button>
 
+      </div>
+    </div>
+  )
+}
+
+function StepCamera({ cameraPosition, setCameraPosition }) {
+  const options = [
+    ['laptop', 'Laptop built-in'],
+    ['externalTop', 'External monitor top'],
+    ['sideLeft', 'Side-left'],
+    ['sideRight', 'Side-right'],
+    ['low', 'Low angle'],
+    ['high', 'High angle'],
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a', margin: '0 0 8px' }}>
+          Where is your webcam?
+        </h2>
+        <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>
+          This helps avoid false focus penalties from camera angle
+        </p>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {options.map(([id, label]) => (
+          <PillOption
+            key={id}
+            label={label}
+            selected={cameraPosition === id}
+            onClick={() => setCameraPosition(id)}
+          />
+        ))}
       </div>
     </div>
   )

@@ -118,14 +118,27 @@ function OverlayIcon({ type }) {
   return null
 }
 
+let lastThresholdLogKey = ''
+
 function computeThresholds(devices = []) {
   // Science: ergonomic laptop posture = 15-20° downward head pitch is NORMAL (Stanford, Pitt).
   // Default pitchDown starts at 25° to avoid false-positives for laptop users.
   // Explicit laptop device bumps it further to 30° (user is definitely looking down at screen).
-  let yawLeft = 30, yawRight = 30, pitchDown = 25, pitchUp = 15
+  let yawLeft = 30, yawRight = 30, pitchDown = 25, pitchUp = 15, yawNeutral = 0
   const workspaceObjects = normalizeWorkspaceObjects(devices)
+  const camera = workspaceObjects.find(d => d.type === 'camera')
   const hasLaptop = workspaceObjects.some(d => d.type === 'laptop')
   if (hasLaptop) pitchDown = 30  // laptop = 15-20° natural downward gaze, 30° is safe threshold
+
+  if (camera) {
+    const cameraCol = camera.col ?? 0.5
+    const cameraRow = camera.row ?? 0.0
+    if (cameraRow > 0.5) pitchDown = Math.max(12, pitchDown - 8)
+    if (cameraRow < 0) pitchDown = Math.max(pitchDown, pitchDown + 5)
+    if (cameraCol < 0.2) yawNeutral = 12
+    if (cameraCol > 0.8) yawNeutral = -12
+  }
+
   for (const d of workspaceObjects) {
     const role = d.role || defaultRoleForType(d.type)
     const isScreen = isScreenRole(role)
@@ -137,7 +150,24 @@ function computeThresholds(devices = []) {
     if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 35)
     if (isProductiveDownwardRole(role) && row < 0.45) pitchDown = Math.max(pitchDown, 34)
   }
-  return { yawLeft, yawRight, pitchDown, pitchUp }
+
+  const cameraRow = camera?.row ?? 0.0
+  const workZonePitchMin = cameraRow > 0.5 ? 0 : cameraRow < 0 ? 5 : 3
+  const workZonePitchMax = Math.max(
+    workZonePitchMin + 4,
+    pitchDown * (cameraRow > 0.5 ? 0.55 : cameraRow < 0 ? 0.8 : 0.7)
+  )
+  const thresholds = { yawLeft, yawRight, yawNeutral, pitchDown, pitchUp, workZonePitchMin, workZonePitchMax }
+
+  if (import.meta.env.DEV) {
+    const logKey = JSON.stringify(thresholds)
+    if (logKey !== lastThresholdLogKey) {
+      lastThresholdLogKey = logKey
+      console.log('[Eudaimonia] focus thresholds', thresholds)
+    }
+  }
+
+  return thresholds
 }
 
 function clamp01(value) {
@@ -171,6 +201,25 @@ function classifyDownwardAttention(devices = [], pitchDeg = 0, yawSigned = 0) {
   if (productive) return { kind: 'productive', object: productive.object, role: productive.role }
   if (pitchDeg >= PHONE_PITCH_THRESH) return { kind: 'unknown_phone' }
   return { kind: 'unknown' }
+}
+
+function classifyHorizontalAttention(devices = [], yawSigned = 0) {
+  if (Math.abs(yawSigned) < 10) return { kind: 'center' }
+
+  const workspaceObjects = normalizeWorkspaceObjects(devices)
+  const hasLeftScreen = workspaceObjects.some(d => {
+    const role = d.role || defaultRoleForType(d.type)
+    return isScreenRole(role) && (d.col ?? 0.5) < 0.3
+  })
+  const hasRightScreen = workspaceObjects.some(d => {
+    const role = d.role || defaultRoleForType(d.type)
+    return isScreenRole(role) && (d.col ?? 0.5) > 0.7
+  })
+
+  if (yawSigned > 20 && hasRightScreen) return { kind: 'productive_right' }
+  if (yawSigned < -20 && hasLeftScreen) return { kind: 'productive_left' }
+  if (Math.abs(yawSigned) > 30) return { kind: 'unknown_horizontal' }
+  return { kind: 'center' }
 }
 
 function dist2d(a, b) {
@@ -514,7 +563,15 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
 // ── Main component ────────────────────────────────────────────────────────────
 export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const totalSeconds = duration * 60
-  const { yawLeft: yawLT, yawRight: yawRT, pitchDown: pitchDT, pitchUp: pitchUpDT } = computeThresholds(devices)
+  const {
+    yawLeft: yawLT,
+    yawRight: yawRT,
+    yawNeutral,
+    pitchDown: pitchDT,
+    pitchUp: pitchUpDT,
+    workZonePitchMin,
+    workZonePitchMax,
+  } = computeThresholds(devices)
   const alertDelayMs = devices.length >= 1 ? 120_000 : 90_000
 
   const [timeLeft,        setTimeLeft]        = useState(totalSeconds)
@@ -770,7 +827,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       perclosHistRef.current.push({ t: now, heavy: avgEar < earHeavy })
       nosePtHistRef.current.push({ t: now, x: f.nosePt.x, y: f.nosePt.y })
     }
-    gazeSignalRef.current = { hasFace, pitchDeg, yawSigned }
+    const adjustedYawSigned = yawSigned - yawNeutral
+    gazeSignalRef.current = { hasFace, pitchDeg, yawSigned: adjustedYawSigned }
 
     const tenAgo   = now - BLINK_WIN_MS
     const thirtyAgo = now - PERCLOS_WIN_MS
@@ -825,13 +883,13 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       headDownFramesRef.current = 0
       headDownStartRef.current = null
     }
-    if (hasFace && yawSigned >= yawLT) {
+    if (hasFace && adjustedYawSigned >= yawLT) {
       headTurnLeftFramesRef.current += 1
     } else {
       headTurnLeftFramesRef.current = 0
       headTurnLeftStartRef.current = null
     }
-    if (hasFace && -yawSigned >= yawRT) {
+    if (hasFace && -adjustedYawSigned >= yawRT) {
       headTurnRightFramesRef.current += 1
     } else {
       headTurnRightFramesRef.current = 0
@@ -857,10 +915,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const fidgetVariance = headVariance(nosePtHistRef.current)
     const eyesRolledUp   = hasFace && irisV > 0.25
     const downwardContext = hasFace
-      ? classifyDownwardAttention(devices, pitchDeg, yawSigned)
+      ? classifyDownwardAttention(devices, pitchDeg, adjustedYawSigned)
       : { kind: 'none' }
+    const horizontalContext = hasFace
+      ? classifyHorizontalAttention(devices, adjustedYawSigned)
+      : { kind: 'center' }
     const productiveDownward = downwardContext.kind === 'productive'
     const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
+    const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
+      horizontalContext.kind === 'productive_right'
+    const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
 
     // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
     // it counts — a momentary downward glance shouldn't trigger the severe penalty
@@ -933,10 +997,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (fidgetVariance <= HEAD_DRIFT_THRESH * 0.5) score += 5
       else if (fidgetVariance <= HEAD_DRIFT_THRESH) score += 2
 
-      // Work-zone gaze: camera is at top of screen, so pitch 3–15° down = looking at screen
-      // pitch ≈ 0 means staring at camera — not a focus signal
-      if (pitchDeg >= 3 && pitchDeg < pitchDT * 0.7) score += 5
+      // Work-zone gaze: pitch range adapts to webcam height.
+      // pitch ≈ 0 means staring at a top camera, but can be normal for low-angle cameras.
+      if (pitchDeg >= workZonePitchMin && pitchDeg < workZonePitchMax) score += 5
       if (productiveDownward) score += 3
+      if (productiveHorizontal) score += 2
 
       // ── Penalties ─────────────────────────────────────────────────────────
       if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
@@ -978,10 +1043,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         if (productiveDownward) score -= 1
         else score -= 8
       }
-      if (yawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
-      else if (yawSigned >= yawLT * 0.6) score -= 8
-      if (-yawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
-      else if (-yawSigned >= yawRT * 0.6) score -= 8
+      if (!productiveHorizontal) {
+        if (unknownHorizontal) {
+          score -= 8
+        } else {
+          if (adjustedYawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
+          else if (adjustedYawSigned >= yawLT * 0.6) score -= 8
+          if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
+          else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
+        }
+      }
       if (eyesRolledUp) score -= 15
     }
 
@@ -1134,7 +1205,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       if (fidgetVariance <= HEAD_DRIFT_THRESH) conf += 0.2
     }
     confidenceRef.current = conf
-  }, [alertDelayMs, devices, yawLT, yawRT, pitchDT, pitchUpDT])
+  }, [alertDelayMs, devices, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
