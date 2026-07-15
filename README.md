@@ -18,6 +18,23 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173)
 
+## Activity Tracking (macOS)
+
+For accurate focus scoring, run the local activity daemon:
+
+```bash
+cd scripts
+chmod +x start-daemon.sh
+./start-daemon.sh
+```
+
+The daemon tracks your active app and sends it to Eudaimonia to improve focus scoring.
+Stop it with:
+
+```bash
+./stop-daemon.sh
+```
+
 ## Deployment (Vercel)
 
 1. Go to [vercel.com](https://vercel.com) → **New Project**

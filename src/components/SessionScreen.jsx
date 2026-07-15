@@ -5,6 +5,8 @@ import {
   isScreenRole,
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
+import { getLastActivity, isDaemonConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { loadFocusAppsConfig } from '../lib/storage'
 
 // ── FaceMesh landmark indices ──────────────────────────────────────────────────
 const RIGHT_EYE   = [33,  160, 158, 133, 153, 144]
@@ -60,6 +62,8 @@ const SCORE_UPDATE_SECS      = 5
 const CALIBRATION_SECS       = 20
 const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 min
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
+const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
+const ACTIVITY_REASON_HOLD_MS      = 30_000
 
 // ── Circadian thresholds ───────────────────────────────────────────────────────
 // Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
@@ -75,6 +79,7 @@ function getCircadianFactor() {
 const REASON_LABELS = {
   away:       '→ looking away',
   phone:      '→ phone detected',
+  distraction_app: '→ wrong app open',
   prolonged:  '→ eyes tired',
   yawn:       '→ yawning',
   lookingup:  '→ mind wandering',
@@ -86,6 +91,7 @@ const REASON_LABELS = {
 const ALERT_MESSAGES = {
   default:    { text: 'Hey — come back.',        sub: 'Your session is still running',   icon: null },
   phone:      { text: 'Put the phone down.',     sub: 'Eyes back on the screen',         icon: 'phone' },
+  distraction_app: { text: 'Switch back to your work.', sub: 'A distraction app is open', icon: 'away' },
   away:       { text: 'Come back to your work.', sub: 'Your session is still running',   icon: 'away' },
   yawn:       { text: 'Take a 2-minute break.',  sub: 'Stand up, stretch, come back strong', icon: 'yawn' },
   lookingup:  { text: 'Eyes on the task.',       sub: 'Bring your focus back here',      icon: 'lookingup' },
@@ -608,6 +614,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const [gazePos,         setGazePos]         = useState(null) // {x, y} normalized 0..1
   const [detectionConf,   setDetectionConf]   = useState(0)   // 0..1 signal quality
   const [scoreHistory,    setScoreHistory]    = useState([68])
+  const [activityStatus,  setActivityStatus]  = useState(() => getLastActivity())
 
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
@@ -649,6 +656,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
   const distractedSinceRef     = useRef(null)
   const lastGentleReminderRef  = useRef(0)
+  const activityRef            = useRef(getLastActivity())
+  const focusAppsConfigRef     = useRef(loadFocusAppsConfig())
+  const activeDistractionAppRef = useRef(null)
+  const activeDistractionSinceRef = useRef(null)
   // Ref stays in sync with state via useEffect to avoid stale closure in handleFaceResults
   const gentleReminderEnabledRef = useRef(gentleReminderEnabled)
 
@@ -717,6 +728,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   useEffect(() => {
     gentleReminderEnabledRef.current = gentleReminderEnabled
   }, [gentleReminderEnabled])
+
+  useEffect(() => {
+    focusAppsConfigRef.current = loadFocusAppsConfig()
+    startActivityPolling((activity) => {
+      activityRef.current = activity
+      setActivityStatus(activity)
+    })
+    return () => stopActivityPolling()
+  }, [])
 
   const toggleGentleReminder = useCallback(() => {
     setGentleReminderEnabled(prev => {
@@ -928,6 +948,33 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
       horizontalContext.kind === 'productive_right'
+    const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
+    const activeActivity = activityRef.current
+    const activeApp = typeof activeActivity?.app === 'string' ? activeActivity.app.trim() : ''
+    const activeAppKey = activeApp.toLowerCase()
+    const daemonConnected = isDaemonConnected()
+    const { focusApps, distractionApps } = focusAppsConfigRef.current
+    const focusAppKeys = new Set(focusApps.map(app => app.toLowerCase()))
+    const distractionAppKeys = new Set(distractionApps.map(app => app.toLowerCase()))
+    const activityIsFocus = daemonConnected && activeAppKey && focusAppKeys.has(activeAppKey)
+    const activityIsDistraction = daemonConnected && activeAppKey && distractionAppKeys.has(activeAppKey)
+
+    if (activityIsDistraction) {
+      if (activeDistractionAppRef.current !== activeAppKey) {
+        activeDistractionAppRef.current = activeAppKey
+        activeDistractionSinceRef.current = now
+      } else if (!activeDistractionSinceRef.current) {
+        activeDistractionSinceRef.current = now
+      }
+    } else {
+      activeDistractionAppRef.current = null
+      activeDistractionSinceRef.current = null
+    }
+    const activityDistractionMs = activeDistractionSinceRef.current
+      ? now - activeDistractionSinceRef.current
+      : 0
+    const activityPenalty = activityDistractionMs >= ACTIVITY_DISTRACTION_HOLD_MS ? 20 : 0
+    const activityBonus = activityIsFocus ? 8 : 0
 
     // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
     // it counts — a momentary downward glance shouldn't trigger the severe penalty
@@ -1007,8 +1054,15 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // Secondary monitor gaze = same focus value as primary screen gaze.
       // A second monitor is a work tool, not a distraction — treat it identically.
       if (productiveHorizontal) score += 5
+      if (activityBonus) score += activityBonus
 
       // ── Penalties ─────────────────────────────────────────────────────────
+      if (activityPenalty) {
+        score -= activityPenalty
+        if (activityDistractionMs >= ACTIVITY_REASON_HOLD_MS && primaryReason === 'focused') {
+          primaryReason = 'distraction_app'
+        }
+      }
       if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
         score -= 45
         primaryReason = 'phone'
@@ -1365,6 +1419,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
   const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
   const showStreak = !isCalibrating && currentStreak > 30
+  const activityConnected = isDaemonConnected()
+  const activityAppLabel = activityConnected && activityStatus?.app ? activityStatus.app : 'No activity data'
 
   const dismissBreak = () => {
     if (breakBanner) {
@@ -1581,6 +1637,34 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
       {/* Audio controls */}
       <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+        <div
+          title={activityConnected && activityStatus?.window ? activityStatus.window : undefined}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            background: '#1C1F28',
+            border: '1px solid #2A2E3A',
+            borderRadius: 100,
+            padding: '6px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            color: activityConnected ? '#94a3b8' : '#6b7280',
+            maxWidth: 220,
+          }}
+        >
+          <span style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: activityConnected ? '#22c55e' : '#6b7280',
+            boxShadow: activityConnected ? '0 0 0 2px #22c55e28' : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activityAppLabel}
+          </span>
+        </div>
         <button
           onClick={cycleAmbient}
           aria-label={`Ambient sound: ${AMBIENT_LABELS[ambientMode]}`}

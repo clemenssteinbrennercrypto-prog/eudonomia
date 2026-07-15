@@ -4,6 +4,7 @@ import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
 import WorkspaceSetup from './components/WorkspaceSetup'
+import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
@@ -90,7 +91,11 @@ export default function App() {
           onStart={handleStart}
           onShowHistory={() => setScreen('history')}
           onShowSetup={() => setScreen('setup')}
+          onShowFocusApps={() => setScreen('focus-apps')}
         />
+      )}
+      {screen === 'focus-apps' && (
+        <FocusAppsScreen onBack={() => setScreen('home')} />
       )}
       {screen === 'setup' && (
         <WorkspaceSetup

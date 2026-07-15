@@ -4,6 +4,21 @@
 
 const STORAGE_KEY = 'eudaimonia_sessions'
 const MAX_SESSIONS = 100
+export const FOCUS_APPS_KEY = 'eudaimonia_focus_apps'
+
+function normalizeAppList(apps) {
+  if (!Array.isArray(apps)) return []
+  const seen = new Set()
+  return apps
+    .map(app => String(app || '').trim())
+    .filter(Boolean)
+    .filter(app => {
+      const key = app.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
 
 export function saveSession(sessionData) {
   const sessions = loadSessions()
@@ -44,4 +59,27 @@ export function updateSession(id, patch) {
 
 export function clearAllSessions() {
   localStorage.removeItem(STORAGE_KEY)
+}
+
+export function loadFocusAppsConfig() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOCUS_APPS_KEY) || '{}')
+    return {
+      focusApps: normalizeAppList(raw.focusApps),
+      distractionApps: normalizeAppList(raw.distractionApps),
+    }
+  } catch {
+    return { focusApps: [], distractionApps: [] }
+  }
+}
+
+export function saveFocusAppsConfig(config) {
+  const normalized = {
+    focusApps: normalizeAppList(config?.focusApps),
+    distractionApps: normalizeAppList(config?.distractionApps),
+  }
+  try {
+    localStorage.setItem(FOCUS_APPS_KEY, JSON.stringify(normalized))
+  } catch {}
+  return normalized
 }

@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
-import { loadSessions } from '../lib/storage'
+import { loadFocusAppsConfig, loadSessions } from '../lib/storage'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
@@ -69,6 +69,7 @@ export default function HomeScreen({
   onStart,
   onShowHistory,
   onShowSetup,
+  onShowFocusApps,
 }) {
   const [legalTab, setLegalTab] = useState(null)
   const [taskFocused, setTaskFocused] = useState(false)
@@ -77,6 +78,7 @@ export default function HomeScreen({
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
   const sessionCount = useMemo(() => loadSessions().length, [])
+  const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
     const last3 = sessions.slice(0, 3).filter(s => s.actualSeconds > 0 && s.focusedSeconds != null)
@@ -275,6 +277,31 @@ export default function HomeScreen({
               <span style={{ fontSize: 16, color: '#c4c9d4', marginLeft: 12 }}>→</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={onShowFocusApps}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#fff',
+              border: '1.5px solid #E8E3DA',
+              borderRadius: 14,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1a2e4a' }}>
+              Focus Apps
+            </span>
+            <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>
+              {focusAppsConfig.focusApps.length} focus apps · {focusAppsConfig.distractionApps.length} distraction apps
+            </span>
+          </button>
 
           {/* Task input */}
           <div className="field">
