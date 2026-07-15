@@ -924,7 +924,10 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const endSession = useCallback((completed = false) => {
     if (sessionEndedRef.current) return
     sessionEndedRef.current = true
-    localStorage.removeItem('eudaimonia_session_active')
+    // Keep the key present (rather than removing it) so the extension content
+    // script — injected into every tab — can tell "this is the app's own tab,
+    // session just ended" apart from "this tab never touched the key at all".
+    localStorage.setItem('eudaimonia_session_active', 'false')
     localStorage.removeItem('eudaimonia_session_end_ts')
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
@@ -1240,6 +1243,14 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       score = 0
       primaryReason = 'away'
       sustainedGoodMsRef.current = 0  // ramp resets when person is clearly away
+      // Activity-based bonus/penalty accumulators must reset here too, otherwise
+      // a distraction penalty built up while the user is away from the webcam
+      // gets slapped on in full the instant they return.
+      activeFocusAppRef.current = null
+      activeDistractionAppRef.current = null
+      activeDistractionSinceRef.current = null
+      activityFocusBonusRef.current = 0
+      activityDistractionPenaltyRef.current = 0
     } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
       score = focusScoreRef.current * 0.88
     } else if (hasFace) {

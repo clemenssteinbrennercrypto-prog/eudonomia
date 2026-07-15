@@ -21,7 +21,13 @@ function syncToLocalStorage() {
 
 function syncSessionFlag() {
   try {
-    const active = localStorage.getItem(SESSION_ACTIVE_KEY) === 'true'
+    const activeRaw = localStorage.getItem(SESSION_ACTIVE_KEY)
+    // This content script runs on every tab (all_urls), but the session flag
+    // is per-origin localStorage — only the Eudaimonia app tab ever sets this
+    // key. Every other tab must leave the shared flag alone, otherwise they'd
+    // continuously clobber it back to false and break redirect blocking.
+    if (activeRaw === null) return
+    const active = activeRaw === 'true'
     const endTs = localStorage.getItem(SESSION_END_KEY)
     chrome.storage.local.set({ [SESSION_ACTIVE_KEY]: active })
     if (endTs) {

@@ -1,8 +1,9 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
+import time
 
 
-last_activity = {"app": None, "window": None, "url": None, "full_url": None}
+last_activity = {"app": None, "window": None, "url": None, "full_url": None, "ts": 0}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -31,6 +32,7 @@ class Handler(BaseHTTPRequestHandler):
                     "window": data.get("window"),
                     "url": data.get("url"),
                     "full_url": data.get("full_url"),
+                    "ts": int(time.time() * 1000),
                 }
             except Exception:
                 pass
