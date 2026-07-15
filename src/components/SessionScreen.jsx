@@ -133,8 +133,11 @@ function computeThresholds(devices = []) {
     const isScreen = isScreenRole(role)
     const col = d.col ?? 0.5
     const row = d.row ?? 0.5
-    if (isScreen && col < 0.35)  yawLeft   = Math.max(yawLeft,   55)
-    if (isScreen && col > 0.65)  yawRight  = Math.max(yawRight,  55)
+    // Widen yaw tolerance for any screen that's off-center.
+    // Use 0.45/0.55 boundary to match classifyHorizontalAttention — prevents
+    // situation where monitor is "configured" but yaw threshold isn't widened.
+    if (isScreen && col < 0.45)  yawLeft   = Math.max(yawLeft,   55)
+    if (isScreen && col > 0.55)  yawRight  = Math.max(yawRight,  55)
     if (isScreen && row > 0.6)   pitchUp   = Math.max(pitchUp,   28)
     if (isScreen && row < 0.3)   pitchDown = Math.max(pitchDown, 35)
     if (isProductiveDownwardRole(role) && row < 0.45) pitchDown = Math.max(pitchDown, 34)
@@ -199,17 +202,26 @@ function classifyHorizontalAttention(devices = [], yawSigned = 0) {
   if (Math.abs(yawSigned) < 10) return { kind: 'center' }
 
   const workspaceObjects = normalizeWorkspaceObjects(devices)
-  const hasLeftScreen = workspaceObjects.some(d => {
+
+  // Use col < 0.45 / col > 0.55 as the screen-side boundary.
+  // Wizard places side monitors at col=0.2 (left) and col=0.8 (right).
+  // col=0.35/0.65 would cut them off — wider boundary is correct.
+  const leftScreens = workspaceObjects.filter(d => {
     const role = d.role || defaultRoleForType(d.type)
-    return isScreenRole(role) && (d.col ?? 0.5) < 0.3
+    return isScreenRole(role) && (d.col ?? 0.5) < 0.45
   })
-  const hasRightScreen = workspaceObjects.some(d => {
+  const rightScreens = workspaceObjects.filter(d => {
     const role = d.role || defaultRoleForType(d.type)
-    return isScreenRole(role) && (d.col ?? 0.5) > 0.7
+    return isScreenRole(role) && (d.col ?? 0.5) > 0.55
   })
 
-  if (yawSigned > 20 && hasRightScreen) return { kind: 'productive_right' }
-  if (yawSigned < -20 && hasLeftScreen) return { kind: 'productive_left' }
+  const hasLeftScreen  = leftScreens.length > 0
+  const hasRightScreen = rightScreens.length > 0
+
+  // Lower the yaw trigger threshold to 15 deg so moderate head turns are caught.
+  // A 20 deg threshold was too high — users don't turn that far for a side monitor.
+  if (yawSigned > 15 && hasRightScreen) return { kind: 'productive_right' }
+  if (yawSigned < -15 && hasLeftScreen) return { kind: 'productive_left' }
   if (Math.abs(yawSigned) > 30) return { kind: 'unknown_horizontal' }
   return { kind: 'center' }
 }
@@ -993,7 +1005,9 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // pitch ≈ 0 means staring at a top camera, but can be normal for low-angle cameras.
       if (pitchDeg >= workZonePitchMin && pitchDeg < workZonePitchMax) score += 5
       if (productiveDownward) score += 3
-      if (productiveHorizontal) score += 2
+      // Secondary monitor gaze = same focus value as primary screen gaze.
+      // A second monitor is a work tool, not a distraction — treat it identically.
+      if (productiveHorizontal) score += 5
 
       // ── Penalties ─────────────────────────────────────────────────────────
       if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
