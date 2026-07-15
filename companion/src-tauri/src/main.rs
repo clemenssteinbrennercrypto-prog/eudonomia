@@ -9,7 +9,9 @@
 mod activity;
 mod server;
 
-use activity::{ActivityState, SessionConfig, SharedActivity, SharedSession};
+use activity::{
+    ActivityState, DebugState, SessionConfig, SharedActivity, SharedDebug, SharedSession,
+};
 use server::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -79,12 +81,14 @@ fn quit_app(app: tauri::AppHandle) {
 fn main() {
     let state: SharedActivity = Arc::new(Mutex::new(ActivityState::default()));
     let session: SharedSession = Arc::new(Mutex::new(SessionConfig::default()));
+    let debug: SharedDebug = Arc::new(Mutex::new(DebugState::default()));
 
-    activity::start_polling(state.clone(), session.clone());
+    activity::start_polling(state.clone(), session.clone(), debug.clone());
 
     let server_state = AppState {
         activity: state.clone(),
         session: session.clone(),
+        debug: debug.clone(),
     };
 
     tauri::Builder::default()
@@ -97,7 +101,8 @@ fn main() {
             // HTTP server on the tauri-managed tokio runtime.
             tauri::async_runtime::spawn(server::run(server_state.clone()));
 
-            let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia Companion", true, None::<&str>)?;
+            let quit =
+                MenuItem::with_id(app, "quit", "Quit Eudonomia Companion", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
 
             TrayIconBuilder::with_id("main-tray")

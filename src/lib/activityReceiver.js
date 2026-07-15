@@ -2,6 +2,7 @@ const STORAGE_KEY = 'eudaimonia_ext_activity'
 const STALE_MS = 10_000
 const DAEMON_STATUS_URL = 'http://localhost:7331/status'
 const DAEMON_SESSION_URL = 'http://localhost:7331/session'
+const DAEMON_DEBUG_URL = 'http://localhost:7331/debug'
 const DAEMON_POLL_MS = 3000
 
 let lastActivity = { url: null, domain: null, title: null, app: '', ts: 0 }
@@ -79,21 +80,37 @@ export function isDaemonConnected() {
 }
 
 // Push session state + blocking config to the Companion app (Tauri, port 7331).
-// Fire-and-forget: the companion is optional, so failures are silently ignored.
+// The companion is optional, so failures are reported without breaking sessions.
 // While `active` is true the companion enforces blocking on its own: blocked
 // native apps get hidden, blocked browser domains get redirected. The endTs
 // acts as the companion-side failsafe (blocking self-expires after endTs+grace).
-export function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [] }) {
+export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [] }) {
   try {
-    fetch(DAEMON_SESSION_URL, {
+    const res = await fetch(DAEMON_SESSION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active, endTs, blockedApps, blockedDomains }),
       signal: AbortSignal.timeout(1500),
-    }).catch(() => {})
-  } catch {
-    // AbortSignal.timeout unsupported or fetch threw synchronously — ignore.
+    })
+    if (!res.ok) {
+      console.warn('[companion] session push failed', res.status)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.warn('[companion] session push failed', err)
+    return false
   }
+}
+
+export async function fetchCompanionDebug() {
+  try {
+    const res = await fetch(DAEMON_DEBUG_URL, {
+      signal: AbortSignal.timeout(2000),
+    })
+    if (res.ok) return res.json()
+  } catch {}
+  return null
 }
 
 export function isExtensionConnected() {

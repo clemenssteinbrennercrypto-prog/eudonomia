@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ExtensionSetup from './ExtensionSetup'
-import { getLastActivity, isExtensionConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import {
+  fetchCompanionDebug,
+  getLastActivity,
+  isExtensionConnected,
+  pushCompanionSession,
+  startActivityPolling,
+  stopActivityPolling,
+} from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadFocusModeEnabled, saveFocusAppsConfig, saveFocusModeEnabled } from '../lib/storage'
 
@@ -242,6 +249,98 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
   )
 }
 
+function CompanionStatus() {
+  const [debug, setDebug] = useState(null)
+  const [connected, setConnected] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      const next = await fetchCompanionDebug()
+      if (cancelled) return
+      setDebug(next)
+      setConnected(Boolean(next))
+    }
+
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
+
+  const tone = !connected ? 'red' : debug?.sessionActive ? 'green' : 'yellow'
+  const colors = {
+    green: { border: '#bbf7d0', bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
+    yellow: { border: '#fde68a', bg: '#fffbeb', text: '#92400e', dot: '#f59e0b' },
+    red: { border: '#fecaca', bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
+  }[tone]
+
+  const label = !connected
+    ? '✗ Companion not found — blocking disabled'
+    : debug?.sessionActive
+      ? `✓ Companion connected — blocking active (${debug.blockedAppsCount || 0} apps, ${debug.blockedDomainsCount || 0} domains)`
+      : '⚠ Companion connected — no active session'
+
+  const lastActivity = debug?.lastActivity
+  const activityLabel = lastActivity?.domain || lastActivity?.app || null
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 7,
+        width: 'fit-content',
+        maxWidth: '100%',
+        border: `1px solid ${colors.border}`,
+        borderRadius: 100,
+        padding: '6px 11px',
+        color: colors.text,
+        background: colors.bg,
+        fontSize: 12,
+        fontWeight: 900,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        <span style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: colors.dot,
+          boxShadow: `0 0 0 2px ${colors.dot}28`,
+          flexShrink: 0,
+        }} />
+        {label}
+      </span>
+
+      {debug?.permissionMissing && (
+        <div style={{
+          border: '1px solid #fbbf24',
+          background: '#fffbeb',
+          color: '#92400e',
+          borderRadius: 12,
+          padding: '10px 12px',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.45,
+        }}>
+          ⚠ Missing Automation permission for {debug.permissionMissing}. Go to: System Settings → Privacy & Security → Automation → enable Eudonomia Companion for {debug.permissionMissing}
+        </div>
+      )}
+
+      {connected && (
+        <div style={{ color: '#8a8177', fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>
+          {activityLabel ? `Last activity: ${activityLabel}` : 'Last activity: none yet'}
+          {debug?.lastOsascriptError ? ` · osascript: ${debug.lastOsascriptError}` : ''}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusModeEnabled }) {
   const initial = useMemo(() => loadFocusAppsConfig(), [])
   const [focusApps, setFocusApps] = useState(initial.focusApps)
@@ -252,6 +351,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
   const [extensionConnected, setExtensionConnected] = useState(() => isExtensionConnected())
+  const [testFeedback, setTestFeedback] = useState('')
+  const testTimerRef = useRef(null)
 
   const configuredCount = focusApps.length + distractionApps.length
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
@@ -275,6 +376,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     }
   }, [])
 
+  useEffect(() => () => {
+    if (testTimerRef.current) clearTimeout(testTimerRef.current)
+  }, [])
+
   const toggleFocusMode = () => {
     const next = !modeEnabled
     if (setFocusModeEnabled) setFocusModeEnabled(next)
@@ -287,6 +392,31 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     setDistractionApps(next.distractionApps)
     setSaved(true)
     setTimeout(() => setSaved(false), 1800)
+  }
+
+  const handleTestBlocking = () => {
+    if (testTimerRef.current) clearTimeout(testTimerRef.current)
+
+    const blockedApps = distractionApps
+    const blockedDomains = [...new Set(domainsFor(distractionApps))]
+    pushCompanionSession({
+      active: true,
+      endTs: Date.now() + 60_000,
+      blockedApps,
+      blockedDomains,
+    })
+    setTestFeedback('Test session active for 60s')
+
+    testTimerRef.current = setTimeout(() => {
+      pushCompanionSession({
+        active: false,
+        endTs: 0,
+        blockedApps: [],
+        blockedDomains: [],
+      })
+      setTestFeedback('')
+      testTimerRef.current = null
+    }, 60_000)
   }
 
   return (
@@ -401,6 +531,46 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               }} />
             </button>
           </label>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          background: '#fff',
+          border: '1px solid #E8E3DA',
+          borderRadius: 16,
+          padding: '12px 16px',
+          boxShadow: '0 2px 20px rgba(26,46,74,0.05)',
+        }}>
+          <CompanionStatus />
+          <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
+            <button
+              type="button"
+              onClick={handleTestBlocking}
+              style={{
+                background: '#1a2e4a',
+                border: 'none',
+                borderRadius: 12,
+                padding: '9px 13px',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 900,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Test Blocking (60s)
+            </button>
+            {testFeedback && (
+              <span style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+                {testFeedback}
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{

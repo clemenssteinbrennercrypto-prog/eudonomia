@@ -20,6 +20,19 @@ pub struct ActivityState {
 
 pub type SharedActivity = Arc<Mutex<ActivityState>>;
 
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DebugState {
+    pub last_osascript_error: Option<String>,
+    pub permission_missing: Option<String>,
+    pub last_poll_ts: u64,
+    pub session_active: bool,
+    pub session_end_ts: u64,
+    pub blocked_apps_count: usize,
+    pub blocked_domains_count: usize,
+}
+
+pub type SharedDebug = Arc<Mutex<DebugState>>;
+
 /// Blocking configuration pushed by the Eudonomia web app via POST /session.
 /// While a session is active, blocked apps get hidden and blocked browser
 /// domains get redirected away — enforcement lives in `enforce_blocking`.
@@ -49,14 +62,35 @@ const BROWSER_APPS: &[&str] = &[
     "Firefox",
 ];
 
-fn run_osascript(script: &str) -> Option<String> {
+fn run_osascript(
+    script: &str,
+    debug: &SharedDebug,
+    permission_context: Option<&str>,
+) -> Option<String> {
     let output = Command::new("osascript")
         .arg("-e")
         .arg(script)
         .output()
         .ok()?;
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !output.status.success() {
+        if let Ok(mut d) = debug.lock() {
+            d.last_osascript_error = Some(stderr.clone());
+            if stderr.contains("-1743") || stderr.contains("1743") {
+                d.permission_missing = Some(
+                    permission_context
+                        .unwrap_or("Browser (check Automation permissions)")
+                        .to_string(),
+                );
+            }
+        }
         return None;
+    }
+    if let Ok(mut d) = debug.lock() {
+        d.last_osascript_error = None;
+        if permission_context.is_some() {
+            d.permission_missing = None;
+        }
     }
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if text.is_empty() {
@@ -66,7 +100,7 @@ fn run_osascript(script: &str) -> Option<String> {
     }
 }
 
-fn frontmost_app_and_window() -> Option<(String, String)> {
+fn frontmost_app_and_window(debug: &SharedDebug) -> Option<(String, String)> {
     let script = r#"tell application "System Events"
   set frontApp to first process whose frontmost is true
   try
@@ -76,7 +110,7 @@ fn frontmost_app_and_window() -> Option<(String, String)> {
   end try
   return (name of frontApp) & "|" & w
 end tell"#;
-    let raw = run_osascript(script)?;
+    let raw = run_osascript(script, debug, None)?;
     let mut parts = raw.splitn(2, '|');
     let app = parts.next().unwrap_or("").trim().to_string();
     let window = parts.next().unwrap_or("").trim().to_string();
@@ -87,7 +121,7 @@ end tell"#;
     }
 }
 
-fn browser_url(app: &str) -> Option<String> {
+fn browser_url(app: &str, debug: &SharedDebug) -> Option<String> {
     let script = match app {
         "Safari" => {
             r#"tell application "Safari"
@@ -107,7 +141,7 @@ end tell"#
         // Firefox has no AppleScript URL support — skip rather than error.
         _ => return None,
     };
-    run_osascript(&script)
+    run_osascript(&script, debug, Some(app))
 }
 
 /// Extract a bare hostname ("youtube.com") from a URL string, without pulling
@@ -141,15 +175,15 @@ fn escape_applescript(value: &str) -> String {
 
 /// Hide a blocked app via System Events. Hiding (not quitting) is deliberate:
 /// no unsaved-work loss, and macOS returns focus to the previous app.
-fn hide_app(app: &str) {
+fn hide_app(app: &str, debug: &SharedDebug) {
     let esc = escape_applescript(app);
     let script =
         format!(r#"tell application "System Events" to set visible of process "{esc}" to false"#);
-    let _ = run_osascript(&script);
+    let _ = run_osascript(&script, debug, None);
 }
 
 /// Redirect the front tab of a blocked browser page away from the distraction.
-fn redirect_browser_tab(app: &str) {
+fn redirect_browser_tab(app: &str, debug: &SharedDebug) {
     let script = match app {
         "Safari" => {
             r#"tell application "Safari" to set URL of current tab of front window to "about:blank""#
@@ -163,15 +197,15 @@ fn redirect_browser_tab(app: &str) {
         }
         _ => return,
     };
-    let _ = run_osascript(&script);
+    let _ = run_osascript(&script, debug, Some(app));
 }
 
-fn notify_blocked(label: &str) {
+fn notify_blocked(label: &str, debug: &SharedDebug) {
     let esc = escape_applescript(label);
     let script = format!(
         r#"display notification "{esc} is blocked during your focus session" with title "Eudonomia""#
     );
-    let _ = run_osascript(&script);
+    let _ = run_osascript(&script, debug, None);
 }
 
 fn normalize_domain_entry(entry: &str) -> Option<String> {
@@ -210,7 +244,12 @@ enum BlockAction {
 /// Check the frontmost activity against the session's block lists and act.
 /// Decisions happen under the lock; the (slow) osascript calls happen after
 /// it is released.
-fn enforce_blocking(session: &SharedSession, app: &str, domain: Option<&str>) {
+fn enforce_blocking(
+    session: &SharedSession,
+    debug: &SharedDebug,
+    app: &str,
+    domain: Option<&str>,
+) {
     let decision = {
         let Ok(mut cfg) = session.lock() else { return };
         if !cfg.active {
@@ -220,6 +259,12 @@ fn enforce_blocking(session: &SharedSession, app: &str, domain: Option<&str>) {
         if cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS {
             // Stale session (web app gone without cleanup) — self-heal.
             cfg.active = false;
+            if let Ok(mut d) = debug.lock() {
+                d.session_active = false;
+                d.session_end_ts = 0;
+                d.blocked_apps_count = 0;
+                d.blocked_domains_count = 0;
+            }
             return;
         }
 
@@ -249,27 +294,32 @@ fn enforce_blocking(session: &SharedSession, app: &str, domain: Option<&str>) {
 
     let (action, label, notify) = decision;
     match action {
-        BlockAction::HideApp => hide_app(app),
-        BlockAction::RedirectTab => redirect_browser_tab(app),
+        BlockAction::HideApp => hide_app(app, debug),
+        BlockAction::RedirectTab => redirect_browser_tab(app, debug),
     }
     if notify {
-        notify_blocked(&label);
+        notify_blocked(&label, debug);
     }
 }
 
-fn poll_once(state: &SharedActivity, session: &SharedSession) {
-    let Some((app, window)) = frontmost_app_and_window() else {
+fn poll_once(state: &SharedActivity, session: &SharedSession, debug: &SharedDebug) {
+    let poll_ts = now_ms();
+    if let Ok(mut d) = debug.lock() {
+        d.last_poll_ts = poll_ts;
+    }
+
+    let Some((app, window)) = frontmost_app_and_window(debug) else {
         return;
     };
 
     let url = if BROWSER_APPS.contains(&app.as_str()) {
-        browser_url(&app).filter(|u| !u.is_empty())
+        browser_url(&app, debug).filter(|u| !u.is_empty())
     } else {
         None
     };
     let domain = url.as_deref().and_then(extract_domain);
 
-    enforce_blocking(session, &app, domain.as_deref());
+    enforce_blocking(session, debug, &app, domain.as_deref());
 
     if let Ok(mut guard) = state.lock() {
         *guard = ActivityState {
@@ -284,9 +334,9 @@ fn poll_once(state: &SharedActivity, session: &SharedSession) {
 
 /// Spawn the polling loop. AppleScript via `osascript` is blocking, so the
 /// loop runs on a dedicated OS thread rather than a tokio task.
-pub fn start_polling(state: SharedActivity, session: SharedSession) {
+pub fn start_polling(state: SharedActivity, session: SharedSession, debug: SharedDebug) {
     std::thread::spawn(move || loop {
-        poll_once(&state, &session);
+        poll_once(&state, &session, &debug);
         std::thread::sleep(Duration::from_secs(3));
     });
 }
