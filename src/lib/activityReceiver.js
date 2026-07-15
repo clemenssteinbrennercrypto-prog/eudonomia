@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'eudaimonia_ext_activity'
 const STALE_MS = 10_000
 const DAEMON_STATUS_URL = 'http://localhost:7331/status'
+const DAEMON_SESSION_URL = 'http://localhost:7331/session'
 const DAEMON_POLL_MS = 3000
 
 let lastActivity = { url: null, domain: null, title: null, app: '', ts: 0 }
@@ -30,12 +31,14 @@ async function pollDaemon(onUpdate) {
     if (!res.ok) return
     const data = await res.json()
     if (!data?.ts) return
-    // Normalize the daemon's shape ({app, window, url, full_url, ts}) to match
-    // the browser-extension bridge shape ({app, domain, title, url, ts}) so
-    // classifyActivity() in SessionScreen.jsx can treat either source the same.
+    // Normalize the daemon's shape to match the browser-extension bridge shape
+    // ({app, domain, title, url, ts}) so classifyActivity() in SessionScreen.jsx
+    // can treat either source the same. Supports both the legacy Python daemon
+    // ({app, window, url, full_url, ts}) and the Tauri companion
+    // ({app, window, url, domain, ts}).
     applyIfFresher({
       app: data.app || '',
-      domain: data.url || '',
+      domain: data.domain || data.url || '',
       title: data.window || '',
       url: data.full_url || data.url || '',
       ts: data.ts,
@@ -73,6 +76,24 @@ export function getLastActivity() {
 
 export function isDaemonConnected() {
   return lastActivity.ts > 0 && (Date.now() - lastActivity.ts) < STALE_MS
+}
+
+// Push session state + blocking config to the Companion app (Tauri, port 7331).
+// Fire-and-forget: the companion is optional, so failures are silently ignored.
+// While `active` is true the companion enforces blocking on its own: blocked
+// native apps get hidden, blocked browser domains get redirected. The endTs
+// acts as the companion-side failsafe (blocking self-expires after endTs+grace).
+export function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [] }) {
+  try {
+    fetch(DAEMON_SESSION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active, endTs, blockedApps, blockedDomains }),
+      signal: AbortSignal.timeout(1500),
+    }).catch(() => {})
+  } catch {
+    // AbortSignal.timeout unsupported or fetch threw synchronously — ignore.
+  }
 }
 
 export function isExtensionConnected() {

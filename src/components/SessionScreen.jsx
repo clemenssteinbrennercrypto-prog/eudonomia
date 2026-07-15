@@ -5,7 +5,8 @@ import {
   isScreenRole,
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
-import { getLastActivity, isDaemonConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { getLastActivity, isDaemonConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig } from '../lib/storage'
 
 // ── FaceMesh landmark indices ──────────────────────────────────────────────────
@@ -902,14 +903,33 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   }, [focusModeEnabled])
 
   useEffect(() => {
+    const endTs = Date.now() + duration * 60 * 1000
     localStorage.setItem('eudaimonia_session_active', 'true')
-    localStorage.setItem('eudaimonia_session_end_ts', String(Date.now() + duration * 60 * 1000))
-    focusAppsConfigRef.current = loadFocusAppsConfig()
+    localStorage.setItem('eudaimonia_session_end_ts', String(endTs))
+    const focusCfg = loadFocusAppsConfig()
+    focusAppsConfigRef.current = focusCfg
+
+    // Tell the Companion app (if running) to enforce blocking on its own:
+    // distraction apps get hidden, distraction domains get redirected.
+    // Re-push every 30s as keepalive in case the companion restarts mid-session.
+    const blockedApps = focusCfg?.distractionApps || []
+    const blockedDomains = [...new Set([
+      ...(focusCfg?.distractionDomains || []),
+      ...blockedApps.flatMap((app) => getDomainsFromAppPreset(app)),
+    ])]
+    const pushBlocking = () => pushCompanionSession({ active: true, endTs, blockedApps, blockedDomains })
+    pushBlocking()
+    const blockingInterval = setInterval(pushBlocking, 30_000)
+
     startActivityPolling((activity) => {
       activityRef.current = activity
       setActivityStatus(activity)
     })
-    return () => stopActivityPolling()
+    return () => {
+      clearInterval(blockingInterval)
+      stopActivityPolling()
+      pushCompanionSession({ active: false })
+    }
   }, [duration])
 
   const toggleGentleReminder = useCallback(() => {
@@ -929,6 +949,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     // session just ended" apart from "this tab never touched the key at all".
     localStorage.setItem('eudaimonia_session_active', 'false')
     localStorage.removeItem('eudaimonia_session_end_ts')
+    pushCompanionSession({ active: false })
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0

@@ -9,7 +9,8 @@
 mod activity;
 mod server;
 
-use activity::{ActivityState, SharedActivity};
+use activity::{ActivityState, SessionConfig, SharedActivity, SharedSession};
+use server::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -77,10 +78,14 @@ fn quit_app(app: tauri::AppHandle) {
 
 fn main() {
     let state: SharedActivity = Arc::new(Mutex::new(ActivityState::default()));
+    let session: SharedSession = Arc::new(Mutex::new(SessionConfig::default()));
 
-    activity::start_polling(state.clone());
+    activity::start_polling(state.clone(), session.clone());
 
-    let server_state = state.clone();
+    let server_state = AppState {
+        activity: state.clone(),
+        session: session.clone(),
+    };
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![quit_app])
