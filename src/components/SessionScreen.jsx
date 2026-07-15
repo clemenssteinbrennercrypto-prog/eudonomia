@@ -928,7 +928,6 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
       horizontalContext.kind === 'productive_right'
-    const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
 
     // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
     // it counts — a momentary downward glance shouldn't trigger the severe penalty
@@ -1050,14 +1049,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
         else score -= 8
       }
       if (!productiveHorizontal) {
-        if (unknownHorizontal) {
-          score -= 8
-        } else {
-          if (adjustedYawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
-          else if (adjustedYawSigned >= yawLT * 0.6) score -= 8
-          if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
-          else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
-        }
+        // unknownHorizontal (|yaw| > 30 with no matching side screen) intentionally
+        // falls through to the same threshold+hold logic below rather than a flat
+        // penalty — otherwise it pre-empts the severe (-25) sustained-turn penalty,
+        // capping ALL large head turns at -8 regardless of duration (dead-code bug:
+        // with default yawLT=30, the >= yawLT severe check becomes unreachable
+        // since anything past 30 was being diverted to the flat -8 branch first).
+        if (adjustedYawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
+        else if (adjustedYawSigned >= yawLT * 0.6) score -= 8
+        if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
+        else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
       }
       if (eyesRolledUp) score -= 15
     }

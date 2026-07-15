@@ -118,8 +118,8 @@ function deviceLabel(type) {
 
 function directionFor(device) {
   const col = device.col ?? 0.5
-  if (col < 0.35) return 'left'
-  if (col > 0.65) return 'right'
+  if (col < 0.45) return 'left'
+  if (col > 0.55) return 'right'
   return 'center'
 }
 
@@ -128,7 +128,7 @@ function buildSummary(devices) {
   const laptops = screens.filter(device => device.type === 'laptop')
   const monitors = screens.filter(device => device.type === 'monitor')
   const cameras = devices.filter(device => device.type === 'camera')
-  const sideScreens = screens.filter(device => (device.col ?? 0.5) < 0.35 || (device.col ?? 0.5) > 0.65)
+  const sideScreens = screens.filter(device => (device.col ?? 0.5) < 0.45 || (device.col ?? 0.5) > 0.55)
   const hasLaptop = laptops.length > 0
   const downwardProductive = devices.some(device =>
     isProductiveDownwardRole(device.role || defaultRoleForType(device.type)) && (device.row ?? 0.5) <= 0.58
@@ -208,7 +208,7 @@ function buildAccuracyChecks(devices) {
   const cameraCol = camera?.col ?? 0.5
   const sideScreensReasonable = secondaryScreens.every(device => {
     const col = device.col ?? 0.5
-    return col < 0.35 || col > 0.65
+    return col < 0.45 || col > 0.55
   })
 
   return [
