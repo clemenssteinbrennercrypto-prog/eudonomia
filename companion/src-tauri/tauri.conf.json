@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Eudonomia Companion",
+  "version": "0.1.0",
+  "identifier": "ai.eudonomia.companion",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "icon": ["icons/icon.png"],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

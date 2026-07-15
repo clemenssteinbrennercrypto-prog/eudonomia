@@ -1,0 +1,20 @@
+[package]
+name = "eudonomia-companion"
+version = "0.1.0"
+description = "Eudonomia menubar companion — activity tracking for the focus tracker"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+
+[profile.release]
+strip = true
+lto = true

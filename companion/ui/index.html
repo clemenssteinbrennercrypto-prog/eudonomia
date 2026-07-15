@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eudonomia Companion</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 260px;
+    background: #0D0F14;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    overflow: hidden;
+  }
+  .wrap { padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+
+  .status-row { display: flex; align-items: center; gap: 8px; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4b5563; flex-shrink: 0;
+  }
+  .dot.active { background: #22c55e; box-shadow: 0 0 8px #22c55e88; }
+  .status-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #6b7280; }
+  .status-label.active { color: #22c55e; }
+
+  .card {
+    background: #151821; border: 1px solid #232838; border-radius: 10px;
+    padding: 12px; display: flex; flex-direction: column; gap: 6px;
+    min-height: 66px;
+  }
+  .app-name { font-size: 14px; font-weight: 700; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .detail { font-size: 12px; color: #9ca3af; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .domain { color: #22c55e; font-weight: 600; }
+  .empty { color: #4b5563; font-size: 12px; }
+
+  .quit {
+    background: none; border: 1px solid #232838; border-radius: 8px;
+    color: #6b7280; font-size: 12px; font-weight: 600;
+    padding: 7px 0; cursor: pointer; width: 100%;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .quit:hover { color: #ef4444; border-color: #ef444455; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="status-row">
+      <span id="dot" class="dot"></span>
+      <span id="statusLabel" class="status-label">No data</span>
+    </div>
+
+    <div class="card">
+      <div id="appName" class="app-name empty">Waiting for activity…</div>
+      <div id="windowTitle" class="detail"></div>
+      <div id="domain" class="detail domain"></div>
+    </div>
+
+    <button id="quitBtn" class="quit">Quit Companion</button>
+  </div>
+
+<script>
+  const dot = document.getElementById('dot')
+  const statusLabel = document.getElementById('statusLabel')
+  const appName = document.getElementById('appName')
+  const windowTitle = document.getElementById('windowTitle')
+  const domain = document.getElementById('domain')
+
+  const STALE_MS = 10000
+
+  async function refresh() {
+    try {
+      const res = await fetch('http://localhost:7331/status')
+      const data = await res.json()
+      const fresh = data.ts > 0 && (Date.now() - data.ts) < STALE_MS
+
+      if (fresh && data.app) {
+        dot.classList.add('active')
+        statusLabel.classList.add('active')
+        statusLabel.textContent = 'Tracking active'
+        appName.classList.remove('empty')
+        appName.textContent = data.app
+        windowTitle.textContent = data.window || ''
+        domain.textContent = data.domain || ''
+      } else {
+        setNoData()
+      }
+    } catch {
+      setNoData()
+    }
+  }
+
+  function setNoData() {
+    dot.classList.remove('active')
+    statusLabel.classList.remove('active')
+    statusLabel.textContent = 'No data'
+    appName.classList.add('empty')
+    appName.textContent = 'Waiting for activity…'
+    windowTitle.textContent = ''
+    domain.textContent = ''
+  }
+
+  document.getElementById('quitBtn').addEventListener('click', () => {
+    if (window.__TAURI__?.core?.invoke) {
+      window.__TAURI__.core.invoke('quit_app')
+    }
+  })
+
+  refresh()
+  setInterval(refresh, 2000)
+</script>
+</body>
+</html>
