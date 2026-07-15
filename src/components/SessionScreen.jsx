@@ -428,13 +428,18 @@ function domainMatches(domain, candidates = []) {
 }
 
 function classifyActivity(activity, config, daemonConnected) {
-  if (!daemonConnected || !activity?.app) {
+  if (!daemonConnected) {
     return { kind: 'unknown', app: '', domain: '', label: 'No activity data' }
   }
 
   const app = String(activity.app || '').trim()
   const appKey = app.toLowerCase()
-  const domain = normalizeDomain(activity.full_url || activity.url)
+  const domain = normalizeDomain(activity.domain || activity.full_url || activity.url)
+  const domainKey = domain.toLowerCase()
+  if (!appKey && !domainKey) {
+    return { kind: 'unknown', app: '', domain: '', label: 'No activity data' }
+  }
+
   const focusApps = config?.focusApps || []
   const distractionApps = config?.distractionApps || []
   const focusDomains = config?.focusDomains || []
@@ -443,10 +448,12 @@ function classifyActivity(activity, config, daemonConnected) {
   const distractionAppKeys = new Set(distractionApps.map(item => item.toLowerCase()))
 
   const isDistraction = Boolean(appKey && distractionAppKeys.has(appKey)) ||
+    Boolean(domainKey && distractionAppKeys.has(domainKey)) ||
     domainMatches(domain, distractionDomains)
   const isFocus = Boolean(appKey && focusAppKeys.has(appKey)) ||
+    Boolean(domainKey && focusAppKeys.has(domainKey)) ||
     domainMatches(domain, focusDomains)
-  const label = domain || app || 'Unknown'
+  const label = domain || activity.title || app || 'Unknown'
 
   if (isDistraction) return { kind: 'distraction', app, domain, label }
   if (isFocus) return { kind: 'focus', app, domain, label }
@@ -639,6 +646,8 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
   const duration = isDistraction && activeSince ? formatShortDuration(Date.now() - activeSince) : null
   const suffix = isFocus ? '✓ focus app' : null
   const titleParts = [
+    activity?.domain,
+    activity?.title,
     activity?.app,
     activity?.full_url,
     activity?.url,

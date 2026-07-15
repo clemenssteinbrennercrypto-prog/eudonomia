@@ -1,21 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getLastActivity, isDaemonConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import ExtensionSetup from './ExtensionSetup'
+import { getLastActivity, isExtensionConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadFocusModeEnabled, saveFocusAppsConfig, saveFocusModeEnabled } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
-const PRESET_DOMAINS = {
-  youtube: ['youtube.com'],
-  instagram: ['instagram.com'],
-  'twitter/x': ['twitter.com', 'x.com'],
-  twitter: ['twitter.com', 'x.com'],
-  x: ['x.com'],
-  tiktok: ['tiktok.com'],
-  reddit: ['reddit.com'],
-  netflix: ['netflix.com'],
-  notion: ['notion.so'],
-  figma: ['figma.com'],
-}
 
 function addUnique(list, value) {
   const app = value.trim()
@@ -38,7 +28,8 @@ function normalizeDomain(value) {
 function domainsFor(items) {
   return items.flatMap(item => {
     const key = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ')
-    if (PRESET_DOMAINS[key]) return PRESET_DOMAINS[key]
+    const presetDomains = getDomainsFromAppPreset(key)
+    if (presetDomains.length) return presetDomains
     const normalized = normalizeDomain(item)
     return normalized.includes('.') ? [normalized] : []
   })
@@ -55,20 +46,29 @@ function domainMatches(domain, candidates) {
 }
 
 function classifyCurrentActivity(activity, focusApps, distractionApps, connected) {
-  if (!connected || !activity?.app) return { kind: 'unknown', label: 'No activity detected' }
+  if (!connected) return { kind: 'unknown', label: 'No activity detected' }
   const app = String(activity.app || '').trim()
   const appKey = app.toLowerCase()
-  const domain = normalizeDomain(activity.full_url || activity.url)
+  const domain = normalizeDomain(activity.domain || activity.full_url || activity.url)
+  const domainKey = domain.toLowerCase()
   const focusKeys = new Set(focusApps.map(item => item.toLowerCase()))
   const distractionKeys = new Set(distractionApps.map(item => item.toLowerCase()))
   const focusDomains = domainsFor(focusApps)
   const distractionDomains = domainsFor(distractionApps)
-  const label = domain || app || 'Unknown'
+  const label = domain || activity.title || app || 'Unknown'
 
-  if ((appKey && distractionKeys.has(appKey)) || domainMatches(domain, distractionDomains)) {
+  if (
+    (appKey && distractionKeys.has(appKey)) ||
+    (domainKey && distractionKeys.has(domainKey)) ||
+    domainMatches(domain, distractionDomains)
+  ) {
     return { kind: 'distraction', label }
   }
-  if ((appKey && focusKeys.has(appKey)) || domainMatches(domain, focusDomains)) {
+  if (
+    (appKey && focusKeys.has(appKey)) ||
+    (domainKey && focusKeys.has(domainKey)) ||
+    domainMatches(domain, focusDomains)
+  ) {
     return { kind: 'focus', label }
   }
   return { kind: 'unknown', label }
@@ -251,23 +251,23 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [saved, setSaved] = useState(false)
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
-  const [daemonConnected, setDaemonConnected] = useState(() => isDaemonConnected())
+  const [extensionConnected, setExtensionConnected] = useState(() => isExtensionConnected())
 
   const configuredCount = focusApps.length + distractionApps.length
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
   const activityPreview = useMemo(
-    () => classifyCurrentActivity(activity, focusApps, distractionApps, daemonConnected),
-    [activity, focusApps, distractionApps, daemonConnected]
+    () => classifyCurrentActivity(activity, focusApps, distractionApps, extensionConnected),
+    [activity, focusApps, distractionApps, extensionConnected]
   )
 
   useEffect(() => {
     startActivityPolling((nextActivity) => {
       setActivity(nextActivity)
-      setDaemonConnected(isDaemonConnected())
+      setExtensionConnected(isExtensionConnected())
     })
     const heartbeat = setInterval(() => {
       setActivity(getLastActivity())
-      setDaemonConnected(isDaemonConnected())
+      setExtensionConnected(isExtensionConnected())
     }, 1000)
     return () => {
       clearInterval(heartbeat)
@@ -338,8 +338,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               border: '1px solid #E8E3DA',
               borderRadius: 100,
               padding: '5px 10px',
-              color: daemonConnected ? '#166534' : '#6b7280',
-              background: daemonConnected ? '#f0fdf4' : '#f9fafb',
+              color: extensionConnected ? '#166534' : '#92400e',
+              background: extensionConnected ? '#f0fdf4' : '#fffbeb',
               fontSize: 12,
               fontWeight: 800,
             }}>
@@ -347,11 +347,19 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 width: 7,
                 height: 7,
                 borderRadius: '50%',
-                background: daemonConnected ? '#22c55e' : '#9ca3af',
-                boxShadow: daemonConnected ? '0 0 0 2px #22c55e28' : 'none',
+                background: extensionConnected ? '#22c55e' : '#f59e0b',
+                boxShadow: extensionConnected ? '0 0 0 2px #22c55e28' : '0 0 0 2px #f59e0b28',
               }} />
-              {daemonConnected ? 'Daemon connected' : 'Daemon offline'}
+              {extensionConnected ? 'Extension connected' : 'Extension not detected'}
             </span>
+            {!extensionConnected && (
+              <a
+                href="#extension-setup"
+                style={{ color: '#1a2e4a', fontSize: 12, fontWeight: 800, textDecoration: 'underline' }}
+              >
+                Install instructions
+              </a>
+            )}
             <span style={{ fontSize: 13, color: '#1a2e4a', fontWeight: 800 }}>
               {focusApps.length} focus apps · {distractionApps.length} blocked
             </span>
@@ -409,7 +417,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
         }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, color: '#8a8177', fontWeight: 800, marginBottom: 3 }}>
-              Current active app
+              Current active site
             </div>
             <div style={{
               fontSize: 14,
@@ -420,7 +428,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               whiteSpace: 'nowrap',
               maxWidth: 420,
             }}>
-              {daemonConnected && activity?.app ? activity.app : 'Waiting for daemon'}
+              {extensionConnected ? (activity?.domain || activity?.title || activity?.url || 'Waiting for browser activity') : 'Waiting for extension'}
             </div>
           </div>
           <span style={{
@@ -443,6 +451,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 : `${activityPreview.label} is currently detected as: unknown`}
           </span>
         </div>
+
+        {!extensionConnected && <ExtensionSetup />}
 
         {configuredCount === 0 && (
           <div style={{

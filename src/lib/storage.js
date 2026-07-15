@@ -2,23 +2,12 @@
 // Persists sessions to localStorage under key 'eudaimonia_sessions'
 // Max 100 sessions kept (oldest purged first)
 
+import { getDomainFromAppPreset, getDomainsFromAppPreset } from './focusAppsConfig'
+
 const STORAGE_KEY = 'eudaimonia_sessions'
 const MAX_SESSIONS = 100
 export const FOCUS_APPS_KEY = 'eudaimonia_focus_apps'
 export const FOCUS_MODE_KEY = 'eudaimonia_focus_mode_enabled'
-
-const APP_PRESET_DOMAINS = {
-  youtube: ['youtube.com'],
-  instagram: ['instagram.com'],
-  'twitter/x': ['twitter.com', 'x.com'],
-  twitter: ['twitter.com', 'x.com'],
-  x: ['x.com'],
-  tiktok: ['tiktok.com'],
-  reddit: ['reddit.com'],
-  netflix: ['netflix.com'],
-  notion: ['notion.so'],
-  figma: ['figma.com'],
-}
 
 function normalizeAppList(apps) {
   if (!Array.isArray(apps)) return []
@@ -64,20 +53,7 @@ function normalizeDomainList(domains) {
     })
 }
 
-function presetKey(appName) {
-  return String(appName || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-}
-
-export function getDomainFromAppPreset(appName) {
-  return APP_PRESET_DOMAINS[presetKey(appName)]?.[0] ?? null
-}
-
-export function getDomainsFromAppPreset(appName) {
-  return APP_PRESET_DOMAINS[presetKey(appName)] ?? []
-}
+export { getDomainFromAppPreset, getDomainsFromAppPreset }
 
 function deriveDomainsFromApps(apps) {
   return apps.flatMap(app => {

@@ -18,22 +18,21 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173)
 
-## Activity Tracking (macOS)
+## Browser Extension (required for activity tracking)
 
-For accurate focus scoring, run the local activity daemon:
+The Eudonomia Focus Tracker extension tracks your active browser tab
+to enable accurate focus/distraction detection.
 
-```bash
-cd scripts
-chmod +x start-daemon.sh
-./start-daemon.sh
-```
+### Install:
 
-The daemon tracks your active app and sends it to Eudaimonia to improve focus scoring.
-Stop it with:
+1. Open Chrome -> chrome://extensions
+2. Enable Developer Mode (top right)
+3. Click "Load unpacked"
+4. Select the `extension/` folder from this repo
+5. Pin the extension to your toolbar
 
-```bash
-./stop-daemon.sh
-```
+Works with: Chrome, Brave, Arc, Edge
+Safari: requires separate setup (coming soon)
 
 ## Deployment (Vercel)
 

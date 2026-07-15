@@ -1,22 +1,28 @@
-const DAEMON_URL = 'http://localhost:7331'
+const STORAGE_KEY = 'eudaimonia_ext_activity'
+const STALE_MS = 10_000
 
-let lastActivity = { app: null, window: null, url: null, full_url: null, ts: 0 }
+let lastActivity = { url: null, domain: null, title: null, ts: 0 }
 let pollingInterval = null
 
 export function startActivityPolling(onUpdate) {
   if (pollingInterval) return
-  pollingInterval = setInterval(async () => {
+
+  const poll = () => {
     try {
-      const res = await fetch(`${DAEMON_URL}/status`, { signal: AbortSignal.timeout(1000) })
-      if (res.ok) {
-        const data = await res.json()
-        lastActivity = { ...data, ts: Date.now() }
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const data = JSON.parse(raw)
+      if (data?.ts && data.ts !== lastActivity.ts) {
+        lastActivity = data
         onUpdate(lastActivity)
       }
     } catch {
-      // Daemon is optional; sessions continue without activity data.
+      // The extension is optional; sessions continue without activity data.
     }
-  }, 3000)
+  }
+
+  poll()
+  pollingInterval = setInterval(poll, 2000)
 }
 
 export function stopActivityPolling() {
@@ -31,5 +37,9 @@ export function getLastActivity() {
 }
 
 export function isDaemonConnected() {
-  return Date.now() - lastActivity.ts < 6000
+  return lastActivity.ts > 0 && (Date.now() - lastActivity.ts) < STALE_MS
+}
+
+export function isExtensionConnected() {
+  return isDaemonConnected()
 }
