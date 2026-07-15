@@ -1282,7 +1282,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
       const roundedScore = Math.round(focusScoreRef.current)
       setFocusScore(roundedScore)
-      // Keep sparkline history (max 60 values = last 5 min at 5s intervals)
+      // Keep sparkline history (max 60 values, pushed once per second = last 60s)
       scoreHistoryRef.current = [...scoreHistoryRef.current, roundedScore].slice(-60)
       setScoreHistory(scoreHistoryRef.current)
       setCurrentStreak(currentStreakRef.current)
