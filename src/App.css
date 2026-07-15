@@ -333,6 +333,15 @@ body {
   50%       { opacity: 0.4; transform: scale(0.82); }
 }
 
+@keyframes activityDistractionPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(239,68,68,0.14), 0 0 22px rgba(239,68,68,0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239,68,68,0.22), 0 0 34px rgba(239,68,68,0.34);
+  }
+}
+
 @keyframes flowPulse {
   0%, 100% { box-shadow: 0 0 0 3px #a78bfa28; }
   50%       { box-shadow: 0 0 0 6px #a78bfa14; }

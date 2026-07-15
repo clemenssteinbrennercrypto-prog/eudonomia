@@ -64,6 +64,10 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000
+const ACTIVITY_FOCUS_BONUS_PER_TICK = 2
+const ACTIVITY_FOCUS_BONUS_MAX      = 10
+const ACTIVITY_DISTRACTION_PENALTY_PER_TICK = 5
+const ACTIVITY_DISTRACTION_PENALTY_MAX      = 25
 
 // ── Circadian thresholds ───────────────────────────────────────────────────────
 // Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
@@ -394,6 +398,61 @@ function formatTime(s) {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
+function formatShortDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const mins = Math.floor(total / 60)
+  const secs = total % 60
+  if (mins <= 0) return `${secs}s`
+  return `${mins}m ${String(secs).padStart(2, '0')}s`
+}
+
+function normalizeDomain(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) return ''
+  try {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+    return new URL(withProtocol).hostname.replace(/^www\./, '')
+  } catch {
+    return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split('?')[0]
+  }
+}
+
+function domainMatches(domain, candidates = []) {
+  const normalizedDomain = normalizeDomain(domain)
+  if (!normalizedDomain) return false
+  return candidates.some(candidate => {
+    const normalizedCandidate = normalizeDomain(candidate)
+    return normalizedCandidate &&
+      (normalizedDomain === normalizedCandidate || normalizedDomain.endsWith(`.${normalizedCandidate}`))
+  })
+}
+
+function classifyActivity(activity, config, daemonConnected) {
+  if (!daemonConnected || !activity?.app) {
+    return { kind: 'unknown', app: '', domain: '', label: 'No activity data' }
+  }
+
+  const app = String(activity.app || '').trim()
+  const appKey = app.toLowerCase()
+  const domain = normalizeDomain(activity.full_url || activity.url)
+  const focusApps = config?.focusApps || []
+  const distractionApps = config?.distractionApps || []
+  const focusDomains = config?.focusDomains || []
+  const distractionDomains = config?.distractionDomains || []
+  const focusAppKeys = new Set(focusApps.map(item => item.toLowerCase()))
+  const distractionAppKeys = new Set(distractionApps.map(item => item.toLowerCase()))
+
+  const isDistraction = Boolean(appKey && distractionAppKeys.has(appKey)) ||
+    domainMatches(domain, distractionDomains)
+  const isFocus = Boolean(appKey && focusAppKeys.has(appKey)) ||
+    domainMatches(domain, focusDomains)
+  const label = domain || app || 'Unknown'
+
+  if (isDistraction) return { kind: 'distraction', app, domain, label }
+  if (isFocus) return { kind: 'focus', app, domain, label }
+  return { kind: 'unknown', app, domain, label }
+}
+
 // ── Focus Ring (SVG) ──────────────────────────────────────────────────────────
 function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0 }) {
   const size   = 220
@@ -570,8 +629,103 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
   )
 }
 
+function ActivityPill({ activity, classification, connected, activeSince, prominent = false }) {
+  const isFocus = connected && classification.kind === 'focus'
+  const isDistraction = connected && classification.kind === 'distraction'
+  const color = isFocus ? '#22c55e' : isDistraction ? '#ef4444' : '#6b7280'
+  const bg = isFocus ? '#17251d' : isDistraction ? '#2a1719' : '#1C1F28'
+  const border = isFocus ? '#22c55e40' : isDistraction ? '#ef444440' : '#2A2E3A'
+  const label = connected ? classification.label : 'No activity data'
+  const duration = isDistraction && activeSince ? formatShortDuration(Date.now() - activeSince) : null
+  const suffix = isFocus ? '✓ focus app' : null
+  const titleParts = [
+    activity?.app,
+    activity?.full_url,
+    activity?.url,
+    activity?.window,
+  ].filter(Boolean)
+
+  return (
+    <div style={{
+      display: 'inline-flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: prominent && isDistraction ? 5 : 0,
+      minWidth: 0,
+      maxWidth: prominent ? 320 : 220,
+    }}>
+      <div
+        title={titleParts.length ? titleParts.join(' · ') : undefined}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          background: bg,
+          border: `1px solid ${border}`,
+          borderRadius: 100,
+          padding: prominent ? '8px 14px 8px 8px' : '6px 10px 6px 7px',
+          fontSize: prominent ? 12 : 11,
+          fontWeight: 800,
+          color: connected ? '#cbd5e1' : '#6b7280',
+          width: prominent ? 'min(320px, calc(100vw - 48px))' : 'auto',
+          maxWidth: prominent ? 'min(320px, calc(100vw - 48px))' : 220,
+          minWidth: 0,
+          boxShadow: isDistraction
+            ? '0 0 0 2px rgba(239,68,68,0.14), 0 0 24px rgba(239,68,68,0.24)'
+            : isFocus
+              ? '0 0 0 2px rgba(34,197,94,0.10), 0 0 20px rgba(34,197,94,0.16)'
+              : 'none',
+          animation: isDistraction ? 'activityDistractionPulse 1.4s ease-in-out infinite' : 'none',
+        }}
+      >
+        <span style={{
+          width: prominent ? 26 : 22,
+          height: prominent ? 26 : 22,
+          borderRadius: '50%',
+          background: connected ? color : '#374151',
+          color: '#0D0F14',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 11,
+          fontWeight: 900,
+          flexShrink: 0,
+          boxShadow: connected ? `0 0 12px ${color}55` : 'none',
+        }}>
+          {connected && label ? label.charAt(0).toUpperCase() : '-'}
+        </span>
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+          flex: 1,
+        }}>
+          {duration ? `${label} · ${duration}` : label}
+        </span>
+        {suffix && (
+          <span style={{ color: '#86efac', fontSize: 10, fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {suffix}
+          </span>
+        )}
+      </div>
+      {prominent && isDistraction && (
+        <div style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#fca5a5',
+          letterSpacing: '0.01em',
+          textShadow: '0 0 12px rgba(239,68,68,0.25)',
+        }}>
+          Switch back to your work app
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
-export default function SessionScreen({ task, duration, devices = [], onEnd }) {
+export default function SessionScreen({ task, duration, devices = [], focusModeEnabled = true, onEnd }) {
   const totalSeconds = duration * 60
   const {
     yawLeft: yawLT,
@@ -660,6 +814,11 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const focusAppsConfigRef     = useRef(loadFocusAppsConfig())
   const activeDistractionAppRef = useRef(null)
   const activeDistractionSinceRef = useRef(null)
+  const activeFocusAppRef       = useRef(null)
+  const activityFocusBonusRef   = useRef(0)
+  const activityDistractionPenaltyRef = useRef(0)
+  const lastActivityScoreTickRef = useRef(null)
+  const focusModeEnabledRef = useRef(focusModeEnabled)
   // Ref stays in sync with state via useEffect to avoid stale closure in handleFaceResults
   const gentleReminderEnabledRef = useRef(gentleReminderEnabled)
 
@@ -728,6 +887,10 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   useEffect(() => {
     gentleReminderEnabledRef.current = gentleReminderEnabled
   }, [gentleReminderEnabled])
+
+  useEffect(() => {
+    focusModeEnabledRef.current = focusModeEnabled
+  }, [focusModeEnabled])
 
   useEffect(() => {
     focusAppsConfigRef.current = loadFocusAppsConfig()
@@ -949,32 +1112,69 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
       horizontalContext.kind === 'productive_right'
     const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
-    const activeActivity = activityRef.current
-    const activeApp = typeof activeActivity?.app === 'string' ? activeActivity.app.trim() : ''
-    const activeAppKey = activeApp.toLowerCase()
     const daemonConnected = isDaemonConnected()
-    const { focusApps, distractionApps } = focusAppsConfigRef.current
-    const focusAppKeys = new Set(focusApps.map(app => app.toLowerCase()))
-    const distractionAppKeys = new Set(distractionApps.map(app => app.toLowerCase()))
-    const activityIsFocus = daemonConnected && activeAppKey && focusAppKeys.has(activeAppKey)
-    const activityIsDistraction = daemonConnected && activeAppKey && distractionAppKeys.has(activeAppKey)
+    const activityClassification = classifyActivity(activityRef.current, focusAppsConfigRef.current, daemonConnected)
+    const activityScoringEnabled = focusModeEnabledRef.current
+    const activityIsFocus = activityScoringEnabled && activityClassification.kind === 'focus'
+    const activityIsDistraction = activityScoringEnabled && activityClassification.kind === 'distraction'
+    const activeActivityKey = activityClassification.domain || activityClassification.app.toLowerCase()
+
+    if (activityIsFocus) {
+      if (activeFocusAppRef.current !== activeActivityKey) {
+        activeFocusAppRef.current = activeActivityKey
+        activityFocusBonusRef.current = 0
+      }
+    } else {
+      activeFocusAppRef.current = null
+      activityFocusBonusRef.current = 0
+    }
 
     if (activityIsDistraction) {
-      if (activeDistractionAppRef.current !== activeAppKey) {
-        activeDistractionAppRef.current = activeAppKey
+      if (activeDistractionAppRef.current !== activeActivityKey) {
+        activeDistractionAppRef.current = activeActivityKey
         activeDistractionSinceRef.current = now
+        activityDistractionPenaltyRef.current = 0
       } else if (!activeDistractionSinceRef.current) {
         activeDistractionSinceRef.current = now
       }
     } else {
       activeDistractionAppRef.current = null
       activeDistractionSinceRef.current = null
+      activityDistractionPenaltyRef.current = 0
     }
     const activityDistractionMs = activeDistractionSinceRef.current
       ? now - activeDistractionSinceRef.current
       : 0
-    const activityPenalty = activityDistractionMs >= ACTIVITY_DISTRACTION_HOLD_MS ? 20 : 0
-    const activityBonus = activityIsFocus ? 8 : 0
+    const elapsedActivitySecs = Math.max(0, Math.floor((now - startTimeRef.current - pausedTotalRef.current) / 1000))
+    const activityScoreTick = Math.floor(elapsedActivitySecs / SCORE_UPDATE_SECS)
+    if (!activityScoringEnabled) {
+      activeFocusAppRef.current = null
+      activeDistractionAppRef.current = null
+      activeDistractionSinceRef.current = null
+      activityFocusBonusRef.current = 0
+      activityDistractionPenaltyRef.current = 0
+      lastActivityScoreTickRef.current = null
+    } else if (lastActivityScoreTickRef.current !== activityScoreTick) {
+      lastActivityScoreTickRef.current = activityScoreTick
+      // Focus-app rewards accrue once per score tick and cap at +10 while the
+      // classified focus app remains active; this is added on top of camera score.
+      if (activityIsFocus) {
+        activityFocusBonusRef.current = Math.min(
+          ACTIVITY_FOCUS_BONUS_MAX,
+          activityFocusBonusRef.current + ACTIVITY_FOCUS_BONUS_PER_TICK
+        )
+      }
+      // Distraction penalties only begin after the 10s hold and stop/reset as
+      // soon as the user leaves the distraction app.
+      if (activityIsDistraction && activityDistractionMs >= ACTIVITY_DISTRACTION_HOLD_MS) {
+        activityDistractionPenaltyRef.current = Math.min(
+          ACTIVITY_DISTRACTION_PENALTY_MAX,
+          activityDistractionPenaltyRef.current + ACTIVITY_DISTRACTION_PENALTY_PER_TICK
+        )
+      }
+    }
+    const activityPenalty = activityDistractionPenaltyRef.current
+    const activityBonus = activityFocusBonusRef.current
 
     // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
     // it counts — a momentary downward glance shouldn't trigger the severe penalty
@@ -1054,15 +1254,8 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
       // Secondary monitor gaze = same focus value as primary screen gaze.
       // A second monitor is a work tool, not a distraction — treat it identically.
       if (productiveHorizontal) score += 5
-      if (activityBonus) score += activityBonus
 
       // ── Penalties ─────────────────────────────────────────────────────────
-      if (activityPenalty) {
-        score -= activityPenalty
-        if (activityDistractionMs >= ACTIVITY_REASON_HOLD_MS && primaryReason === 'focused') {
-          primaryReason = 'distraction_app'
-        }
-      }
       if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
         score -= 45
         primaryReason = 'phone'
@@ -1118,6 +1311,18 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
     }
 
     score = Math.max(0, Math.min(85, score))  // raw capped at 85 — last 15 pts come from ramp
+
+    // Activity scoring is additive to the existing camera-derived score. Apply
+    // it after the raw camera cap so the capped +10 focus-app reward remains
+    // visible, while distraction penalties still stack with other penalties.
+    if (hasFace && activityPenalty) {
+      score = Math.max(0, score - activityPenalty)
+      if (activityDistractionMs >= ACTIVITY_REASON_HOLD_MS && primaryReason === 'focused') {
+        primaryReason = 'distraction_app'
+      }
+    } else if (hasFace && activityBonus) {
+      score = Math.min(100, score + activityBonus)
+    }
 
     // ── Sustained-focus ramp (+0 to +15 over ~2 min) ──────────────────────
     // Attention Restoration Theory (Kaplan 1995; Mark et al. 2008):
@@ -1420,7 +1625,7 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
   const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
   const showStreak = !isCalibrating && currentStreak > 30
   const activityConnected = isDaemonConnected()
-  const activityAppLabel = activityConnected && activityStatus?.app ? activityStatus.app : 'No activity data'
+  const activityClassification = classifyActivity(activityStatus, focusAppsConfigRef.current, activityConnected)
 
   const dismissBreak = () => {
     if (breakBanner) {
@@ -1549,6 +1754,16 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
           calibProgress={calibProgress}
         />
 
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', width: '100%' }}>
+          <ActivityPill
+            activity={activityStatus}
+            classification={activityClassification}
+            connected={activityConnected}
+            activeSince={activeDistractionSinceRef.current}
+            prominent
+          />
+        </div>
+
         {/* Flow state indicator */}
         {inFlowState && !isCalibrating && (
           <div style={{
@@ -1637,34 +1852,6 @@ export default function SessionScreen({ task, duration, devices = [], onEnd }) {
 
       {/* Audio controls */}
       <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
-        <div
-          title={activityConnected && activityStatus?.window ? activityStatus.window : undefined}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 7,
-            background: '#1C1F28',
-            border: '1px solid #2A2E3A',
-            borderRadius: 100,
-            padding: '6px 12px',
-            fontSize: 11,
-            fontWeight: 600,
-            color: activityConnected ? '#94a3b8' : '#6b7280',
-            maxWidth: 220,
-          }}
-        >
-          <span style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: activityConnected ? '#22c55e' : '#6b7280',
-            boxShadow: activityConnected ? '0 0 0 2px #22c55e28' : 'none',
-            flexShrink: 0,
-          }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {activityAppLabel}
-          </span>
-        </div>
         <button
           onClick={cycleAmbient}
           aria-label={`Ambient sound: ${AMBIENT_LABELS[ambientMode]}`}

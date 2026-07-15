@@ -66,6 +66,8 @@ export default function HomeScreen({
   goal, setGoal,
   tags, setTags,
   devices,
+  focusModeEnabled,
+  setFocusModeEnabled,
   onStart,
   onShowHistory,
   onShowSetup,
@@ -299,7 +301,50 @@ export default function HomeScreen({
               Focus Apps
             </span>
             <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>
-              {focusAppsConfig.focusApps.length} focus apps · {focusAppsConfig.distractionApps.length} distraction apps
+              {focusAppsConfig.focusApps.length} focus apps · {focusAppsConfig.distractionApps.length} blocked
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFocusModeEnabled(prev => !prev)}
+            aria-pressed={focusModeEnabled}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 14,
+              background: focusModeEnabled ? '#f7fbf8' : '#fff',
+              border: `1.5px solid ${focusModeEnabled ? '#cfe9d7' : '#E8E3DA'}`,
+              borderRadius: 14,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1a2e4a' }}>
+              Focus mode: {focusModeEnabled ? 'ON' : 'OFF'}
+            </span>
+            <span style={{
+              width: 42,
+              height: 24,
+              borderRadius: 100,
+              background: focusModeEnabled ? '#1a2e4a' : '#d1d5db',
+              padding: 3,
+              display: 'inline-flex',
+              justifyContent: focusModeEnabled ? 'flex-end' : 'flex-start',
+              transition: 'background 0.15s ease',
+              flexShrink: 0,
+            }}>
+              <span style={{
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: '#fff',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+              }} />
             </span>
           </button>
 

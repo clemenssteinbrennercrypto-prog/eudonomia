@@ -1,8 +1,21 @@
-import { useMemo, useState } from 'react'
-import { loadFocusAppsConfig, saveFocusAppsConfig } from '../lib/storage'
+import { useEffect, useMemo, useState } from 'react'
+import { getLastActivity, isDaemonConnected, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { loadFocusAppsConfig, loadFocusModeEnabled, saveFocusAppsConfig, saveFocusModeEnabled } from '../lib/storage'
 
-const FOCUS_PRESETS = ['VS Code', 'Xcode', 'Terminal', 'Figma', 'Notion', 'Linear', 'Cursor', 'Zed']
-const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix', 'WhatsApp', 'Telegram']
+const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
+const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
+const PRESET_DOMAINS = {
+  youtube: ['youtube.com'],
+  instagram: ['instagram.com'],
+  'twitter/x': ['twitter.com', 'x.com'],
+  twitter: ['twitter.com', 'x.com'],
+  x: ['x.com'],
+  tiktok: ['tiktok.com'],
+  reddit: ['reddit.com'],
+  netflix: ['netflix.com'],
+  notion: ['notion.so'],
+  figma: ['figma.com'],
+}
 
 function addUnique(list, value) {
   const app = value.trim()
@@ -11,7 +24,107 @@ function addUnique(list, value) {
   return [...list, app]
 }
 
-function AppSection({ title, apps, setApps, presets, inputValue, setInputValue }) {
+function normalizeDomain(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) return ''
+  try {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+    return new URL(withProtocol).hostname.replace(/^www\./, '')
+  } catch {
+    return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split('?')[0]
+  }
+}
+
+function domainsFor(items) {
+  return items.flatMap(item => {
+    const key = String(item || '').trim().toLowerCase().replace(/\s+/g, ' ')
+    if (PRESET_DOMAINS[key]) return PRESET_DOMAINS[key]
+    const normalized = normalizeDomain(item)
+    return normalized.includes('.') ? [normalized] : []
+  })
+}
+
+function domainMatches(domain, candidates) {
+  const normalizedDomain = normalizeDomain(domain)
+  if (!normalizedDomain) return false
+  return candidates.some(candidate => {
+    const normalizedCandidate = normalizeDomain(candidate)
+    return normalizedCandidate &&
+      (normalizedDomain === normalizedCandidate || normalizedDomain.endsWith(`.${normalizedCandidate}`))
+  })
+}
+
+function classifyCurrentActivity(activity, focusApps, distractionApps, connected) {
+  if (!connected || !activity?.app) return { kind: 'unknown', label: 'No activity detected' }
+  const app = String(activity.app || '').trim()
+  const appKey = app.toLowerCase()
+  const domain = normalizeDomain(activity.full_url || activity.url)
+  const focusKeys = new Set(focusApps.map(item => item.toLowerCase()))
+  const distractionKeys = new Set(distractionApps.map(item => item.toLowerCase()))
+  const focusDomains = domainsFor(focusApps)
+  const distractionDomains = domainsFor(distractionApps)
+  const label = domain || app || 'Unknown'
+
+  if ((appKey && distractionKeys.has(appKey)) || domainMatches(domain, distractionDomains)) {
+    return { kind: 'distraction', label }
+  }
+  if ((appKey && focusKeys.has(appKey)) || domainMatches(domain, focusDomains)) {
+    return { kind: 'focus', label }
+  }
+  return { kind: 'unknown', label }
+}
+
+function AppChip({ app, tone, onRemove }) {
+  const colors = tone === 'focus'
+    ? { bg: '#f7fbf8', border: '#cfe9d7', text: '#1f5132', xBg: '#e8f5ec', xText: '#2f6f46' }
+    : { bg: '#fff8f7', border: '#f2d2ce', text: '#7a2f28', xBg: '#fde9e7', xText: '#9a3a32' }
+
+  return (
+    <span
+      style={{
+        minHeight: 34,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        background: colors.bg,
+        border: `1.5px solid ${colors.border}`,
+        borderRadius: 100,
+        padding: '6px 7px 6px 13px',
+        color: colors.text,
+        fontSize: 13,
+        fontWeight: 700,
+        maxWidth: '100%',
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${app}`}
+        style={{
+          width: 21,
+          height: 21,
+          borderRadius: '50%',
+          border: 'none',
+          background: colors.xBg,
+          color: colors.xText,
+          cursor: 'pointer',
+          lineHeight: 1,
+          fontSize: 15,
+          fontWeight: 700,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        x
+      </button>
+    </span>
+  )
+}
+
+function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setInputValue, tone }) {
   const availablePresets = useMemo(
     () => presets.filter(preset => !apps.some(app => app.toLowerCase() === preset.toLowerCase())),
     [apps, presets]
@@ -23,9 +136,24 @@ function AppSection({ title, apps, setApps, presets, inputValue, setInputValue }
   }
 
   return (
-    <section style={{ display: 'grid', gap: 14 }}>
-      <div>
-        <h2 style={{ margin: 0, color: '#1a2e4a', fontSize: 18, fontWeight: 700 }}>{title}</h2>
+    <section style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, color: '#1a2e4a', fontSize: 20, fontWeight: 800, letterSpacing: 0 }}>{title}</h2>
+          <p style={{ margin: '4px 0 0', color: '#8a8177', fontSize: 13, lineHeight: 1.45 }}>{subtitle}</p>
+        </div>
+        <span style={{
+          border: '1px solid #E8E3DA',
+          borderRadius: 100,
+          padding: '4px 10px',
+          color: '#6b7280',
+          fontSize: 12,
+          fontWeight: 700,
+          background: '#fff',
+          flexShrink: 0,
+        }}>
+          {apps.length}
+        </span>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
@@ -40,8 +168,8 @@ function AppSection({ title, apps, setApps, presets, inputValue, setInputValue }
               addApp()
             }
           }}
-          placeholder="App name"
-          style={{ flex: 1 }}
+          placeholder="Type app or website"
+          style={{ flex: 1, minWidth: 0, fontSize: 15, borderRadius: 13 }}
         />
         <button
           type="button"
@@ -49,81 +177,64 @@ function AppSection({ title, apps, setApps, presets, inputValue, setInputValue }
           style={{
             background: '#1a2e4a',
             border: 'none',
-            borderRadius: 10,
+            borderRadius: 13,
             padding: '0 16px',
             color: '#fff',
             fontSize: 13,
-            fontWeight: 700,
+            fontWeight: 800,
             cursor: 'pointer',
             fontFamily: 'inherit',
             whiteSpace: 'nowrap',
           }}
         >
-          Add app
+          Add
         </button>
       </div>
 
-      {apps.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {apps.map(app => (
-            <span
-              key={app}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                background: '#fff',
-                border: '1.5px solid #E8E3DA',
-                borderRadius: 100,
-                padding: '6px 8px 6px 12px',
-                color: '#1f2937',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              {app}
-              <button
-                type="button"
-                onClick={() => setApps(prev => prev.filter(item => item !== app))}
-                aria-label={`Remove ${app}`}
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  border: 'none',
-                  background: '#f3f4f6',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  lineHeight: 1,
-                  fontSize: 14,
-                }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 34 }}>
+        {apps.map(app => (
+          <AppChip
+            key={app}
+            app={app}
+            tone={tone}
+            onRemove={() => setApps(prev => prev.filter(item => item !== app))}
+          />
+        ))}
+        {apps.length === 0 && (
+          <div style={{
+            width: '100%',
+            border: '1.5px dashed #ded8cf',
+            borderRadius: 14,
+            padding: '14px 16px',
+            color: '#9a9288',
+            fontSize: 13,
+            lineHeight: 1.45,
+            background: 'rgba(255,255,255,0.55)',
+          }}>
+            Nothing here yet. Add a preset or type your own.
+          </div>
+        )}
+      </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
         {availablePresets.map(preset => (
           <button
             key={preset}
             type="button"
             onClick={() => addApp(preset)}
             style={{
-              background: 'transparent',
+              background: '#fff',
               border: '1px solid #d8d2c8',
               borderRadius: 100,
-              padding: '5px 11px',
-              color: '#64748b',
+              padding: '6px 12px',
+              color: '#5f6d7f',
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}
           >
-            {preset}
+            + {preset}
           </button>
         ))}
       </div>
@@ -131,13 +242,44 @@ function AppSection({ title, apps, setApps, presets, inputValue, setInputValue }
   )
 }
 
-export default function FocusAppsScreen({ onBack }) {
+export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusModeEnabled }) {
   const initial = useMemo(() => loadFocusAppsConfig(), [])
   const [focusApps, setFocusApps] = useState(initial.focusApps)
   const [distractionApps, setDistractionApps] = useState(initial.distractionApps)
   const [focusInput, setFocusInput] = useState('')
   const [distractionInput, setDistractionInput] = useState('')
   const [saved, setSaved] = useState(false)
+  const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
+  const [activity, setActivity] = useState(() => getLastActivity())
+  const [daemonConnected, setDaemonConnected] = useState(() => isDaemonConnected())
+
+  const configuredCount = focusApps.length + distractionApps.length
+  const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
+  const activityPreview = useMemo(
+    () => classifyCurrentActivity(activity, focusApps, distractionApps, daemonConnected),
+    [activity, focusApps, distractionApps, daemonConnected]
+  )
+
+  useEffect(() => {
+    startActivityPolling((nextActivity) => {
+      setActivity(nextActivity)
+      setDaemonConnected(isDaemonConnected())
+    })
+    const heartbeat = setInterval(() => {
+      setActivity(getLastActivity())
+      setDaemonConnected(isDaemonConnected())
+    }, 1000)
+    return () => {
+      clearInterval(heartbeat)
+      stopActivityPolling()
+    }
+  }, [])
+
+  const toggleFocusMode = () => {
+    const next = !modeEnabled
+    if (setFocusModeEnabled) setFocusModeEnabled(next)
+    setLocalFocusModeEnabled(saveFocusModeEnabled(next))
+  }
 
   const handleSave = () => {
     const next = saveFocusAppsConfig({ focusApps, distractionApps })
@@ -148,23 +290,25 @@ export default function FocusAppsScreen({ onBack }) {
   }
 
   return (
-    <div className="screen-center">
-      <div className="home-content" style={{ maxWidth: 620 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+    <div className="screen-center" style={{ background: '#F5F4F0' }}>
+      <div className="home-content" style={{ maxWidth: 720, gap: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <h1 className="app-title" style={{ marginBottom: 4 }}>Focus Apps</h1>
-            <p className="app-tagline" style={{ margin: 0 }}>Tell Eudaimonia which apps support your work.</p>
+            <h1 className="app-title" style={{ marginBottom: 4, color: '#1a2e4a' }}>Focus Apps</h1>
+            <p className="app-tagline" style={{ margin: 0 }}>
+              Choose what counts as work and what should pull your score down.
+            </p>
           </div>
           <button
             type="button"
             onClick={onBack}
             style={{
-              background: 'none',
-              border: '1px solid #e5e7eb',
+              background: '#fff',
+              border: '1px solid #E8E3DA',
               borderRadius: 100,
-              padding: '7px 14px',
+              padding: '8px 15px',
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 700,
               color: '#6b7280',
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -175,40 +319,181 @@ export default function FocusAppsScreen({ onBack }) {
         </div>
 
         <div style={{
-          display: 'grid',
-          gap: 26,
-          background: '#F5F4F0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          background: '#fff',
           border: '1px solid #E8E3DA',
           borderRadius: 16,
-          padding: 24,
+          padding: '12px 16px',
+          boxShadow: '0 2px 20px rgba(26,46,74,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              border: '1px solid #E8E3DA',
+              borderRadius: 100,
+              padding: '5px 10px',
+              color: daemonConnected ? '#166534' : '#6b7280',
+              background: daemonConnected ? '#f0fdf4' : '#f9fafb',
+              fontSize: 12,
+              fontWeight: 800,
+            }}>
+              <span style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: daemonConnected ? '#22c55e' : '#9ca3af',
+                boxShadow: daemonConnected ? '0 0 0 2px #22c55e28' : 'none',
+              }} />
+              {daemonConnected ? 'Daemon connected' : 'Daemon offline'}
+            </span>
+            <span style={{ fontSize: 13, color: '#1a2e4a', fontWeight: 800 }}>
+              {focusApps.length} focus apps · {distractionApps.length} blocked
+            </span>
+          </div>
+          <label style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 9,
+            color: '#1a2e4a',
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}>
+            Focus Mode
+            <button
+              type="button"
+              role="switch"
+              aria-checked={modeEnabled}
+              onClick={toggleFocusMode}
+              style={{
+                width: 42,
+                height: 24,
+                borderRadius: 100,
+                border: `1px solid ${modeEnabled ? '#22c55e' : '#d1d5db'}`,
+                background: modeEnabled ? '#22c55e' : '#e5e7eb',
+                padding: 2,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{
+                display: 'block',
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: '#fff',
+                transform: modeEnabled ? 'translateX(18px)' : 'translateX(0)',
+                transition: 'transform 0.18s ease',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+              }} />
+            </button>
+          </label>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          background: '#fff',
+          border: '1px solid #E8E3DA',
+          borderRadius: 16,
+          padding: '13px 16px',
+          boxShadow: '0 2px 20px rgba(26,46,74,0.05)',
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: '#8a8177', fontWeight: 800, marginBottom: 3 }}>
+              Current active app
+            </div>
+            <div style={{
+              fontSize: 14,
+              color: '#1a2e4a',
+              fontWeight: 800,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 420,
+            }}>
+              {daemonConnected && activity?.app ? activity.app : 'Waiting for daemon'}
+            </div>
+          </div>
+          <span style={{
+            border: `1px solid ${activityPreview.kind === 'focus' ? '#bbf7d0' : activityPreview.kind === 'distraction' ? '#fecaca' : '#e5e7eb'}`,
+            borderRadius: 100,
+            padding: '6px 11px',
+            color: activityPreview.kind === 'focus' ? '#166534' : activityPreview.kind === 'distraction' ? '#991b1b' : '#6b7280',
+            background: activityPreview.kind === 'focus' ? '#f0fdf4' : activityPreview.kind === 'distraction' ? '#fef2f2' : '#f9fafb',
+            fontSize: 12,
+            fontWeight: 900,
+            whiteSpace: 'nowrap',
+            maxWidth: 'min(100%, 430px)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {activityPreview.kind === 'focus'
+              ? `${activityPreview.label} is currently detected as: focus app ✓`
+              : activityPreview.kind === 'distraction'
+                ? `${activityPreview.label} is currently detected as: distraction`
+                : `${activityPreview.label} is currently detected as: unknown`}
+          </span>
+        </div>
+
+        {configuredCount === 0 && (
+          <div style={{
+            background: '#1a2e4a',
+            borderRadius: 18,
+            padding: '18px 20px',
+            color: '#eef4fb',
+            boxShadow: '0 14px 36px rgba(26,46,74,0.18)',
+          }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Start with a few presets.</p>
+            <p style={{ margin: '5px 0 0', fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
+              Add the tools you use for deep work, then add the sites that usually interrupt it.
+            </p>
+          </div>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gap: 28,
+          background: '#F5F4F0',
+          border: '1px solid #E8E3DA',
+          borderRadius: 20,
+          padding: 26,
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
         }}>
           <AppSection
-            title="Focus Apps"
+            title="Focus Apps ✓"
+            subtitle="Apps and sites that support the current session."
             apps={focusApps}
             setApps={setFocusApps}
             presets={FOCUS_PRESETS}
             inputValue={focusInput}
             setInputValue={setFocusInput}
+            tone="focus"
           />
           <div style={{ height: 1, background: '#E8E3DA' }} />
           <AppSection
-            title="Distraction Apps"
+            title="Block List ✗"
+            subtitle="Apps and sites that should count as distractions."
             apps={distractionApps}
             setApps={setDistractionApps}
             presets={DISTRACTION_PRESETS}
             inputValue={distractionInput}
             setInputValue={setDistractionInput}
+            tone="block"
           />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, gap: 12 }}>
-          <span style={{ fontSize: 12, color: saved ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>
-            {saved ? 'Saved' : `${focusApps.length} focus apps · ${distractionApps.length} distraction apps`}
-          </span>
-          <button type="button" className="start-btn" onClick={handleSave} style={{ width: 'auto', minWidth: 130 }}>
-            Save
-          </button>
-        </div>
+        <button type="button" className="start-btn" onClick={handleSave}>
+          {saved ? 'Saved ✓' : 'Save'}
+        </button>
       </div>
     </div>
   )

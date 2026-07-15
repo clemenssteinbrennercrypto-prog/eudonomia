@@ -2,7 +2,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 
 
-last_activity = {"app": None, "window": None}
+last_activity = {"app": None, "window": None, "url": None, "full_url": None}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -29,6 +29,8 @@ class Handler(BaseHTTPRequestHandler):
                 last_activity = {
                     "app": data.get("app"),
                     "window": data.get("window"),
+                    "url": data.get("url"),
+                    "full_url": data.get("full_url"),
                 }
             except Exception:
                 pass

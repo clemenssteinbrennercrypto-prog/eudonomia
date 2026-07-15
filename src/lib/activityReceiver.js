@@ -1,6 +1,6 @@
 const DAEMON_URL = 'http://localhost:7331'
 
-let lastActivity = { app: null, window: null, ts: 0 }
+let lastActivity = { app: null, window: null, url: null, full_url: null, ts: 0 }
 let pollingInterval = null
 
 export function startActivityPolling(onUpdate) {

@@ -8,7 +8,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
-import { saveSession } from './lib/storage'
+import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 
 // ── Persist helpers ───────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ export default function App() {
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
+  const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
 
   const setDevices = useCallback((val) => {
     setDevicesRaw(prev => {
@@ -43,6 +44,13 @@ export default function App() {
       const normalized = normalizeWorkspaceObjects(next)
       saveDevices(normalized)
       return normalized
+    })
+  }, [])
+
+  const setFocusModeEnabled = useCallback((val) => {
+    setFocusModeEnabledRaw(prev => {
+      const next = typeof val === 'function' ? val(prev) : val
+      return saveFocusModeEnabled(next)
     })
   }, [])
 
@@ -88,6 +96,8 @@ export default function App() {
           tags={tags}
           setTags={setTags}
           devices={devices}
+          focusModeEnabled={focusModeEnabled}
+          setFocusModeEnabled={setFocusModeEnabled}
           onStart={handleStart}
           onShowHistory={() => setScreen('history')}
           onShowSetup={() => setScreen('setup')}
@@ -95,7 +105,11 @@ export default function App() {
         />
       )}
       {screen === 'focus-apps' && (
-        <FocusAppsScreen onBack={() => setScreen('home')} />
+        <FocusAppsScreen
+          focusModeEnabled={focusModeEnabled}
+          setFocusModeEnabled={setFocusModeEnabled}
+          onBack={() => setScreen('home')}
+        />
       )}
       {screen === 'setup' && (
         <WorkspaceSetup
@@ -109,6 +123,7 @@ export default function App() {
           task={task}
           duration={duration}
           devices={devices}
+          focusModeEnabled={focusModeEnabled}
           onEnd={handleEnd}
         />
       )}
