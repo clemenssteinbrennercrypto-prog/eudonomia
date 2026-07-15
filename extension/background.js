@@ -70,9 +70,24 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const domain = extractDomain(tab.url)
   const normalizedUrl = tab.url.toLowerCase()
 
-  chrome.storage.local.get(['eudaimonia_focus_apps_config', 'eudaimonia_session_active'], (result) => {
+  chrome.storage.local.get(['eudaimonia_focus_apps_config', 'eudaimonia_session_active', 'eudaimonia_session_end_ts'], (result) => {
     const sessionActive = result.eudaimonia_session_active === true
     if (!sessionActive) return
+
+    // Failsafe: if the app tab was closed (or the browser crashed) before the
+    // session ended normally, the content script never flips session_active
+    // back to false — the flag would stay true forever and block distraction
+    // sites indefinitely. session_end_ts is the planned end of the session; if
+    // that moment has passed (+2 min grace for overtime), treat the session as
+    // over and clear the stale flag. A missing/invalid end_ts also means we
+    // cannot prove a session is genuinely running, so don't block.
+    const endTs = Number(result.eudaimonia_session_end_ts)
+    const GRACE_MS = 2 * 60 * 1000
+    if (!Number.isFinite(endTs) || endTs <= 0 || Date.now() > endTs + GRACE_MS) {
+      chrome.storage.local.set({ eudaimonia_session_active: false })
+      chrome.storage.local.remove('eudaimonia_session_end_ts')
+      return
+    }
 
     const config = result.eudaimonia_focus_apps_config || { distractionApps: [], distractionDomains: [] }
     const blockedDomains = new Set([
