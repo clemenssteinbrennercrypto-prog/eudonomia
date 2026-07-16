@@ -42,7 +42,7 @@ pub struct DebugState {
 
 pub type SharedDebug = Arc<Mutex<DebugState>>;
 
-/// Blocking configuration pushed by the Eudonomia web app via POST /session.
+/// Blocking configuration pushed by the bundled UI via POST /session.
 /// While a session is active, blocked apps get hidden and blocked browser
 /// domains get redirected away — enforcement lives in `enforce_blocking`.
 #[derive(Debug, Clone, Default)]

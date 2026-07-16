@@ -311,8 +311,8 @@ export default function LandingPage({ onEnter }) {
             margin: '0 auto 36px',
           }}>
             No account. No server. No video storage.
-            Your camera feed is processed entirely in your browser
-            using MediaPipe — the same technology used by Google Meet.
+            Your camera feed is processed locally on your device
+            using MediaPipe.
           </p>
           <button
             onClick={onEnter}
@@ -342,7 +342,7 @@ export default function LandingPage({ onEnter }) {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
-              { q: 'Is my camera footage stored?', a: 'Never. All processing happens locally in your browser using MediaPipe. No frames leave your device.' },
+              { q: 'Is my camera footage stored?', a: 'Never. Attention processing happens locally on your device using MediaPipe. No frames leave your device.' },
               { q: 'Does it work without a webcam?', a: 'No — the webcam is required for attention tracking. A built-in laptop camera works perfectly.' },
               { q: 'Is it free?', a: 'Yes, completely free. No account, no subscription, no credit card.' },
             ].map(({ q, a }) => (

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import ExtensionSetup from './ExtensionSetup'
 import {
   fetchCompanionDebug,
+  getActivitySourceStatus,
   getLastActivity,
   installCompanionHelper,
   isActivityConnected,
-  isExtensionConnected,
   pushCompanionSession,
   startActivityPolling,
   stopActivityPolling,
@@ -626,7 +625,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [strictMode, setStrictMode] = useState(() => loadStrictMode())
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
-  const [extensionConnected, setExtensionConnected] = useState(() => isExtensionConnected())
+  const [activitySources, setActivitySources] = useState(() => getActivitySourceStatus())
   const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
@@ -644,12 +643,12 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   useEffect(() => {
     startActivityPolling((nextActivity) => {
       setActivity(nextActivity)
-      setExtensionConnected(isExtensionConnected())
+      setActivitySources(getActivitySourceStatus())
       setActivityConnected(isActivityConnected())
     })
     const heartbeat = setInterval(() => {
       setActivity(getLastActivity())
-      setExtensionConnected(isExtensionConnected())
+      setActivitySources(getActivitySourceStatus())
       setActivityConnected(isActivityConnected())
     }, 1000)
     return () => {
@@ -730,6 +729,17 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     testTimerRef.current = setTimeout(stopTestBlocking, 60_000)
   }
 
+  const activityRuntimeLabel = activitySources.primarySource === 'companion'
+    ? 'Native Companion'
+    : activitySources.primarySource === 'extension'
+      ? 'Legacy browser extension fallback'
+      : 'Native Companion'
+  const currentActivityValue = activityConnected
+    ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity')
+    : activitySources.extensionConnected && !activitySources.companionConnected
+      ? 'Extension fallback seen, Companion not connected'
+      : 'Waiting for Companion activity'
+
   return (
     <div className="screen-center" style={{ background: '#F5F4F0' }}>
       <div className="home-content" style={{ maxWidth: 720, gap: 22 }}>
@@ -737,7 +747,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           <div>
             <h1 className="app-title" style={{ marginBottom: 4, color: '#1a2e4a' }}>Focus Apps</h1>
             <p className="app-tagline" style={{ margin: 0 }}>
-              Choose what counts as work and what should pull your score down.
+              Configure the native Companion's app and website rules for focus sessions.
             </p>
           </div>
           <button
@@ -842,10 +852,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 900, color: '#1a2e4a' }}>
-                Streng-Modus {strictMode ? '· an' : '· aus'}
+                Strict Mode {strictMode ? '· on' : '· off'}
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#6b6357', lineHeight: 1.5, marginTop: 3 }}>
-                Versteckt <b>jede App außer deinen Focus-Apps</b> + Basis-Apps (Finder, Einstellungen). Browser bleiben offen — deren Websites filtert die Blockliste. Full focus.
+                The Companion hides every non-browser app except your focus apps and base system apps. Browsers stay open; blocked sites are handled by the native website block list.
               </div>
             </div>
             <button
@@ -921,7 +931,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
         }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, color: '#8a8177', fontWeight: 800, marginBottom: 3 }}>
-              Current active site
+              Current activity from {activityRuntimeLabel}
             </div>
             <div style={{
               fontSize: 14,
@@ -932,8 +942,13 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               whiteSpace: 'nowrap',
               maxWidth: 420,
             }}>
-              {activityConnected ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity') : 'Waiting for activity'}
+              {currentActivityValue}
             </div>
+            {activitySources.primarySource === 'extension' && (
+              <div style={{ marginTop: 4, color: '#9a6a1d', fontSize: 11, fontWeight: 750, lineHeight: 1.35 }}>
+                Legacy fallback only. Start the Companion app for native tracking and blocking.
+              </div>
+            )}
           </div>
           <span style={{
             border: `1px solid ${activityPreview.kind === 'focus' ? '#bbf7d0' : activityPreview.kind === 'distraction' ? '#fecaca' : '#e5e7eb'}`,

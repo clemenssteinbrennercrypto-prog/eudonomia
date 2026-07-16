@@ -1,13 +1,16 @@
-# Eudaimonia — Focus Session Tracker
+# Eudaimonia — Companion-first Focus Tracker
 
-A webcam-powered focus session app that tracks attention in real time using eye-tracking and face detection.
+Eudaimonia is a native macOS Companion app for focus sessions. The React UI is
+bundled into the Companion, while the public website should explain the vision
+and route users to the app download.
 
 ## Tech Stack
 
-- **Frontend:** React + Vite
-- **Eye tracking:** face-api.js (TensorFlow.js)
-- **Storage:** localStorage (no backend)
-- **Deployment:** Vercel
+- **Companion:** Tauri macOS app in `companion/`
+- **UI:** React + Vite, bundled into `companion/webui`
+- **Attention tracking:** MediaPipe in the local WebView
+- **Activity/blocking:** native Companion service on localhost:7331
+- **Marketing site:** Vercel surface for product explanation and downloads
 
 ## Local Development
 
@@ -16,25 +19,25 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+Open [http://localhost:5173](http://localhost:5173) for UI iteration. For the
+actual product runtime, build/run the Companion from `companion/src-tauri`.
 
-## Browser Extension (required for activity tracking)
+## Native Companion
 
-The Eudonomia Focus Tracker extension tracks your active browser tab
-to enable accurate focus/distraction detection.
+The Companion is the primary runtime. It hosts the UI, detects the frontmost app
+and browser tab via AppleScript, and enforces app/website blocking during a
+session.
 
-### Install:
+```bash
+cd companion/src-tauri
+cargo tauri build
+```
 
-1. Open Chrome -> chrome://extensions
-2. Enable Developer Mode (top right)
-3. Click "Load unpacked"
-4. Select the `extension/` folder from this repo
-5. Pin the extension to your toolbar
+The old browser extension remains in `extension/` as a legacy fallback for
+experiments, but it is not the product path and should not be presented as
+required setup.
 
-Works with: Chrome, Brave, Arc, Edge
-Safari: requires separate setup (coming soon)
-
-## Deployment (Vercel)
+## Website Deployment (Vercel)
 
 1. Go to [vercel.com](https://vercel.com) → **New Project**
 2. Import this repository from GitHub
@@ -43,7 +46,8 @@ Safari: requires separate setup (coming soon)
 
 ### Environment Variables
 
-None required. The app runs entirely in the browser.
+None required for the marketing/download surface. Native activity tracking and
+blocking require the Companion runtime.
 
 ### Build Settings (auto-detected via vercel.json)
 

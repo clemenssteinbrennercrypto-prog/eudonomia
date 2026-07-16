@@ -1,11 +1,11 @@
 // Axum HTTP server on localhost:7331.
 //
-// GET  /status  — current frontmost app/tab (polled by the Eudonomia web app)
-// POST /session — session + blocking config pushed by the web app on session
+// GET  /status  — current frontmost app/tab (polled by the bundled UI)
+// POST /session — session + blocking config pushed by the bundled UI on session
 //                 start/end (and re-pushed periodically as a keepalive)
 //
-// CORS is wide open (localhost bind only) so the Vercel-hosted app can talk
-// to us from the browser.
+// CORS is wide open (localhost bind only) for local development and the
+// Companion WebView.
 
 use crate::activity::{now_ms, SharedActivity, SharedDebug, SharedSession};
 use axum::{

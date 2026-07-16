@@ -1,8 +1,8 @@
 // Eudonomia — macOS app.
 //
-// A normal windowed app that loads the Eudonomia UI (the Vercel web app) in its
-// own WebView, plus a menubar tray for quick access and quit. Loading the UI in
-// the app's own window sidesteps every browser↔localhost problem (Brave shields,
+// A normal windowed app that loads the bundled Eudonomia UI in its own WebView,
+// plus a menubar tray for quick access and quit. Loading the UI in the app's own
+// window sidesteps every browser↔localhost problem (Brave shields,
 // IPv6, mixed content): the WebView talks to the in-process companion server on
 // 127.0.0.1:7331 directly. Two background workers run for the app's lifetime:
 // the AppleScript activity poller and the axum HTTP server.

@@ -37,6 +37,10 @@ function noteSource(source, ts) {
 }
 
 function applyIfFresher(activity, onUpdate, source) {
+  if (source === 'extension' && isDaemonConnected()) {
+    if (activity?.ts) noteSource(source, activity.ts)
+    return
+  }
   if (activity?.ts && activity.ts > lastActivity.ts) {
     noteSource(source, activity.ts)
     lastActivity = { ...activity, source }
@@ -122,6 +126,19 @@ export function isDaemonConnected() {
   return lastDaemonTs > 0 && (Date.now() - lastDaemonTs) < STALE_MS
 }
 
+export function getActivitySourceStatus() {
+  const now = Date.now()
+  const companionConnected = lastDaemonTs > 0 && (now - lastDaemonTs) < STALE_MS
+  const extensionConnected = lastExtensionTs > 0 && (now - lastExtensionTs) < STALE_MS
+  return {
+    companionConnected,
+    extensionConnected,
+    primarySource: companionConnected ? 'companion' : extensionConnected ? 'extension' : 'none',
+    lastCompanionTs: lastDaemonTs,
+    lastExtensionTs,
+  }
+}
+
 export function isActivityConnected() {
   const newestTs = Math.max(lastActivity.ts || 0, lastExtensionTs, lastDaemonTs)
   return newestTs > 0 && (Date.now() - newestTs) < STALE_MS
@@ -181,8 +198,4 @@ export async function installCompanionHelper() {
   } catch (err) {
     return { ok: false, error: String(err?.message || err) }
   }
-}
-
-export function isExtensionConnected() {
-  return lastExtensionTs > 0 && (Date.now() - lastExtensionTs) < STALE_MS
 }
