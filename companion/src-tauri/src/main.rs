@@ -26,6 +26,25 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 
+/// Check GitHub Releases for a newer companion build and install it silently in
+/// the background. The update is applied on the next launch, so this never
+/// interrupts a running focus session. Signed with our updater key; the plugin
+/// verifies the signature before installing. Any failure (offline, no update)
+/// is ignored — the app runs fine on the current version.
+fn spawn_update_check(handle: tauri::AppHandle) {
+    use tauri_plugin_updater::UpdaterExt;
+    tauri::async_runtime::spawn(async move {
+        let Ok(updater) = handle.updater() else { return };
+        match updater.check().await {
+            Ok(Some(update)) => {
+                let _ = update.download_and_install(|_, _| {}, || {}).await;
+                // Installed; it applies the next time the user opens Eudonomia.
+            }
+            _ => {}
+        }
+    });
+}
+
 /// Show and focus the main Eudonomia window (defined in tauri.conf.json).
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
@@ -64,10 +83,14 @@ fn main() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![quit_app])
         .setup(move |app| {
             // HTTP server on the tauri-managed tokio runtime.
             tauri::async_runtime::spawn(server::run(server_state.clone()));
+
+            // Check for a newer signed build in the background.
+            spawn_update_check(app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia", true, None::<&str>)?;
