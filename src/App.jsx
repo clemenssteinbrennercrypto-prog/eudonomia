@@ -61,7 +61,7 @@ function AppRefreshControl({ updateStatus }) {
   const title = updateAvailable
     ? isNative
       ? 'A signed native app update is available. Reload only refreshes the current bundled UI.'
-      : 'A newer web build is available. Reload loads it.'
+      : 'Reload refreshes this local development build.'
     : error
       ? `Update check unavailable: ${error}. Reload refreshes the current app only.`
       : 'Reload refreshes the current app without claiming a new version.'

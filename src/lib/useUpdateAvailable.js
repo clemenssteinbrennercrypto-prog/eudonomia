@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const CURRENT_BUILD_ID = __EUDAIMONIA_BUILD_ID__
 const CHECK_INTERVAL_MS = 5 * 60 * 1000
 const DEFAULT_STATUS = {
   runtime: 'web',
@@ -16,13 +15,6 @@ function getTauriInvoke() {
   return window.__TAURI__?.core?.invoke || null
 }
 
-function getBuildInfoUrl() {
-  const base = import.meta.env.BASE_URL || '/'
-  const url = new URL(`${base}build-info.json`, `${window.location.origin}/`)
-  url.searchParams.set('t', Date.now().toString())
-  return url.toString()
-}
-
 export function useAppUpdateStatus() {
   const [status, setStatus] = useState(() => ({
     ...DEFAULT_STATUS,
@@ -30,7 +22,6 @@ export function useAppUpdateStatus() {
   }))
   const checkingRef = useRef(false)
   const installingRef = useRef(false)
-  const webUpdateAvailableRef = useRef(false)
 
   const checkForUpdate = useCallback(async () => {
     if (checkingRef.current) return
@@ -67,45 +58,16 @@ export function useAppUpdateStatus() {
       return
     }
 
-    if (webUpdateAvailableRef.current || import.meta.env.DEV) return
-
-    checkingRef.current = true
-    setStatus(prev => ({ ...prev, runtime: 'web', checking: true, error: null }))
-
-    try {
-      const response = await fetch(getBuildInfoUrl(), {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
-      })
-
-      if (!response.ok) {
-        setStatus(prev => ({ ...prev, checking: false }))
-        return
-      }
-
-      const remoteBuild = await response.json()
-      if (remoteBuild?.buildId && remoteBuild.buildId !== CURRENT_BUILD_ID) {
-        webUpdateAvailableRef.current = true
-        setStatus(prev => ({
-          ...prev,
-          checking: false,
-          updateAvailable: true,
-          updateVersion: remoteBuild.buildId,
-        }))
-      } else {
-        webUpdateAvailableRef.current = false
-        setStatus(prev => ({ ...prev, checking: false, updateAvailable: false }))
-      }
-    } catch (error) {
-      // Update checks are best-effort and should never interrupt app use.
-      setStatus(prev => ({
-        ...prev,
-        checking: false,
-        error: error?.message || String(error),
-      }))
-    } finally {
-      checkingRef.current = false
-    }
+    setStatus(prev => ({
+      ...prev,
+      runtime: 'web',
+      checking: false,
+      installing: false,
+      updateAvailable: false,
+      updateVersion: null,
+      currentVersion: null,
+      error: null,
+    }))
   }, [])
 
   const installNativeUpdate = useCallback(async () => {

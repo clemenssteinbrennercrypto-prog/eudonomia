@@ -2,7 +2,7 @@
   "name": "eudonomia-companion",
   "version": "0.1.0",
   "private": true,
-  "description": "Native macOS companion for Eudonomia (Tauri). No JS frontend build — the window loads the deployed web app.",
+  "description": "Native macOS companion for Eudonomia (Tauri). The window hosts the bundled React UI.",
   "scripts": {
     "tauri": "tauri"
   }
