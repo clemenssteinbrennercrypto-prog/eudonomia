@@ -53,6 +53,10 @@ function AppRefreshControl({ updateStatus }) {
 
   const isNative = runtime === 'native'
   const versionText = updateVersion ? ` ${updateVersion}` : ''
+  const primaryAction = isNative && updateAvailable ? installNativeUpdate : reloadCurrentApp
+  const primaryLabel = isNative && updateAvailable
+    ? installing ? 'Installing' : 'Update'
+    : 'Reload'
   const statusText = installing
     ? 'Installing update...'
     : updateAvailable
@@ -67,7 +71,7 @@ function AppRefreshControl({ updateStatus }) {
 
   const title = updateAvailable
     ? isNative
-      ? 'A signed native app update is available. Reload only refreshes the current bundled UI.'
+      ? 'A native app update is available. Update installs a newer app bundle; Reload only refreshes the current UI.'
       : 'Reload refreshes this local development build.'
     : error
       ? `Update check unavailable: ${error}. Reload refreshes the current app only.`
@@ -78,11 +82,12 @@ function AppRefreshControl({ updateStatus }) {
       <button
         className="app-refresh-button"
         type="button"
-        onClick={reloadCurrentApp}
-        aria-label="Reload current Eudonomia app"
+        onClick={primaryAction}
+        disabled={installing}
+        aria-label={isNative && updateAvailable ? 'Install native Eudonomia update' : 'Reload current Eudonomia app'}
       >
         <span className="app-refresh-icon" aria-hidden="true">↻</span>
-        <span>Reload</span>
+        <span>{primaryLabel}</span>
       </button>
       <span className={`app-refresh-status ${updateAvailable ? 'is-update' : ''}`}>
         {statusText}
@@ -91,11 +96,11 @@ function AppRefreshControl({ updateStatus }) {
         <button
           className="app-update-button"
           type="button"
-          onClick={installNativeUpdate}
+          onClick={reloadCurrentApp}
           disabled={installing}
-          aria-label="Install native Eudonomia update"
+          aria-label="Reload current Eudonomia app without installing the available native update"
         >
-          {installing ? 'Installing' : 'Install'}
+          Reload only
         </button>
       )}
     </div>

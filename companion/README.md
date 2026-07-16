@@ -40,8 +40,16 @@ should not be presented as manual-install downloads.
 
 Pushes to `main` use `.github/workflows/companion-test.yml` instead. That
 workflow refreshes and verifies the bundled UI, builds unsigned internal macOS
-artifacts, and uploads them as workflow artifacts. It does not require Apple
-signing, notarization, or Tauri updater signing secrets.
+artifacts, uploads them as workflow artifacts, and publishes updater artifacts
+to the moving `internal-test` prerelease using `TAURI_SIGNING_PRIVATE_KEY`.
+Test-channel builds use `src-tauri/tauri.test.conf.json`, so they poll
+`releases/download/internal-test/latest.json` instead of the production
+`releases/latest/download/latest.json` endpoint.
+
+This internal channel still needs Tauri updater signing, because Tauri refuses
+to install unsigned updater archives. It intentionally does not require Apple
+Developer ID signing or notarization. That makes it practical for internal
+testing, but macOS may still show normal warnings for unsigned apps.
 
 Release publishing requires these GitHub Actions secrets:
 
@@ -63,8 +71,11 @@ then swaps the bundle directory into place.
 
 The base Tauri config is internal-build friendly: unsigned builds do not create
 updater artifacts and do not opt into hardened runtime or entitlements. The
-production release workflow adds `src-tauri/tauri.release.conf.json`, which
-enables updater artifacts plus macOS hardened runtime and entitlements.
+test workflow adds `src-tauri/tauri.test.conf.json`, which enables updater
+artifacts and points at the internal channel. The production release workflow
+adds `src-tauri/tauri.release.conf.json`, which enables updater artifacts plus
+macOS hardened runtime and entitlements while preserving the production updater
+endpoint.
 
 ## Build
 
@@ -73,6 +84,7 @@ npm run refresh:companion-webui
 npm run verify:companion-webui
 cd companion/src-tauri
 cargo tauri build      # unsigned internal build
+cargo tauri build --config tauri.test.conf.json  # internal updater channel
 cargo tauri build --config tauri.release.conf.json  # production config shape
 cargo test             # pure blocking/scoring logic
 ```

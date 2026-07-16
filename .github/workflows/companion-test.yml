@@ -1,7 +1,8 @@
 name: Test Companion
 
-# Fast internal Companion build for main. This verifies the bundled UI and
-# produces unsigned macOS artifacts without Apple signing/notarization secrets.
+# Fast internal Companion build for main. This verifies the bundled UI, produces
+# unsigned macOS artifacts, and publishes a prerelease updater channel using
+# Tauri updater signatures.
 
 on:
   push:
@@ -19,7 +20,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test-build:
@@ -70,11 +71,24 @@ jobs:
       - name: Verify bundled companion UI
         run: npm run verify:companion-webui
 
+      - name: Validate internal updater signing secret
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is required for internal updater artifacts." >&2
+            echo "Apple signing/notarization secrets are still only required by companion-release.yml." >&2
+            exit 1
+          fi
+
       - name: Build unsigned companion
         uses: tauri-apps/tauri-action@v1
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: companion
-          args: --target universal-apple-darwin --verbose
+          args: --target universal-apple-darwin --verbose --config src-tauri/tauri.test.conf.json
 
       - name: Upload unsigned app bundle
         uses: actions/upload-artifact@v4
@@ -84,3 +98,72 @@ jobs:
             companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.app
             companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
           if-no-files-found: error
+
+      - name: Publish internal updater channel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          bundle_root="companion/src-tauri/target/universal-apple-darwin/release/bundle"
+          release_dir="$(mktemp -d)"
+
+          find "$bundle_root" -type f \( -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' -o -name 'latest.json' \) -exec cp {} "$release_dir/" \;
+
+          if [ ! -f "$release_dir/latest.json" ]; then
+            echo "latest.json was not produced; the test build cannot be used by the Tauri updater." >&2
+            exit 1
+          fi
+
+          if ! find "$release_dir" -type f -name '*.app.tar.gz' | grep -q .; then
+            echo "No .app.tar.gz updater archive was produced." >&2
+            exit 1
+          fi
+
+          if ! find "$release_dir" -type f -name '*.app.tar.gz.sig' | grep -q .; then
+            echo "No updater signature was produced." >&2
+            exit 1
+          fi
+
+          python3 - "$release_dir/latest.json" <<'PY'
+          import json
+          import sys
+
+          latest_path = sys.argv[1]
+          latest = json.load(open(latest_path))
+          platforms = latest.get("platforms") or {}
+          if not platforms:
+              raise SystemExit("latest.json does not contain updater platforms")
+
+          bad = []
+          for name, metadata in platforms.items():
+              url = metadata.get("url", "")
+              signature = metadata.get("signature", "")
+              if "releases/download/internal-test/" not in url:
+                  bad.append(f"{name}: unexpected url {url!r}")
+              if not signature:
+                  bad.append(f"{name}: missing signature")
+
+          if bad:
+              raise SystemExit("\n".join(bad))
+          PY
+
+          git tag -f internal-test "$GITHUB_SHA"
+          git push -f origin refs/tags/internal-test
+
+          if gh release view internal-test >/dev/null 2>&1; then
+            existing_assets="$(gh release view internal-test --json assets --jq '.assets[].name')"
+            if [ -n "$existing_assets" ]; then
+              while IFS= read -r asset; do
+                [ -n "$asset" ] && gh release delete-asset internal-test "$asset" -y
+              done <<< "$existing_assets"
+            fi
+          else
+            gh release create internal-test \
+              --title "Eudonomia Internal Test" \
+              --notes "Moving internal test channel for unsigned Companion builds. Do not use for public downloads." \
+              --prerelease
+          fi
+
+          gh release upload internal-test "$release_dir"/* --clobber

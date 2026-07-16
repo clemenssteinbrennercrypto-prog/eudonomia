@@ -41,9 +41,10 @@ then signs, notarizes, verifies, and publishes the macOS bundle.
 
 Pushes to `main` use `.github/workflows/companion-test.yml`. That workflow
 refreshes and verifies the bundled UI, builds unsigned internal macOS artifacts,
-and uploads them as GitHub Actions artifacts without Apple signing/notarization
-secrets. These test builds are for internal validation; public downloads and
-native updater metadata still come from production releases.
+uploads them as GitHub Actions artifacts, and publishes updater artifacts to the
+`internal-test` prerelease using `TAURI_SIGNING_PRIVATE_KEY`. These test builds
+are for internal validation; public downloads and production native updater
+metadata still come from production releases.
 
 The native app displays a small build/version badge. Use it, or inspect
 `companion/webui/build-info.json`, to confirm a fresh build contains the commit

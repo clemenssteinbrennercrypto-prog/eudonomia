@@ -1,0 +1,12 @@
+{
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/clemenssteinbrennercrypto-prog/eudonomia/releases/download/internal-test/latest.json"
+      ]
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true
+  }
+}
