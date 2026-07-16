@@ -97,6 +97,36 @@ fn is_base_app(app_lc: &str) -> bool {
     BASE_APPS.iter().any(|b| b.to_lowercase() == app_lc)
 }
 
+/// Groups of names that refer to the same app. The frontmost process name from
+/// System Events is often the short/binary name (e.g. "Code" for VS Code,
+/// "Google Chrome" for a "Chrome" entry), not the friendly name a user types in
+/// the Focus Apps list. Without this, strict mode would hide an allowed app —
+/// e.g. add "VS Code" as a focus app, but the process is "Code", no match, hide.
+/// Kept conservative: only well-known, unambiguous aliases (never "Electron",
+/// which many apps share).
+const APP_ALIASES: &[&[&str]] = &[
+    &["vs code", "visual studio code", "code"],
+    &["chrome", "google chrome"],
+    &["brave", "brave browser"],
+    &["edge", "microsoft edge"],
+    &["intellij", "intellij idea", "idea"],
+    &["word", "microsoft word"],
+    &["excel", "microsoft excel"],
+    &["powerpoint", "microsoft powerpoint"],
+];
+
+/// True if a user-entered app name refers to the given frontmost process name,
+/// resolving common display-name ↔ process-name aliases.
+fn app_name_matches(entry: &str, process_name_lc: &str) -> bool {
+    let entry_lc = entry.trim().to_lowercase();
+    if entry_lc == process_name_lc {
+        return true;
+    }
+    APP_ALIASES.iter().any(|group| {
+        group.contains(&entry_lc.as_str()) && group.contains(&process_name_lc)
+    })
+}
+
 /// Decide whether the frontmost app should be hidden. Pure so it can be
 /// unit-tested. `app_lc` is the lowercased frontmost process name.
 fn should_hide_app(
@@ -114,12 +144,12 @@ fn should_hide_app(
         }
         let allowed = allowed_apps
             .iter()
-            .any(|a| a.trim().to_lowercase() == app_lc);
+            .any(|a| app_name_matches(a, app_lc));
         !allowed
     } else {
         blocked_apps
             .iter()
-            .any(|a| a.trim().to_lowercase() == app_lc)
+            .any(|a| app_name_matches(a, app_lc))
     }
 }
 
@@ -566,6 +596,19 @@ mod tests {
             &allowed,
             &[]
         ));
+    }
+
+    #[test]
+    fn strict_mode_resolves_display_name_aliases() {
+        // The real bug: System Events reports VS Code's process as "Code", but
+        // the user added the friendly "VS Code" preset. It must NOT be hidden.
+        let allowed = v(&["VS Code", "Notion"]);
+        assert!(!should_hide_app(true, "code", false, &allowed, &[]));
+        // A different unlisted app is still hidden.
+        assert!(should_hide_app(true, "slack", false, &allowed, &[]));
+        // Blocklist mode resolves aliases too: blocking "VS Code" hides "Code".
+        let blocked = v(&["VS Code"]);
+        assert!(should_hide_app(false, "code", false, &[], &blocked));
     }
 
     #[test]
