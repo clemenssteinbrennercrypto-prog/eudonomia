@@ -28,14 +28,20 @@ shields, IPv6, mixed content).
 The app checks GitHub Releases for a newer signed native build through Tauri's
 updater. The in-app refresh control always offers a local reload, and shows a
 separate install action only when the updater reports a real native app update.
-See `.github/workflows/companion-release.yml`, which builds a universal macOS
-DMG, signs it with a Developer ID Application certificate, notarizes it, staples
-the notarization ticket, verifies Gatekeeper acceptance, and only then publishes
-the GitHub Release. CI assigns the version automatically, no manual bumping.
+See `.github/workflows/companion-release.yml`, which runs only for `release-v*`
+tags or manual release dispatches. It builds a universal macOS DMG, signs it
+with a Developer ID Application certificate, notarizes it, staples the
+notarization ticket, verifies Gatekeeper acceptance, and only then publishes the
+GitHub Release.
 
 The user-facing download is the `.dmg` asset from the latest Companion release.
 The `.app.tar.gz`, `.sig`, and `latest.json` assets are updater inputs and
 should not be presented as manual-install downloads.
+
+Pushes to `main` use `.github/workflows/companion-test.yml` instead. That
+workflow refreshes and verifies the bundled UI, builds unsigned internal macOS
+artifacts, and uploads them as workflow artifacts. It does not require Apple
+signing, notarization, or Tauri updater signing secrets.
 
 Release publishing requires these GitHub Actions secrets:
 
@@ -48,21 +54,32 @@ Release publishing requires these GitHub Actions secrets:
 - `TAURI_SIGNING_PRIVATE_KEY` — private key for Tauri updater signatures
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — only if the updater key is encrypted
 
-Because the UI is bundled (`companion/webui`), a web-app change reaches the
-native app only when that bundle is refreshed and a new companion release is
-built. `.github/workflows/companion-release.yml` now does that on every relevant
-push: it installs the root web dependencies, runs
-`npm run refresh:companion-webui`, then packages the refreshed bundle into the
-signed Tauri release.
+Because the UI is bundled (`companion/webui`), a web-app change reaches a native
+build only when that bundle is refreshed before packaging. Both Companion
+workflows run `npm run refresh:companion-webui` followed by
+`npm run verify:companion-webui`. The refresh script builds the root Vite app,
+writes `companion/webui/build-info.json`, verifies relative bundled assets, and
+then swaps the bundle directory into place.
+
+The base Tauri config is internal-build friendly: unsigned builds do not create
+updater artifacts and do not opt into hardened runtime or entitlements. The
+production release workflow adds `src-tauri/tauri.release.conf.json`, which
+enables updater artifacts plus macOS hardened runtime and entitlements.
 
 ## Build
 
 ```bash
 npm run refresh:companion-webui
+npm run verify:companion-webui
 cd companion/src-tauri
-cargo tauri build      # -> target/release/bundle/dmg/*.dmg
+cargo tauri build      # unsigned internal build
+cargo tauri build --config tauri.release.conf.json  # production config shape
 cargo test             # pure blocking/scoring logic
 ```
+
+The app shows a small build badge in the lower-left corner, for example
+`test v0.1.123 · abc1234`. For a fresh native build, confirm that badge and
+`companion/webui/build-info.json` match the commit or GitHub run you expected.
 
 ## How it connects
 

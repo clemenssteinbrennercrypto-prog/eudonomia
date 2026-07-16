@@ -1,22 +1,19 @@
 name: Release Companion
 
-# Builds, signs, notarizes, staples, verifies, and publishes the native
-# Eudonomia companion whenever its source or release pipeline changes. The
-# installed app checks the resulting GitHub Release on launch and updates itself.
+# Production-only Companion pipeline. Builds a signed universal macOS app,
+# notarizes and staples the DMG, verifies Gatekeeper acceptance, then publishes
+# the release used by the native updater.
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'index.html'
-      - 'public/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.js'
-      - 'companion/**'
-      - '.github/workflows/companion-release.yml'
-  workflow_dispatch: {}
+    tags:
+      - 'release-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, without the release-v prefix'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -42,26 +39,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: companion/src-tauri
-
-      - name: Refresh bundled companion UI
-        run: npm run refresh:companion-webui
-
-      - name: Verify bundled companion UI
-        run: |
-          set -euo pipefail
-
-          test -f companion/webui/index.html
-          test -d companion/webui/assets
-
-          if ! grep -q 'src="./assets/' companion/webui/index.html; then
-            echo "companion/webui/index.html does not reference bundled relative JS assets." >&2
-            exit 1
-          fi
-
-          if ! grep -q 'href="./assets/' companion/webui/index.html; then
-            echo "companion/webui/index.html does not reference bundled relative CSS assets." >&2
-            exit 1
-          fi
 
       - name: Validate release secrets
         env:
@@ -94,19 +71,44 @@ jobs:
             exit 1
           fi
 
-      # Give every CI build a unique, monotonically increasing version so the
-      # updater always recognises it as newer than what's installed. No manual
-      # version bumping needed.
-      - name: Set build version
+      - name: Set release build identity
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          python3 - <<'PY'
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#release-v}"
+          else
+            version="${INPUT_VERSION}"
+          fi
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release version must be semver-like: $version" >&2
+            exit 1
+          fi
+
+          python3 - <<PY
           import json
           p = 'companion/src-tauri/tauri.conf.json'
           d = json.load(open(p))
-          d['version'] = '0.1.${{ github.run_number }}'
+          d['version'] = '${version}'
           json.dump(d, open(p, 'w'), indent=2)
           print('version set to', d['version'])
           PY
+
+          {
+            echo "EUDONOMIA_BUILD_VERSION=$version"
+            echo "EUDONOMIA_BUILD_CHANNEL=release"
+            echo "EUDONOMIA_BUILD_ID=release-v$version-${GITHUB_SHA::7}"
+            echo "EUDONOMIA_BUILD_SHA=$GITHUB_SHA"
+          } >> "$GITHUB_ENV"
+
+      - name: Refresh bundled companion UI
+        run: npm run refresh:companion-webui
+
+      - name: Verify bundled companion UI
+        run: npm run verify:companion-webui
 
       - id: tauri-build
         uses: tauri-apps/tauri-action@v1
@@ -122,7 +124,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: companion
-          tagName: companion-v__VERSION__
+          tagName: release-v__VERSION__
           releaseName: 'Eudonomia v__VERSION__'
           releaseBody: |
             Download the macOS `.dmg` asset to install Eudonomia.
@@ -131,7 +133,7 @@ jobs:
           releaseDraft: true
           prerelease: false
           releaseAssetNamePattern: '[name]-[version]-[arch][ext]'
-          args: --target universal-apple-darwin --verbose
+          args: --target universal-apple-darwin --verbose --config src-tauri/tauri.release.conf.json
 
       - name: Verify signed and notarized macOS artifacts
         run: |
@@ -169,4 +171,4 @@ jobs:
           VERSION: ${{ steps.tauri-build.outputs.appVersion }}
         run: |
           set -euo pipefail
-          gh release edit "companion-v${VERSION}" --draft=false --latest
+          gh release edit "release-v${VERSION}" --draft=false --latest

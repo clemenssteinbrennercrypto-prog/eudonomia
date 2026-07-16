@@ -14,6 +14,13 @@ import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 
 const isNativeRuntime = () => Boolean(window.__TAURI__?.core?.invoke)
 
+const bundledBuildInfo = {
+  version: import.meta.env.VITE_EUDONOMIA_BUILD_VERSION || '',
+  channel: import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL || '',
+  buildId: import.meta.env.VITE_EUDONOMIA_BUILD_ID || '',
+  shortSha: import.meta.env.VITE_EUDONOMIA_BUILD_SHORT_SHA || '',
+}
+
 function getInitialFlow() {
   if (!isNativeRuntime() && !import.meta.env.DEV) return 'landing'
   return localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'onboarding'
@@ -95,6 +102,42 @@ function AppRefreshControl({ updateStatus }) {
   )
 }
 
+function BuildIdentity() {
+  const [info, setInfo] = useState(bundledBuildInfo)
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch('./build-info.json', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.version) {
+          setInfo({
+            version: data.version,
+            channel: data.channel || bundledBuildInfo.channel,
+            buildId: data.buildId || bundledBuildInfo.buildId,
+            shortSha: data.shortSha || bundledBuildInfo.shortSha,
+          })
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const version = info.version || 'dev'
+  const build = info.shortSha || info.buildId || 'local'
+  const channel = info.channel ? `${info.channel} ` : ''
+
+  return (
+    <div className="app-build-identity" title={info.buildId || build}>
+      {channel}v{version} · {build}
+    </div>
+  )
+}
+
 export default function App() {
   // Public web stays marketing/download only. Native and local dev expose the app.
   const [flow, setFlow] = useState(getInitialFlow)
@@ -150,6 +193,7 @@ export default function App() {
     return (
       <>
         <AppRefreshControl updateStatus={updateStatus} />
+        <BuildIdentity />
         <Onboarding onComplete={() => {
           setFlow('app')
           if (loadDevices().length === 0) setScreen('setup')
@@ -161,6 +205,7 @@ export default function App() {
   return (
     <>
       <AppRefreshControl updateStatus={updateStatus} />
+      <BuildIdentity />
       {screen === 'home' && (
         <HomeScreen
           task={task}

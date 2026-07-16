@@ -39,7 +39,7 @@
       "dmg",
       "app"
     ],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -48,8 +48,6 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "entitlements": "./Entitlements.plist",
-      "hardenedRuntime": true,
       "signingIdentity": null,
       "minimumSystemVersion": "10.15"
     }

@@ -1,0 +1,86 @@
+name: Test Companion
+
+# Fast internal Companion build for main. This verifies the bundled UI and
+# produces unsigned macOS artifacts without Apple signing/notarization secrets.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - 'scripts/refresh-companion-webui.mjs'
+      - 'companion/**'
+      - '.github/workflows/companion-test.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check preinstalled Node.js
+        run: |
+          node --version
+          npm --version
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion/src-tauri
+
+      - name: Set internal build identity
+        run: |
+          set -euo pipefail
+          version="0.1.${GITHUB_RUN_NUMBER}"
+
+          python3 - <<PY
+          import json
+          p = 'companion/src-tauri/tauri.conf.json'
+          d = json.load(open(p))
+          d['version'] = '${version}'
+          json.dump(d, open(p, 'w'), indent=2)
+          print('version set to', d['version'])
+          PY
+
+          {
+            echo "EUDONOMIA_BUILD_VERSION=$version"
+            echo "EUDONOMIA_BUILD_CHANNEL=test"
+            echo "EUDONOMIA_BUILD_ID=test-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+            echo "EUDONOMIA_BUILD_SHA=$GITHUB_SHA"
+          } >> "$GITHUB_ENV"
+
+      - name: Refresh bundled companion UI
+        run: npm run refresh:companion-webui
+
+      - name: Verify bundled companion UI
+        run: npm run verify:companion-webui
+
+      - name: Build unsigned companion
+        uses: tauri-apps/tauri-action@v1
+        with:
+          projectPath: companion
+          args: --target universal-apple-darwin --verbose
+
+      - name: Upload unsigned app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: eudonomia-companion-test-${{ github.run_number }}
+          path: |
+            companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.app
+            companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
+          if-no-files-found: error

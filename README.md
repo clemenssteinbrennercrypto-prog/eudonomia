@@ -35,9 +35,19 @@ cargo tauri build
 ```
 
 Native releases are produced by `.github/workflows/companion-release.yml`. The
-workflow rebuilds `companion/webui` from the root Vite app before Tauri packages
-the macOS bundle, so a pushed UI change reaches the installed app only after the
-workflow publishes a signed Companion release and the app installs that update.
+workflow runs only from `release-v*` tags or manual dispatch, rebuilds
+`companion/webui` from the root Vite app, applies the production Tauri overlay,
+then signs, notarizes, verifies, and publishes the macOS bundle.
+
+Pushes to `main` use `.github/workflows/companion-test.yml`. That workflow
+refreshes and verifies the bundled UI, builds unsigned internal macOS artifacts,
+and uploads them as GitHub Actions artifacts without Apple signing/notarization
+secrets. These test builds are for internal validation; public downloads and
+native updater metadata still come from production releases.
+
+The native app displays a small build/version badge. Use it, or inspect
+`companion/webui/build-info.json`, to confirm a fresh build contains the commit
+or workflow run you expected.
 
 The old browser extension remains in `extension/` as a legacy fallback for
 experiments, but it is not the product path and should not be presented as
