@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const CURRENT_BUILD_ID = __EUDAIMONIA_BUILD_ID__
 const CHECK_INTERVAL_MS = 5 * 60 * 1000
@@ -28,11 +28,17 @@ export function useAppUpdateStatus() {
     ...DEFAULT_STATUS,
     runtime: getTauriInvoke() ? 'native' : 'web',
   }))
+  const checkingRef = useRef(false)
+  const installingRef = useRef(false)
+  const webUpdateAvailableRef = useRef(false)
 
   const checkForUpdate = useCallback(async () => {
+    if (checkingRef.current) return
+
     const invoke = getTauriInvoke()
 
     if (invoke) {
+      checkingRef.current = true
       setStatus(prev => ({ ...prev, runtime: 'native', checking: true, error: null }))
 
       try {
@@ -55,12 +61,15 @@ export function useAppUpdateStatus() {
           updateVersion: null,
           error: error?.message || String(error),
         }))
+      } finally {
+        checkingRef.current = false
       }
       return
     }
 
-    if (status.updateAvailable || import.meta.env.DEV) return
+    if (webUpdateAvailableRef.current || import.meta.env.DEV) return
 
+    checkingRef.current = true
     setStatus(prev => ({ ...prev, runtime: 'web', checking: true, error: null }))
 
     try {
@@ -76,6 +85,7 @@ export function useAppUpdateStatus() {
 
       const remoteBuild = await response.json()
       if (remoteBuild?.buildId && remoteBuild.buildId !== CURRENT_BUILD_ID) {
+        webUpdateAvailableRef.current = true
         setStatus(prev => ({
           ...prev,
           checking: false,
@@ -83,6 +93,7 @@ export function useAppUpdateStatus() {
           updateVersion: remoteBuild.buildId,
         }))
       } else {
+        webUpdateAvailableRef.current = false
         setStatus(prev => ({ ...prev, checking: false, updateAvailable: false }))
       }
     } catch (error) {
@@ -92,13 +103,16 @@ export function useAppUpdateStatus() {
         checking: false,
         error: error?.message || String(error),
       }))
+    } finally {
+      checkingRef.current = false
     }
-  }, [status.updateAvailable])
+  }, [])
 
   const installNativeUpdate = useCallback(async () => {
     const invoke = getTauriInvoke()
-    if (!invoke || status.installing) return
+    if (!invoke || installingRef.current) return
 
+    installingRef.current = true
     setStatus(prev => ({ ...prev, installing: true, error: null }))
 
     try {
@@ -116,8 +130,10 @@ export function useAppUpdateStatus() {
         installing: false,
         error: error?.message || String(error),
       }))
+    } finally {
+      installingRef.current = false
     }
-  }, [status.installing])
+  }, [])
 
   useEffect(() => {
     checkForUpdate()
