@@ -12,6 +12,13 @@ import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/s
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 
+const isNativeRuntime = () => Boolean(window.__TAURI__?.core?.invoke)
+
+function getInitialFlow() {
+  if (!isNativeRuntime() && !import.meta.env.DEV) return 'landing'
+  return localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'onboarding'
+}
+
 // ── Persist helpers ───────────────────────────────────────────────────────────
 function loadDevices() {
   try {
@@ -89,10 +96,8 @@ function AppRefreshControl({ updateStatus }) {
 }
 
 export default function App() {
-  // 'landing' → 'onboarding' → 'app'
-  const [flow, setFlow] = useState(
-    () => localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'landing'
-  )
+  // Public web stays marketing/download only. Native and local dev expose the app.
+  const [flow, setFlow] = useState(getInitialFlow)
   const [screen,   setScreen]   = useState('home')
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
@@ -138,12 +143,7 @@ export default function App() {
   }
 
   if (flow === 'landing') {
-    return (
-      <>
-        <AppRefreshControl updateStatus={updateStatus} />
-        <LandingPage onEnter={() => setFlow('onboarding')} />
-      </>
-    )
+    return <LandingPage />
   }
 
   if (flow === 'onboarding') {

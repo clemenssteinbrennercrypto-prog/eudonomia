@@ -4,24 +4,25 @@ import LegalModal from './LegalModal'
 const STEPS = [
   {
     num: '01',
-    title: 'Set your task',
-    body: 'Tell Eudaimonia what you\'re working on and for how long.',
+    title: 'Download the Companion',
+    body: 'Install the native macOS app. The website is only here to explain the product and point you to the app.',
   },
   {
     num: '02',
-    title: 'Camera tracks your attention',
-    body: 'Blink rate, eye openness, and head position are analyzed locally in real time — nothing leaves your device.',
+    title: 'Run sessions in the app',
+    body: 'The Companion hosts the focus UI, reads attention signals locally, and keeps the experience out of a browser tab.',
   },
   {
     num: '03',
-    title: 'Get gently called back',
-    body: 'If you drift for too long, a calm alert brings you back without breaking your flow.',
+    title: 'Stay inside your work',
+    body: 'When your focus slips, Eudaimonia can call you back and enforce native app and website guardrails.',
   },
 ]
 
 const font = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif'
+const DOWNLOAD_URL = 'https://github.com/clemenssteinbrennercrypto-prog/eudonomia/releases/latest'
 
-export default function LandingPage({ onEnter }) {
+export default function LandingPage() {
   const [legalTab, setLegalTab] = useState(null)
 
   return (
@@ -121,7 +122,7 @@ export default function LandingPage({ onEnter }) {
                 boxShadow: '0 0 6px #6496ed',
                 display: 'inline-block',
               }} />
-              Focus tracking — powered by your camera
+              Native macOS Companion
             </span>
           </div>
 
@@ -135,7 +136,7 @@ export default function LandingPage({ onEnter }) {
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>
-            Your silent<br />focus guardian
+            Eudaimonia<br />Companion
           </h1>
 
           {/* Subtitle */}
@@ -144,15 +145,17 @@ export default function LandingPage({ onEnter }) {
             maxWidth: 440, margin: '0 auto 44px',
             letterSpacing: '0.01em',
           }}>
-            Eudaimonia watches your attention using your webcam.
-            No video recorded. No data sent. Everything stays on your device.
+            Eudaimonia is a native Mac app for focus sessions. It tracks
+            attention locally, helps you notice drift, and keeps the core
+            experience in the Companion app instead of the browser.
           </p>
 
           {/* CTA */}
-          <button
-            onClick={onEnter}
+          <a
+            href={DOWNLOAD_URL}
             className="hero-cta"
             style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               background: 'linear-gradient(135deg, #1a2e4a 0%, #243d61 100%)',
               color: '#ffffff',
               border: '1px solid rgba(100,149,237,0.3)',
@@ -161,11 +164,11 @@ export default function LandingPage({ onEnter }) {
               cursor: 'pointer', fontFamily: font,
               transition: 'all 0.2s ease',
               boxShadow: '0 0 0 1px rgba(100,149,237,0.1), 0 4px 20px rgba(26,46,74,0.5)',
-              letterSpacing: '0.01em',
+              letterSpacing: '0.01em', textDecoration: 'none',
             }}
           >
-            Start focusing — it's free
-          </button>
+            Download for macOS
+          </a>
 
           {/* Trust pills */}
           <div style={{
@@ -173,9 +176,9 @@ export default function LandingPage({ onEnter }) {
             justifyContent: 'center', flexWrap: 'wrap',
           }}>
             {[
-              { icon: '🔒', label: 'Private' },
-              { icon: '⚡', label: 'Instant' },
-              { icon: '✓', label: 'Free forever' },
+              { icon: '🔒', label: 'Local-first' },
+              { icon: '⌘', label: 'Native Mac app' },
+              { icon: '✓', label: 'No account needed' },
             ].map(({ icon, label }) => (
               <span key={label} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -204,9 +207,9 @@ export default function LandingPage({ onEnter }) {
           gap: 0, flexWrap: 'wrap',
         }}>
           {[
-            { value: '100%', label: 'Local processing' },
-            { value: '0',    label: 'Data sent to servers' },
-            { value: 'Free', label: 'No account needed' },
+            { value: 'Mac', label: 'Companion app runtime' },
+            { value: '100%', label: 'Local attention processing' },
+            { value: '0',    label: 'Accounts required' },
           ].map(({ value, label }, i) => (
             <div key={label} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -245,7 +248,7 @@ export default function LandingPage({ onEnter }) {
               fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700,
               letterSpacing: '-0.03em', color: '#ffffff', margin: 0,
             }}>
-              Three steps to<br />deep focus
+              Website to app,<br />then focus
             </h2>
           </div>
 
@@ -310,24 +313,25 @@ export default function LandingPage({ onEnter }) {
             fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.75,
             margin: '0 auto 36px',
           }}>
-            No account. No server. No video storage.
-            Your camera feed is processed locally on your device
-            using MediaPipe.
+            No account. No video storage. The Companion processes camera
+            signals locally on your Mac using MediaPipe; the website does not
+            run your focus sessions.
           </p>
-          <button
-            onClick={onEnter}
+          <a
+            href={DOWNLOAD_URL}
             className="hero-cta"
             style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               background: '#ffffff', color: '#1a2e4a',
               border: 'none', height: 52, padding: '0 32px',
               borderRadius: 12, fontSize: 15, fontWeight: 700,
               cursor: 'pointer', fontFamily: font,
               transition: 'all 0.2s ease',
-              letterSpacing: '0.01em',
+              letterSpacing: '0.01em', textDecoration: 'none',
             }}
           >
-            Try it now — free
-          </button>
+            Get the Companion
+          </a>
         </div>
       </section>
 
@@ -343,8 +347,9 @@ export default function LandingPage({ onEnter }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
               { q: 'Is my camera footage stored?', a: 'Never. Attention processing happens locally on your device using MediaPipe. No frames leave your device.' },
-              { q: 'Does it work without a webcam?', a: 'No — the webcam is required for attention tracking. A built-in laptop camera works perfectly.' },
-              { q: 'Is it free?', a: 'Yes, completely free. No account, no subscription, no credit card.' },
+              { q: 'Can I use Eudaimonia in the browser?', a: 'The public website is only a landing and download surface. The main experience runs in the native macOS Companion app.' },
+              { q: 'Does it work without a webcam?', a: 'No. A camera is required for attention tracking; a built-in laptop camera works.' },
+              { q: 'Is it free?', a: 'Yes. No account, subscription, or credit card is required.' },
             ].map(({ q, a }) => (
               <div key={q} className="faq-card" style={{
                 padding: '20px 24px',

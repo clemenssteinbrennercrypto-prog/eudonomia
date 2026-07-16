@@ -44,7 +44,7 @@ export default function Onboarding({ onComplete }) {
       localStorage.setItem('eudaimonia_onboarded', 'true')
       goNext()
     } catch {
-      setError('Camera access is required. Please allow it in your browser settings.')
+      setError('Camera access is required. Please allow camera permission for Eudaimonia in your system settings.')
     } finally {
       setLoading(false)
     }
