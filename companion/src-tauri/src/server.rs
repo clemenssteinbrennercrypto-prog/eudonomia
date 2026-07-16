@@ -91,19 +91,32 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         .lock()
         .map(|guard| guard.clone())
         .unwrap_or_default();
+    let session = state
+        .session
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
+    let session_state = if !session.state.is_empty() {
+        session.state.as_str()
+    } else if !debug.session_state.is_empty() {
+        debug.session_state.as_str()
+    } else if session.active || debug.session_active {
+        "active"
+    } else {
+        "inactive"
+    };
+    let session_active = session.active;
+    let session_end_ts = session.end_ts;
 
     let body = serde_json::json!({
-        "sessionActive": debug.session_active,
-        "sessionState": if debug.session_state.is_empty() {
-            if debug.session_active { "active" } else { "inactive" }
-        } else {
-            debug.session_state.as_str()
-        },
-        "sessionEndTs": debug.session_end_ts,
-        "blockedAppsCount": debug.blocked_apps_count,
-        "blockedDomainsCount": debug.blocked_domains_count,
-        "strictMode": debug.strict_mode,
-        "allowedAppsCount": debug.allowed_apps_count,
+        "sessionActive": session_active,
+        "sessionState": session_state,
+        "sessionEndTs": session_end_ts,
+        "sessionUpdatedTs": debug.session_updated_ts,
+        "blockedAppsCount": session.blocked_apps.len(),
+        "blockedDomainsCount": session.blocked_domains.len(),
+        "strictMode": session.strict_mode,
+        "allowedAppsCount": session.allowed_apps.len(),
         "lastPollTs": debug.last_poll_ts,
         "lastActivity": {
             "app": activity.app,
@@ -150,6 +163,8 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
         "active"
     } else if requested_state == "paused" {
         "paused"
+    } else if requested_state == "ended" {
+        "ended"
     } else {
         "inactive"
     };
@@ -186,6 +201,7 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
         // reconcile loop decides when to (un)apply from them. Overwriting them
         // here would make reconcile re-prompt for admin on every keepalive push.
         cfg.active = active;
+        cfg.state = session_state.to_string();
         cfg.end_ts = end_ts;
         cfg.blocked_apps = blocked_apps;
         cfg.blocked_domains = blocked_domains;
@@ -203,6 +219,7 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
             debug.session_active = active;
             debug.session_state = session_state.to_string();
             debug.session_end_ts = end_ts;
+            debug.session_updated_ts = received_at;
             debug.blocked_apps_count = blocked_apps_count;
             debug.blocked_domains_count = blocked_domains_count;
             debug.strict_mode = strict_mode;
@@ -213,6 +230,10 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
     let body = serde_json::json!({
         "ok": accepted,
         "active": active,
+        "sessionActive": active,
+        "sessionState": session_state,
+        "sessionEndTs": end_ts,
+        "sessionUpdatedTs": received_at,
         "receivedAt": received_at,
     })
     .to_string();

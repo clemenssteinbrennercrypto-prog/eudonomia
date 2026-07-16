@@ -28,6 +28,7 @@ pub struct DebugState {
     pub session_state: String,
     pub session_active: bool,
     pub session_end_ts: u64,
+    pub session_updated_ts: u64,
     pub blocked_apps_count: usize,
     pub blocked_domains_count: usize,
     pub strict_mode: bool,
@@ -47,6 +48,7 @@ pub type SharedDebug = Arc<Mutex<DebugState>>;
 #[derive(Debug, Clone, Default)]
 pub struct SessionConfig {
     pub active: bool,
+    pub state: String,
     pub end_ts: u64,
     pub blocked_apps: Vec<String>,
     pub blocked_domains: Vec<String>,
@@ -327,10 +329,12 @@ fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, dom
         if cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS {
             // Stale session (web app gone without cleanup) — self-heal.
             cfg.active = false;
+            cfg.state = "inactive".to_string();
             if let Ok(mut d) = debug.lock() {
                 d.session_active = false;
                 d.session_state = "inactive".to_string();
                 d.session_end_ts = 0;
+                d.session_updated_ts = now;
                 d.blocked_apps_count = 0;
                 d.blocked_domains_count = 0;
             }
@@ -403,6 +407,7 @@ fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
         let expired = cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS;
         if cfg.active && expired {
             cfg.active = false;
+            cfg.state = "inactive".to_string();
             cfg.strict_mode = false;
             cfg.blocked_apps.clear();
             cfg.blocked_domains.clear();
@@ -411,6 +416,7 @@ fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
                 d.session_active = false;
                 d.session_state = "inactive".to_string();
                 d.session_end_ts = 0;
+                d.session_updated_ts = now;
                 d.blocked_apps_count = 0;
                 d.blocked_domains_count = 0;
                 d.strict_mode = false;

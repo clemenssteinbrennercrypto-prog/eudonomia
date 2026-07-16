@@ -5,7 +5,7 @@ import {
   isScreenRole,
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
-import { getLastActivity, isActivityConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { fetchCompanionSession, getLastActivity, isActivityConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
 
@@ -787,6 +787,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const pausedAtRef     = useRef(null) // timestamp when paused
   const pausedTotalRef  = useRef(0)    // total ms spent paused
   const timeLeftRef     = useRef(totalSeconds)
+  const companionSessionRef = useRef({ active: false, sessionActive: false, sessionState: 'inactive', sessionEndTs: 0 })
+  const companionSessionHadActiveRef = useRef(false)
 
   // ── Detection rolling buffers ─────────────────────────────────────────────
   const blinkTimestampsRef     = useRef([])
@@ -917,34 +919,61 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     }
   }, [])
 
-  const pushBlockingState = useCallback((active, sessionState = active ? 'active' : 'inactive') => {
+  const applyCompanionSession = useCallback((session) => {
+    if (!session || session === true) return false
+    companionSessionRef.current = session
+    if (session.sessionState === 'active' || session.sessionState === 'paused') {
+      companionSessionHadActiveRef.current = true
+    }
+    setSessionStorageActive(session.active, session.sessionEndTs)
+
+    if (sessionEndedRef.current) return true
+
+    if (session.sessionState === 'paused' && !isPausedRef.current) {
+      isPausedRef.current = true
+      pausedAtRef.current = pausedAtRef.current || Date.now()
+      setIsPaused(true)
+    } else if (session.sessionState === 'active' && isPausedRef.current) {
+      isPausedRef.current = false
+      if (pausedAtRef.current) {
+        pausedTotalRef.current += Date.now() - pausedAtRef.current
+        pausedAtRef.current = null
+      }
+      setIsPaused(false)
+    }
+    return true
+  }, [setSessionStorageActive])
+
+  const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
     setSessionStorageActive(active, endTs)
-    return pushCompanionSession({
+    const companionSession = await pushCompanionSession({
       active,
       endTs,
       sessionState,
       ...companionBlockingRef.current,
     })
-  }, [setSessionStorageActive])
+    applyCompanionSession(companionSession)
+    return companionSession
+  }, [applyCompanionSession, setSessionStorageActive])
 
-  const pauseSession = useCallback(() => {
+  const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
     isPausedRef.current = true
     pausedAtRef.current = Date.now()
-    pushBlockingState(false, 'paused')
     setIsPaused(true)
+    await pushBlockingState(false, 'paused')
   }, [pushBlockingState])
 
-  const resumeSession = useCallback(() => {
+  const resumeSession = useCallback(async () => {
     if (sessionEndedRef.current || !isPausedRef.current) return
     isPausedRef.current = false
     if (pausedAtRef.current) {
       pausedTotalRef.current += Date.now() - pausedAtRef.current
       pausedAtRef.current = null
     }
-    pushBlockingState(true, 'active')
     setIsPaused(false)
+    await pushBlockingState(true, 'active')
   }, [pushBlockingState])
 
   useEffect(() => {
@@ -976,7 +1005,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     return () => {
       clearInterval(blockingInterval)
       stopActivityPolling()
-      pushBlockingState(false)
+      pushBlockingState(false, sessionEndedRef.current ? 'ended' : 'inactive')
     }
   }, [duration, pushBlockingState])
 
@@ -997,7 +1026,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     // session just ended" apart from "this tab never touched the key at all".
     localStorage.setItem('eudaimonia_session_active', 'false')
     localStorage.removeItem('eudaimonia_session_end_ts')
-    pushBlockingState(false)
+    pushBlockingState(false, 'ended')
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
@@ -1021,6 +1050,22 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       distractionLog:       distractionLogRef.current,
     })
   }, [duration, onEnd, pushBlockingState, stopAmbient])
+
+  useEffect(() => {
+    const syncCompanionSession = async () => {
+      const companionSession = await fetchCompanionSession()
+      if (!companionSession || sessionEndedRef.current) return
+      if (companionSession.sessionState === 'inactive' || companionSession.sessionState === 'ended') {
+        if (companionSessionHadActiveRef.current) endSession(false)
+        return
+      }
+      applyCompanionSession(companionSession)
+    }
+
+    syncCompanionSession()
+    const interval = setInterval(syncCompanionSession, 3000)
+    return () => clearInterval(interval)
+  }, [applyCompanionSession, endSession])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {

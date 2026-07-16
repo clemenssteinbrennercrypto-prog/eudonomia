@@ -9,6 +9,28 @@ let lastDaemonTs = 0
 let pollingInterval = null
 let daemonInterval = null
 
+function normalizeSessionState(value, active = false) {
+  const state = String(value || '').trim().toLowerCase()
+  if (state === 'active' || state === 'paused' || state === 'ended' || state === 'inactive') {
+    return state
+  }
+  return active ? 'active' : 'inactive'
+}
+
+function normalizeCompanionSession(data) {
+  if (!data) return null
+  const active = data.sessionActive ?? data.active ?? false
+  const sessionState = normalizeSessionState(data.sessionState, active)
+  return {
+    active: active === true && sessionState === 'active',
+    sessionActive: active === true && sessionState === 'active',
+    sessionState,
+    sessionEndTs: Number(data.sessionEndTs || data.endTs || 0),
+    sessionUpdatedTs: Number(data.sessionUpdatedTs || data.receivedAt || 0),
+    receivedAt: Number(data.receivedAt || 0),
+  }
+}
+
 function noteSource(source, ts) {
   if (source === 'extension') lastExtensionTs = ts
   if (source === 'daemon') lastDaemonTs = ts
@@ -119,15 +141,21 @@ export async function pushCompanionSession({ active, endTs = 0, blockedApps = []
       signal: AbortSignal.timeout(1500),
     })
     const data = await res.json().catch(() => null)
-    if (active && data?.active !== true) {
+    const session = normalizeCompanionSession(data)
+    if (active && session?.active !== true) {
       console.warn('[companion] session push rejected stale session')
       return false
     }
-    return true
+    return session || true
   } catch (err) {
     console.warn('[companion] session push failed', err)
     return false
   }
+}
+
+export async function fetchCompanionSession() {
+  const data = await fetchCompanionDebug()
+  return normalizeCompanionSession(data)
 }
 
 export async function fetchCompanionDebug() {
