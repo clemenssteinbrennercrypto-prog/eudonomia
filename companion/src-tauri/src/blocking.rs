@@ -312,6 +312,11 @@ pub fn apply_block(domains: &[String]) -> Result<(), String> {
 /// Remove the Eudonomia block entirely. Uses the silent helper if installed;
 /// otherwise a per-call admin prompt. No-op if no block is present.
 pub fn clear_block() -> Result<(), String> {
+    let current = read_hosts().map_err(|e| format!("read hosts: {e}"))?;
+    if !current.contains(START_MARKER) {
+        return Ok(());
+    }
+
     if helper_available() {
         let out = Command::new("sudo")
             .args(["-n", HELPER_PATH, "unblock"])
@@ -324,10 +329,6 @@ pub fn clear_block() -> Result<(), String> {
         };
     }
 
-    let current = read_hosts().map_err(|e| format!("read hosts: {e}"))?;
-    if !current.contains(START_MARKER) {
-        return Ok(());
-    }
     let desired = strip_eudonomia_block(&current);
     write_hosts_via_admin(&desired)
 }
