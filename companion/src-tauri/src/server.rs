@@ -94,6 +94,11 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
 
     let body = serde_json::json!({
         "sessionActive": debug.session_active,
+        "sessionState": if debug.session_state.is_empty() {
+            if debug.session_active { "active" } else { "inactive" }
+        } else {
+            debug.session_state.as_str()
+        },
         "sessionEndTs": debug.session_end_ts,
         "blockedAppsCount": debug.blocked_apps_count,
         "blockedDomainsCount": debug.blocked_domains_count,
@@ -130,6 +135,7 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
 struct SessionPayload {
     active: bool,
     end_ts: u64,
+    session_state: Option<String>,
     blocked_apps: Vec<String>,
     blocked_domains: Vec<String>,
     strict_mode: bool,
@@ -139,6 +145,14 @@ struct SessionPayload {
 async fn session(State(state): State<AppState>, Json(payload): Json<SessionPayload>) -> Response {
     let received_at = now_ms();
     let active = payload.active && payload.end_ts > received_at;
+    let requested_state = payload.session_state.as_deref().unwrap_or("");
+    let session_state = if active {
+        "active"
+    } else if requested_state == "paused" {
+        "paused"
+    } else {
+        "inactive"
+    };
     let end_ts = if active { payload.end_ts } else { 0 };
     let blocked_apps = if active {
         payload.blocked_apps
@@ -187,6 +201,7 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
     if accepted {
         if let Ok(mut debug) = state.debug.lock() {
             debug.session_active = active;
+            debug.session_state = session_state.to_string();
             debug.session_end_ts = end_ts;
             debug.blocked_apps_count = blocked_apps_count;
             debug.blocked_domains_count = blocked_domains_count;

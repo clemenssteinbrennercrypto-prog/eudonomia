@@ -917,12 +917,13 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     }
   }, [])
 
-  const pushBlockingState = useCallback((active) => {
+  const pushBlockingState = useCallback((active, sessionState = active ? 'active' : 'inactive') => {
     const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
     setSessionStorageActive(active, endTs)
     return pushCompanionSession({
       active,
       endTs,
+      sessionState,
       ...companionBlockingRef.current,
     })
   }, [setSessionStorageActive])
@@ -931,7 +932,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     if (sessionEndedRef.current || isPausedRef.current) return
     isPausedRef.current = true
     pausedAtRef.current = Date.now()
-    pushBlockingState(false)
+    pushBlockingState(false, 'paused')
     setIsPaused(true)
   }, [pushBlockingState])
 
@@ -942,7 +943,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       pausedTotalRef.current += Date.now() - pausedAtRef.current
       pausedAtRef.current = null
     }
-    pushBlockingState(true)
+    pushBlockingState(true, 'active')
     setIsPaused(false)
   }, [pushBlockingState])
 

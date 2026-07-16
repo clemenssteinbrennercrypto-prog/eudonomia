@@ -25,6 +25,7 @@ pub struct DebugState {
     pub last_osascript_error: Option<String>,
     pub permission_missing: Option<String>,
     pub last_poll_ts: u64,
+    pub session_state: String,
     pub session_active: bool,
     pub session_end_ts: u64,
     pub blocked_apps_count: usize,
@@ -328,6 +329,7 @@ fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, dom
             cfg.active = false;
             if let Ok(mut d) = debug.lock() {
                 d.session_active = false;
+                d.session_state = "inactive".to_string();
                 d.session_end_ts = 0;
                 d.blocked_apps_count = 0;
                 d.blocked_domains_count = 0;
@@ -407,6 +409,7 @@ fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
             cfg.allowed_apps.clear();
             if let Ok(mut d) = debug.lock() {
                 d.session_active = false;
+                d.session_state = "inactive".to_string();
                 d.session_end_ts = 0;
                 d.blocked_apps_count = 0;
                 d.blocked_domains_count = 0;

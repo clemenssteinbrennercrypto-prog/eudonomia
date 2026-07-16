@@ -83,6 +83,202 @@ function classifyCurrentActivity(activity, focusApps, distractionApps, connected
   return { kind: 'unknown', label }
 }
 
+const TRACKING_STALE_MS = 12_000
+
+function ageLabel(ts, now = Date.now()) {
+  if (!ts) return 'never'
+  const seconds = Math.max(0, Math.round((now - ts) / 1000))
+  if (seconds < 2) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  return `${Math.round(seconds / 60)}m ago`
+}
+
+function getProtectionStatus(debug, connected, now = Date.now()) {
+  const sessionState = debug?.sessionState || (debug?.sessionActive ? 'active' : 'inactive')
+  const sessionActive = connected && debug?.sessionActive === true && sessionState === 'active'
+  const lastPollTs = debug?.lastPollTs || 0
+  const lastActivityTs = debug?.lastActivity?.ts || 0
+  const pollFresh = lastPollTs > 0 && now - lastPollTs <= TRACKING_STALE_MS
+  const activityFresh = lastActivityTs > 0 && now - lastActivityTs <= TRACKING_STALE_MS
+  const permissionMissing = debug?.permissionMissing
+  const trackingActive = connected && pollFresh && activityFresh && !permissionMissing
+  const trackingKnown = connected && lastPollTs > 0
+  const blockedAppsCount = debug?.blockedAppsCount || 0
+  const blockedDomainsCount = debug?.blockedDomainsCount || 0
+  const strictMode = Boolean(debug?.strictMode)
+  const appBlockingConfigured = blockedAppsCount > 0 || strictMode
+  const websiteBlockingConfigured = blockedDomainsCount > 0
+  const hostCancelled = debug?.hostBlockError === 'cancelled'
+  const hostFailed = Boolean(debug?.hostBlockError && !hostCancelled)
+  const hostActive = Boolean(debug?.hostBlockActive)
+
+  const dimensions = [
+    {
+      label: 'Session',
+      state: !connected
+        ? 'off'
+        : sessionState === 'active'
+          ? 'active'
+          : sessionState === 'paused'
+            ? 'paused'
+            : 'inactive',
+      detail: !connected
+        ? 'Companion not reachable.'
+        : sessionState === 'active'
+          ? `Running until ${debug?.sessionEndTs ? new Date(debug.sessionEndTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'unknown end time'}.`
+          : sessionState === 'paused'
+            ? 'Paused. Blocking is intentionally off while paused.'
+            : 'No active focus session. Blocking is off.',
+    },
+    {
+      label: 'Tracking',
+      state: !connected || permissionMissing
+        ? 'unavailable'
+        : trackingActive
+          ? 'active'
+          : trackingKnown
+            ? 'stale'
+            : 'unavailable',
+      detail: permissionMissing
+        ? `Missing Automation permission for ${permissionMissing}.`
+        : trackingActive
+          ? `Last activity ${ageLabel(lastActivityTs, now)}.`
+          : trackingKnown
+            ? `Last poll ${ageLabel(lastPollTs, now)}, last activity ${ageLabel(lastActivityTs, now)}.`
+            : 'No native activity data yet.',
+    },
+    {
+      label: 'Website blocking',
+      state: !sessionActive || !websiteBlockingConfigured
+        ? 'off'
+        : hostActive
+          ? 'active'
+          : hostCancelled
+            ? 'off'
+            : hostFailed
+              ? 'failed'
+              : 'unconfirmed',
+      detail: !sessionActive
+        ? 'Off because there is no active session.'
+        : !websiteBlockingConfigured
+          ? 'No blocked websites are configured for this session.'
+          : hostActive
+            ? `${blockedDomainsCount} domain${blockedDomainsCount === 1 ? '' : 's'} blocked system-wide via /etc/hosts.`
+            : hostCancelled
+              ? 'Off because the admin password prompt was dismissed.'
+              : hostFailed
+                ? `Failed: ${debug.hostBlockError}`
+                : 'Requested, but the companion has not confirmed the hosts block yet.',
+    },
+    {
+      label: 'App blocking',
+      state: !sessionActive || !appBlockingConfigured
+        ? 'off'
+        : permissionMissing
+          ? 'failed'
+          : trackingActive
+            ? 'active'
+            : 'unconfirmed',
+      detail: !sessionActive
+        ? 'Off because there is no active session.'
+        : !appBlockingConfigured
+          ? 'No blocked apps or strict allowlist are configured for this session.'
+          : permissionMissing
+            ? 'Cannot reliably hide apps without Automation permission.'
+            : trackingActive
+              ? strictMode
+                ? `Strict mode is on; app hiding uses frontmost-app checks. ${blockedAppsCount} explicit blocked app${blockedAppsCount === 1 ? '' : 's'}.`
+                : `${blockedAppsCount} blocked app${blockedAppsCount === 1 ? '' : 's'} configured. Enforcement is checked when an app becomes frontmost.`
+              : 'Configured, but tracking is stale or not confirmed.',
+    },
+    {
+      label: 'Helper',
+      state: !connected ? 'unknown' : debug?.helperInstalled ? 'installed' : 'not installed',
+      detail: !connected
+        ? 'Cannot check helper installation until the companion is reachable.'
+        : debug?.helperInstalled
+          ? 'Silent website blocking helper is installed.'
+          : 'Website blocking may require an admin prompt until the helper is installed.',
+    },
+    {
+      label: 'Permissions',
+      state: permissionMissing ? 'missing' : connected ? 'no known issue' : 'unknown',
+      detail: permissionMissing
+        ? `Enable Eudonomia Companion Automation access for ${permissionMissing} in System Settings.`
+        : connected
+          ? 'No Automation error reported by the companion.'
+          : 'Cannot check permissions until the companion is reachable.',
+    },
+  ]
+
+  const blockingConfigured = appBlockingConfigured || websiteBlockingConfigured
+  const websiteOk = !websiteBlockingConfigured || hostActive
+  const appOk = !appBlockingConfigured || (trackingActive && !permissionMissing)
+
+  if (!connected) {
+    return {
+      level: 'off',
+      title: 'Off',
+      summary: 'Companion not reachable. Native tracking and blocking are off.',
+      tone: 'red',
+      dimensions,
+    }
+  }
+  if (!sessionActive) {
+    return {
+      level: 'off',
+      title: sessionState === 'paused' ? 'Off while paused' : 'Off',
+      summary: sessionState === 'paused'
+        ? 'The focus session is paused, so protection is intentionally off.'
+        : 'No active focus session. The companion can track, but it is not enforcing blocking.',
+      tone: 'yellow',
+      dimensions,
+    }
+  }
+  if (!trackingActive || permissionMissing || hostFailed || hostCancelled) {
+    return {
+      level: 'degraded',
+      title: 'Degraded',
+      summary: 'A session is active, but at least one required native signal is missing or failed.',
+      tone: 'red',
+      dimensions,
+    }
+  }
+  if (!blockingConfigured) {
+    return {
+      level: 'tracking_only',
+      title: 'Tracking only',
+      summary: 'The companion is tracking activity, but no app or website blocking is configured.',
+      tone: 'yellow',
+      dimensions,
+    }
+  }
+  if (websiteOk && appOk) {
+    return {
+      level: 'fully_protected',
+      title: 'Fully protected',
+      summary: 'All configured protection paths are active or have no known native failure.',
+      tone: 'green',
+      dimensions,
+    }
+  }
+  return {
+    level: 'partially_protected',
+    title: 'Partially protected',
+    summary: 'Some configured protection is active, but at least one path is off or not confirmed.',
+    tone: 'yellow',
+    dimensions,
+  }
+}
+
+function statusColors(tone) {
+  return {
+    green: { border: '#bbf7d0', bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
+    yellow: { border: '#fde68a', bg: '#fffbeb', text: '#92400e', dot: '#f59e0b' },
+    red: { border: '#fecaca', bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
+  }[tone] || { border: '#e5e7eb', bg: '#f9fafb', text: '#374151', dot: '#6b7280' }
+}
+
 function AppChip({ app, tone, onRemove }) {
   const colors = tone === 'focus'
     ? { bg: '#f7fbf8', border: '#cfe9d7', text: '#1f5132', xBg: '#e8f5ec', xText: '#2f6f46' }
@@ -287,59 +483,79 @@ function CompanionStatus() {
     }
   }
 
-  const tone = !connected ? 'red' : debug?.sessionActive ? 'green' : 'yellow'
-  const colors = {
-    green: { border: '#bbf7d0', bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
-    yellow: { border: '#fde68a', bg: '#fffbeb', text: '#92400e', dot: '#f59e0b' },
-    red: { border: '#fecaca', bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
-  }[tone]
-
-  const label = !connected
-    ? '✗ Companion not found — blocking disabled'
-    : debug?.sessionActive
-      ? `✓ Companion connected — blocking active (${debug.blockedAppsCount || 0} apps, ${debug.blockedDomainsCount || 0} domains)`
-      : '⚠ Companion connected — no active session'
-
+  const protection = getProtectionStatus(debug, connected)
+  const colors = statusColors(protection.tone)
   const lastActivity = debug?.lastActivity
   const activityLabel = lastActivity?.domain || lastActivity?.app || null
-
-  // Website blocking runs system-wide via /etc/hosts and needs an admin
-  // password once per session. Surface its real state so a dismissed prompt
-  // (hostBlockError "cancelled") doesn't look like silent success.
-  const hostCancelled = debug?.hostBlockError === 'cancelled'
-  const hostFailed = debug?.hostBlockError && !hostCancelled
   const websitesBlocked = debug?.hostBlockActive
   const helperInstalled = debug?.helperInstalled
 
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        width: 'fit-content',
-        maxWidth: '100%',
-        border: `1px solid ${colors.border}`,
-        borderRadius: 100,
-        padding: '6px 11px',
-        color: colors.text,
+    <div style={{ display: 'grid', gap: 10, width: '100%', maxWidth: 540 }}>
+      <section style={{
+        border: `1.5px solid ${colors.border}`,
         background: colors.bg,
-        fontSize: 12,
-        fontWeight: 900,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
+        color: colors.text,
+        borderRadius: 14,
+        padding: '13px 14px',
+        display: 'grid',
+        gap: 10,
       }}>
-        <span style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: colors.dot,
-          boxShadow: `0 0 0 2px ${colors.dot}28`,
-          flexShrink: 0,
-        }} />
-        {label}
-      </span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 950 }}>
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: colors.dot,
+                boxShadow: `0 0 0 3px ${colors.dot}28`,
+                flexShrink: 0,
+              }} />
+              Protection: {protection.title}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 12, fontWeight: 750, lineHeight: 1.45 }}>
+              {protection.summary}
+            </div>
+          </div>
+          <span style={{
+            border: `1px solid ${colors.border}`,
+            background: '#fff',
+            borderRadius: 100,
+            padding: '5px 9px',
+            fontSize: 11,
+            fontWeight: 900,
+            whiteSpace: 'nowrap',
+          }}>
+            {protection.level.replace('_', ' ')}
+          </span>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+          gap: 8,
+        }}>
+          {protection.dimensions.map(item => (
+            <div
+              key={item.label}
+              style={{
+                border: '1px solid rgba(26,46,74,0.12)',
+                background: 'rgba(255,255,255,0.72)',
+                borderRadius: 10,
+                padding: '9px 10px',
+                minWidth: 0,
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 950, color: '#1a2e4a' }}>{item.label}</div>
+              <div style={{ marginTop: 2, fontSize: 12, fontWeight: 900, color: colors.text }}>{item.state}</div>
+              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 650, color: '#6b6357', lineHeight: 1.35 }}>
+                {item.detail}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {connected && !helperInstalled && (
         <div style={{
@@ -380,67 +596,13 @@ function CompanionStatus() {
 
       {connected && helperInstalled && (
         <div style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
-          ⚡ Silent blocking enabled — no password needed per session
+          Silent website blocking helper installed; no password prompt expected per session.
         </div>
       )}
 
       {connected && debug?.sessionActive && websitesBlocked && (
-        <div style={{
-          border: '1px solid #bbf7d0',
-          background: '#f0fdf4',
-          color: '#166534',
-          borderRadius: 12,
-          padding: '8px 12px',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.45,
-        }}>
-          🌐 Websites blocked system-wide (all browsers) via /etc/hosts
-        </div>
-      )}
-
-      {hostCancelled && (
-        <div style={{
-          border: '1px solid #fbbf24',
-          background: '#fffbeb',
-          color: '#92400e',
-          borderRadius: 12,
-          padding: '10px 12px',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.45,
-        }}>
-          ⚠ Website blocking is OFF — you dismissed the admin password prompt. Restart the session and enter your Mac password to block sites across all browsers. (App blocking still works.)
-        </div>
-      )}
-
-      {hostFailed && (
-        <div style={{
-          border: '1px solid #fecaca',
-          background: '#fef2f2',
-          color: '#991b1b',
-          borderRadius: 12,
-          padding: '10px 12px',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.45,
-        }}>
-          ✗ Website blocking failed: {debug.hostBlockError}
-        </div>
-      )}
-
-      {debug?.permissionMissing && (
-        <div style={{
-          border: '1px solid #fbbf24',
-          background: '#fffbeb',
-          color: '#92400e',
-          borderRadius: 12,
-          padding: '10px 12px',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.45,
-        }}>
-          ⚠ Missing Automation permission for {debug.permissionMissing}. Go to: System Settings → Privacy & Security → Automation → enable Eudonomia Companion for {debug.permissionMissing}
+        <div style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+          Website blocking is confirmed system-wide via /etc/hosts.
         </div>
       )}
 

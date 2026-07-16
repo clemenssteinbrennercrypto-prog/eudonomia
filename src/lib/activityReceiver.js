@@ -110,12 +110,12 @@ export function isActivityConnected() {
 // While `active` is true the companion enforces blocking on its own: blocked
 // native apps get hidden, blocked browser domains get redirected. The endTs
 // acts as the companion-side failsafe (blocking self-expires after endTs+grace).
-export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [], strictMode = false, allowedApps = [] }) {
+export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [], strictMode = false, allowedApps = [], sessionState = null }) {
   try {
     const res = await fetchDaemon('/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active, endTs, blockedApps, blockedDomains, strictMode, allowedApps }),
+      body: JSON.stringify({ active, endTs, blockedApps, blockedDomains, strictMode, allowedApps, sessionState }),
       signal: AbortSignal.timeout(1500),
     })
     const data = await res.json().catch(() => null)
