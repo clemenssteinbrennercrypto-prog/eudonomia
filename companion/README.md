@@ -7,8 +7,11 @@ shields, IPv6, mixed content).
 
 ## What it does
 
-- **Hosts the UI** in its own window (loads the deployed web app) — no browser,
-  no extension needed. A menubar tray gives quick open/quit.
+- **Hosts the UI** in its own window from a **locally bundled** copy of the web
+  app (`companion/webui`) — no browser, no extension. Loading the UI from the
+  app's own local origin is what makes the in-app WebView able to reach the
+  local companion server; a remote (https) origin is blocked from talking to
+  localhost. A menubar tray gives quick open/quit.
 - **Detects the frontmost app + browser tab URL** every 3 seconds via AppleScript
   (Safari, Chrome, Arc, Brave) and serves it on `http://127.0.0.1:7331/status`.
 - **Blocks distractions during a session:**
@@ -23,11 +26,17 @@ shields, IPv6, mixed content).
 ## Updates
 
 The app **updates itself**. On launch it checks GitHub Releases for a newer
-signed build and installs it in the background (applies next launch). The web
-UI updates independently via Vercel. So neither the user nor a co-developer ever
-re-installs by hand — see `.github/workflows/companion-release.yml`, which builds,
-signs, and publishes a release on every `companion/**` change (CI assigns the
-version automatically, no manual bumping).
+signed build and installs it in the background (applies next launch). So neither
+the user nor a co-developer ever re-installs by hand — see
+`.github/workflows/companion-release.yml`, which builds, signs, and publishes a
+release on every `companion/**` change (CI assigns the version automatically, no
+manual bumping).
+
+Because the UI is bundled (`companion/webui`), a web-app change reaches the
+native app only when that bundle is refreshed and a new companion release is
+built. The workflow that keeps `companion/webui` in sync with the web app is the
+next thing to wire up; until then, rebuild it with
+`npm run build && rm -rf companion/webui && cp -r dist companion/webui`.
 
 ## Build
 
