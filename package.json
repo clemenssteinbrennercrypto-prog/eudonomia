@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "refresh:companion-webui": "npm run build && rm -rf companion/webui && cp -R dist companion/webui",
+    "build:companion": "npm run refresh:companion-webui && cd companion/src-tauri && cargo tauri build",
     "preview": "vite preview"
   },
   "dependencies": {

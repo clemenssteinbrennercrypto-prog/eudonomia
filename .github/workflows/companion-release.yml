@@ -1,16 +1,21 @@
 name: Release Companion
 
-# Builds, signs, and publishes the native Eudonomia companion whenever its
-# source changes. The installed app checks the resulting GitHub Release on
-# launch and updates itself ‚Äî so users never re-drag a new .app into
-# Applications. Only the Rust/Tauri companion needs this; the web UI keeps
-# auto-updating via Vercel.
+# Builds, signs, notarizes, staples, verifies, and publishes the native
+# Eudonomia companion whenever its source or release pipeline changes. The
+# installed app checks the resulting GitHub Release on launch and updates itself.
 
 on:
   push:
     branches: [main]
     paths:
+      - 'src/**'
+      - 'index.html'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
       - 'companion/**'
+      - '.github/workflows/companion-release.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -22,13 +27,72 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci
+
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: companion/src-tauri
+
+      - name: Refresh bundled companion UI
+        run: npm run refresh:companion-webui
+
+      - name: Verify bundled companion UI
+        run: |
+          set -euo pipefail
+
+          test -f companion/webui/index.html
+          test -d companion/webui/assets
+
+          if ! grep -q 'src="./assets/' companion/webui/index.html; then
+            echo "companion/webui/index.html does not reference bundled relative JS assets." >&2
+            exit 1
+          fi
+
+          if ! grep -q 'href="./assets/' companion/webui/index.html; then
+            echo "companion/webui/index.html does not reference bundled relative CSS assets." >&2
+            exit 1
+          fi
+
+      - name: Validate release secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          missing=()
+          for name in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY
+          do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required release secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Refusing to publish an unsigned or unnotarized macOS build.\n' >&2
+            exit 1
+          fi
 
       # Give every CI build a unique, monotonically increasing version so the
       # updater always recognises it as newer than what's installed. No manual
@@ -44,16 +108,65 @@ jobs:
           print('version set to', d['version'])
           PY
 
-      - uses: tauri-apps/tauri-action@v0
+      - id: tauri-build
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: companion
           tagName: companion-v__VERSION__
           releaseName: 'Eudonomia v__VERSION__'
-          releaseBody: 'Automatic companion build ‚Äî the app updates itself on next launch.'
-          releaseDraft: false
+          releaseBody: |
+            Download the macOS `.dmg` asset to install Eudonomia.
+
+            The `.app.tar.gz`, `.sig`, and `latest.json` assets are for the signed Tauri updater, not manual installation.
+          releaseDraft: true
           prerelease: false
-          args: --target aarch64-apple-darwin
+          releaseAssetNamePattern: '[name]-[version]-[arch][ext]'
+          args: --target universal-apple-darwin --verbose
+
+      - name: Verify signed and notarized macOS artifacts
+        run: |
+          set -euo pipefail
+
+          bundle_root="companion/src-tauri/target/universal-apple-darwin/release/bundle"
+
+          app_count=0
+          while IFS= read -r app; do
+            app_count=$((app_count + 1))
+            codesign --verify --deep --strict --verbose=2 "$app"
+            /usr/sbin/spctl --assess --type execute --verbose=4 "$app"
+          done < <(find "$bundle_root" -name '*.app' -type d)
+
+          if [ "$app_count" -eq 0 ]; then
+            echo "No .app bundle found under $bundle_root" >&2
+            exit 1
+          fi
+
+          dmg_count=0
+          while IFS= read -r dmg; do
+            dmg_count=$((dmg_count + 1))
+            xcrun stapler validate "$dmg"
+            /usr/sbin/spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          done < <(find "$bundle_root" -name '*.dmg' -type f)
+
+          if [ "$dmg_count" -eq 0 ]; then
+            echo "No .dmg found under $bundle_root" >&2
+            exit 1
+          fi
+
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.tauri-build.outputs.appVersion }}
+        run: |
+          set -euo pipefail
+          gh release edit "companion-v${VERSION}" --draft=false --latest

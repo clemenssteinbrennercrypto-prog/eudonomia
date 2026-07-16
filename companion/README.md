@@ -28,21 +28,39 @@ shields, IPv6, mixed content).
 The app checks GitHub Releases for a newer signed native build through Tauri's
 updater. The in-app refresh control always offers a local reload, and shows a
 separate install action only when the updater reports a real native app update.
-See `.github/workflows/companion-release.yml`, which builds, signs, and
-publishes a release on every `companion/**` change (CI assigns the version
-automatically, no manual bumping).
+See `.github/workflows/companion-release.yml`, which builds a universal macOS
+DMG, signs it with a Developer ID Application certificate, notarizes it, staples
+the notarization ticket, verifies Gatekeeper acceptance, and only then publishes
+the GitHub Release. CI assigns the version automatically, no manual bumping.
+
+The user-facing download is the `.dmg` asset from the latest Companion release.
+The `.app.tar.gz`, `.sig`, and `latest.json` assets are updater inputs and
+should not be presented as manual-install downloads.
+
+Release publishing requires these GitHub Actions secrets:
+
+- `APPLE_CERTIFICATE` — base64-encoded Developer ID Application `.p12`
+- `APPLE_CERTIFICATE_PASSWORD` — password for that `.p12`
+- `APPLE_SIGNING_IDENTITY` — `Developer ID Application: ... (TEAMID)`
+- `APPLE_ID` — Apple Developer account email for notarization
+- `APPLE_PASSWORD` — app-specific password for `APPLE_ID`
+- `APPLE_TEAM_ID` — 10-character Apple Developer Team ID
+- `TAURI_SIGNING_PRIVATE_KEY` — private key for Tauri updater signatures
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — only if the updater key is encrypted
 
 Because the UI is bundled (`companion/webui`), a web-app change reaches the
 native app only when that bundle is refreshed and a new companion release is
-built. The workflow that keeps `companion/webui` in sync with the web app is the
-next thing to wire up; until then, rebuild it with
-`npm run build && rm -rf companion/webui && cp -r dist companion/webui`.
+built. `.github/workflows/companion-release.yml` now does that on every relevant
+push: it installs the root web dependencies, runs
+`npm run refresh:companion-webui`, then packages the refreshed bundle into the
+signed Tauri release.
 
 ## Build
 
 ```bash
+npm run refresh:companion-webui
 cd companion/src-tauri
-cargo tauri build      # → target/release/bundle/dmg/*.dmg
+cargo tauri build      # -> target/release/bundle/dmg/*.dmg
 cargo test             # pure blocking/scoring logic
 ```
 

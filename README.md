@@ -29,9 +29,15 @@ and browser tab via AppleScript, and enforces app/website blocking during a
 session.
 
 ```bash
+npm run refresh:companion-webui
 cd companion/src-tauri
 cargo tauri build
 ```
+
+Native releases are produced by `.github/workflows/companion-release.yml`. The
+workflow rebuilds `companion/webui` from the root Vite app before Tauri packages
+the macOS bundle, so a pushed UI change reaches the installed app only after the
+workflow publishes a signed Companion release and the app installs that update.
 
 The old browser extension remains in `extension/` as a legacy fallback for
 experiments, but it is not the product path and should not be presented as
