@@ -10,6 +10,7 @@ import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
 import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
+import { useUpdateAvailable } from './lib/useUpdateAvailable'
 
 // ── Persist helpers ───────────────────────────────────────────────────────────
 function loadDevices() {
@@ -37,6 +38,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
+  const updateAvailable = useUpdateAvailable()
 
   const setDevices = useCallback((val) => {
     setDevicesRaw(prev => {
@@ -85,6 +87,18 @@ export default function App() {
 
   return (
     <>
+      {updateAvailable && (
+        <button
+          className="update-available-pill"
+          type="button"
+          onClick={() => window.location.reload()}
+          aria-label="Reload to update Eudaimonia"
+          title="Reload to update"
+        >
+          <span className="update-available-icon" aria-hidden="true">↻</span>
+          <span>Update available</span>
+        </button>
+      )}
       {screen === 'home' && (
         <HomeScreen
           task={task}

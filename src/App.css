@@ -38,6 +38,48 @@ body {
   min-height: 100vh;
 }
 
+.update-available-pill {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 250;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(26, 46, 74, 0.94);
+  color: #ffffff;
+  box-shadow: 0 10px 28px rgba(26, 46, 74, 0.22);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.update-available-pill:hover {
+  background: var(--navy-hover);
+  box-shadow: 0 12px 32px rgba(26, 46, 74, 0.28);
+}
+
+.update-available-pill:active {
+  transform: translateY(1px);
+}
+
+.update-available-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 17px;
+  line-height: 1;
+}
+
 /* ── HOME ── */
 
 .screen-center {
@@ -561,6 +603,14 @@ body {
     justify-content: center;
     gap: 8px;
     margin-top: 8px;
+  }
+
+  .update-available-pill {
+    top: 12px;
+    right: 12px;
+    min-height: 34px;
+    padding: 0 11px 0 10px;
+    font-size: 12px;
   }
 }
 
