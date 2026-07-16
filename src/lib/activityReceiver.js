@@ -84,12 +84,12 @@ export function isDaemonConnected() {
 // While `active` is true the companion enforces blocking on its own: blocked
 // native apps get hidden, blocked browser domains get redirected. The endTs
 // acts as the companion-side failsafe (blocking self-expires after endTs+grace).
-export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [] }) {
+export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [], strictMode = false, allowedApps = [] }) {
   try {
     const res = await fetch(DAEMON_SESSION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active, endTs, blockedApps, blockedDomains }),
+      body: JSON.stringify({ active, endTs, blockedApps, blockedDomains, strictMode, allowedApps }),
       signal: AbortSignal.timeout(1500),
     })
     if (!res.ok) {

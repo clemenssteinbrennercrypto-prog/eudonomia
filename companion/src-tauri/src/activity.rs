@@ -29,6 +29,8 @@ pub struct DebugState {
     pub session_end_ts: u64,
     pub blocked_apps_count: usize,
     pub blocked_domains_count: usize,
+    pub strict_mode: bool,
+    pub allowed_apps_count: usize,
     /// True while an /etc/hosts block is actually in place.
     pub host_block_active: bool,
     /// Last error/cancellation from applying or clearing the hosts block
@@ -47,6 +49,10 @@ pub struct SessionConfig {
     pub end_ts: u64,
     pub blocked_apps: Vec<String>,
     pub blocked_domains: Vec<String>,
+    /// Strict/allowlist mode: hide EVERY non-browser app except `allowed_apps`
+    /// and the base system apps. When false, only `blocked_apps` are hidden.
+    pub strict_mode: bool,
+    pub allowed_apps: Vec<String>,
     /// Timestamp of the last user-facing block notification (throttling).
     pub last_notify_ts: u64,
     /// Whether an /etc/hosts block is currently applied, and for which domains.
@@ -58,6 +64,61 @@ pub struct SessionConfig {
 }
 
 pub type SharedSession = Arc<Mutex<SessionConfig>>;
+
+/// Apps that must never be hidden in strict mode — hiding them would break the
+/// Mac or the focus session itself. Browsers are handled separately (their
+/// content is filtered via /etc/hosts, so they always stay visible). Matched
+/// case-insensitively against the frontmost process name.
+const BASE_APPS: &[&str] = &[
+    "Finder",
+    "System Settings",
+    "System Preferences",
+    "loginwindow",
+    "Dock",
+    "SystemUIServer",
+    "Control Center",
+    "Control Centre",
+    "Notification Center",
+    "NotificationCenter",
+    "WindowServer",
+    "Spotlight",
+    "coreautha",
+    "SecurityAgent",
+    "UserNotificationCenter",
+    "osascript",
+    "Eudonomia Companion",
+    "eudonomia-companion",
+];
+
+fn is_base_app(app_lc: &str) -> bool {
+    BASE_APPS.iter().any(|b| b.to_lowercase() == app_lc)
+}
+
+/// Decide whether the frontmost app should be hidden. Pure so it can be
+/// unit-tested. `app_lc` is the lowercased frontmost process name.
+fn should_hide_app(
+    strict_mode: bool,
+    app_lc: &str,
+    is_browser: bool,
+    allowed_apps: &[String],
+    blocked_apps: &[String],
+) -> bool {
+    if strict_mode {
+        // Browsers are never hidden (content filtered via hosts); base system
+        // apps and explicitly-allowed apps stay; everything else is hidden.
+        if is_browser || is_base_app(app_lc) {
+            return false;
+        }
+        let allowed = allowed_apps
+            .iter()
+            .any(|a| a.trim().to_lowercase() == app_lc);
+        !allowed
+    } else {
+        blocked_apps
+            .iter()
+            .any(|a| a.trim().to_lowercase() == app_lc)
+    }
+}
 
 /// Failsafe, mirroring the browser extension's rule: if the web app dies
 /// without clearing the session flag, blocking must stop on its own once the
@@ -266,11 +327,17 @@ fn enforce_blocking(
         // frontmost tab's domain still feeds /status for scoring.
         let _ = domain;
         let app_lc = app.trim().to_lowercase();
-        let app_blocked = cfg
-            .blocked_apps
-            .iter()
-            .any(|a| a.trim().to_lowercase() == app_lc);
-        if !app_blocked {
+        let is_browser = BROWSER_APPS.iter().any(|b| b.to_lowercase() == app_lc);
+
+        let should_hide = should_hide_app(
+            cfg.strict_mode,
+            &app_lc,
+            is_browser,
+            &cfg.allowed_apps,
+            &cfg.blocked_apps,
+        );
+
+        if !should_hide {
             return;
         }
 
@@ -403,7 +470,37 @@ pub fn start_polling(state: SharedActivity, session: SharedSession, debug: Share
 
 #[cfg(test)]
 mod tests {
-    use super::{domain_is_blocked, extract_domain};
+    use super::{domain_is_blocked, extract_domain, should_hide_app};
+
+    fn v(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn strict_mode_hides_unlisted_nonbrowser_apps() {
+        let allowed = v(&["VS Code", "Notion"]);
+        // Distraction app, not allowed → hidden.
+        assert!(should_hide_app(true, "discord", false, &allowed, &[]));
+        // Allowed app → stays.
+        assert!(!should_hide_app(true, "vs code", false, &allowed, &[]));
+        // Browser → never hidden (content filtered via hosts).
+        assert!(!should_hide_app(true, "google chrome", true, &allowed, &[]));
+        // Base system app → never hidden, even if unlisted.
+        assert!(!should_hide_app(true, "finder", false, &allowed, &[]));
+        assert!(!should_hide_app(true, "system settings", false, &allowed, &[]));
+        // The companion itself → never hidden.
+        assert!(!should_hide_app(true, "eudonomia companion", false, &allowed, &[]));
+    }
+
+    #[test]
+    fn blocklist_mode_hides_only_listed_apps() {
+        let blocked = v(&["Discord", "Slack"]);
+        assert!(should_hide_app(false, "discord", false, &[], &blocked));
+        assert!(!should_hide_app(false, "vs code", false, &[], &blocked));
+        // In blocklist mode a browser CAN be hidden if the user lists it.
+        let blocked_browser = v(&["Safari"]);
+        assert!(should_hide_app(false, "safari", true, &[], &blocked_browser));
+    }
 
     #[test]
     fn blocks_exact_and_subdomains() {

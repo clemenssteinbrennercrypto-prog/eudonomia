@@ -7,7 +7,7 @@ import {
 } from '../lib/workspaceObjects'
 import { getLastActivity, isDaemonConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { loadFocusAppsConfig } from '../lib/storage'
+import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
 
 // ── FaceMesh landmark indices ──────────────────────────────────────────────────
 const RIGHT_EYE   = [33,  160, 158, 133, 153, 144]
@@ -910,14 +910,17 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     focusAppsConfigRef.current = focusCfg
 
     // Tell the Companion app (if running) to enforce blocking on its own:
-    // distraction apps get hidden, distraction domains get redirected.
+    // distraction apps/domains get hidden/blocked; in strict mode every
+    // non-browser app except the focus (allowed) apps is hidden.
     // Re-push every 30s as keepalive in case the companion restarts mid-session.
     const blockedApps = focusCfg?.distractionApps || []
     const blockedDomains = [...new Set([
       ...(focusCfg?.distractionDomains || []),
       ...blockedApps.flatMap((app) => getDomainsFromAppPreset(app)),
     ])]
-    const pushBlocking = () => pushCompanionSession({ active: true, endTs, blockedApps, blockedDomains })
+    const strictMode = loadStrictMode()
+    const allowedApps = focusCfg?.focusApps || []
+    const pushBlocking = () => pushCompanionSession({ active: true, endTs, blockedApps, blockedDomains, strictMode, allowedApps })
     pushBlocking()
     const blockingInterval = setInterval(pushBlocking, 30_000)
 

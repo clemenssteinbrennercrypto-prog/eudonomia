@@ -164,3 +164,24 @@ export function saveFocusModeEnabled(enabled) {
   } catch {}
   return next
 }
+
+const STRICT_MODE_KEY = 'eudaimonia_strict_mode'
+
+// Strict/allowlist mode: during a session the companion hides every non-browser
+// app except the focus apps (allowed) and base system apps. Off by default —
+// it's the aggressive "full focus" option, opt-in.
+export function loadStrictMode() {
+  try {
+    return localStorage.getItem(STRICT_MODE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function saveStrictMode(enabled) {
+  const next = Boolean(enabled)
+  try {
+    localStorage.setItem(STRICT_MODE_KEY, String(next))
+  } catch {}
+  return next
+}

@@ -81,6 +81,8 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         "sessionEndTs": debug.session_end_ts,
         "blockedAppsCount": debug.blocked_apps_count,
         "blockedDomainsCount": debug.blocked_domains_count,
+        "strictMode": debug.strict_mode,
+        "allowedAppsCount": debug.allowed_apps_count,
         "lastPollTs": debug.last_poll_ts,
         "lastActivity": {
             "app": activity.app,
@@ -114,6 +116,8 @@ struct SessionPayload {
     end_ts: u64,
     blocked_apps: Vec<String>,
     blocked_domains: Vec<String>,
+    strict_mode: bool,
+    allowed_apps: Vec<String>,
 }
 
 async fn session(State(state): State<AppState>, Json(payload): Json<SessionPayload>) -> Response {
@@ -121,6 +125,8 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
     let end_ts = payload.end_ts;
     let blocked_apps_count = payload.blocked_apps.len();
     let blocked_domains_count = payload.blocked_domains.len();
+    let strict_mode = payload.strict_mode;
+    let allowed_apps_count = payload.allowed_apps.len();
 
     let accepted = if let Ok(mut cfg) = state.session.lock() {
         // Update the requested config, but PRESERVE host_block_applied /
@@ -131,6 +137,8 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
         cfg.end_ts = end_ts;
         cfg.blocked_apps = payload.blocked_apps;
         cfg.blocked_domains = payload.blocked_domains;
+        cfg.strict_mode = payload.strict_mode;
+        cfg.allowed_apps = payload.allowed_apps;
         // Allow an immediate app-hide notification after a fresh push.
         cfg.last_notify_ts = 0;
         true
@@ -144,6 +152,8 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
             debug.session_end_ts = end_ts;
             debug.blocked_apps_count = blocked_apps_count;
             debug.blocked_domains_count = blocked_domains_count;
+            debug.strict_mode = strict_mode;
+            debug.allowed_apps_count = allowed_apps_count;
         }
     }
 

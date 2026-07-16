@@ -10,7 +10,7 @@ import {
   stopActivityPolling,
 } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { loadFocusAppsConfig, loadFocusModeEnabled, saveFocusAppsConfig, saveFocusModeEnabled } from '../lib/storage'
+import { loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
@@ -460,6 +460,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [focusInput, setFocusInput] = useState('')
   const [distractionInput, setDistractionInput] = useState('')
   const [saved, setSaved] = useState(false)
+  const [strictMode, setStrictMode] = useState(() => loadStrictMode())
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
   const [extensionConnected, setExtensionConnected] = useState(() => isExtensionConnected())
@@ -496,6 +497,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     const next = !modeEnabled
     if (setFocusModeEnabled) setFocusModeEnabled(next)
     setLocalFocusModeEnabled(saveFocusModeEnabled(next))
+  }
+
+  const toggleStrictMode = () => {
+    setStrictMode(saveStrictMode(!strictMode))
   }
 
   const handleSave = () => {
@@ -658,6 +663,56 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           boxShadow: '0 2px 20px rgba(26,46,74,0.05)',
         }}>
           <CompanionStatus />
+
+          <div style={{
+            marginTop: 12,
+            border: `1.5px solid ${strictMode ? '#1a2e4a' : '#e5e0d8'}`,
+            background: strictMode ? '#f5f8fc' : '#fbfaf8',
+            borderRadius: 12,
+            padding: '13px 15px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#1a2e4a' }}>
+                Streng-Modus {strictMode ? '· an' : '· aus'}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6b6357', lineHeight: 1.5, marginTop: 3 }}>
+                Versteckt <b>jede App außer deinen Focus-Apps</b> + Basis-Apps (Finder, Einstellungen). Browser bleiben offen — deren Websites filtert die Blockliste. Full focus.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleStrictMode}
+              aria-pressed={strictMode}
+              style={{
+                flexShrink: 0,
+                width: 46,
+                height: 27,
+                borderRadius: 999,
+                border: 'none',
+                cursor: 'pointer',
+                background: strictMode ? '#1a2e4a' : '#cdc7bd',
+                position: 'relative',
+                transition: 'background 0.15s',
+              }}
+            >
+              <span style={{
+                position: 'absolute',
+                top: 3,
+                left: strictMode ? 22 : 3,
+                width: 21,
+                height: 21,
+                borderRadius: '50%',
+                background: '#fff',
+                transition: 'left 0.15s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }} />
+            </button>
+          </div>
+
           <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
             <button
               type="button"
