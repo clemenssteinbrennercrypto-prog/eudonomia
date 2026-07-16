@@ -3,6 +3,7 @@ import ExtensionSetup from './ExtensionSetup'
 import {
   fetchCompanionDebug,
   getLastActivity,
+  installCompanionHelper,
   isExtensionConnected,
   pushCompanionSession,
   startActivityPolling,
@@ -252,6 +253,8 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
 function CompanionStatus() {
   const [debug, setDebug] = useState(null)
   const [connected, setConnected] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -269,6 +272,19 @@ function CompanionStatus() {
       clearInterval(interval)
     }
   }, [])
+
+  const runInstall = async () => {
+    setInstalling(true)
+    setInstallError(null)
+    const res = await installCompanionHelper()
+    setInstalling(false)
+    if (!res.ok) {
+      setInstallError(res.error === 'cancelled' ? 'You cancelled the password prompt.' : res.error)
+    } else {
+      const next = await fetchCompanionDebug()
+      setDebug(next)
+    }
+  }
 
   const tone = !connected ? 'red' : debug?.sessionActive ? 'green' : 'yellow'
   const colors = {
@@ -292,6 +308,7 @@ function CompanionStatus() {
   const hostCancelled = debug?.hostBlockError === 'cancelled'
   const hostFailed = debug?.hostBlockError && !hostCancelled
   const websitesBlocked = debug?.hostBlockActive
+  const helperInstalled = debug?.helperInstalled
 
   return (
     <div style={{ display: 'grid', gap: 8 }}>
@@ -322,6 +339,49 @@ function CompanionStatus() {
         }} />
         {label}
       </span>
+
+      {connected && !helperInstalled && (
+        <div style={{
+          border: '1px solid #93c5fd',
+          background: '#eff6ff',
+          color: '#1e3a8a',
+          borderRadius: 12,
+          padding: '12px 14px',
+          display: 'grid',
+          gap: 8,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 900 }}>⚡ Frictionless blocking (one-time setup)</div>
+          <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: '#1d4ed8' }}>
+            Enter your Mac password <b>once</b> to let Eudonomia block distraction sites silently — no password on every session. It installs a small helper that only edits your block list.
+          </div>
+          <button
+            onClick={runInstall}
+            disabled={installing}
+            style={{
+              justifySelf: 'start',
+              border: 'none',
+              borderRadius: 9,
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 900,
+              cursor: installing ? 'default' : 'pointer',
+              background: installing ? '#93c5fd' : '#2563eb',
+              color: '#fff',
+            }}
+          >
+            {installing ? 'Waiting for password…' : 'Enable — enter password once'}
+          </button>
+          {installError && (
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#991b1b' }}>⚠ {installError}</div>
+          )}
+        </div>
+      )}
+
+      {connected && helperInstalled && (
+        <div style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+          ⚡ Silent blocking enabled — no password needed per session
+        </div>
+      )}
 
       {connected && debug?.sessionActive && websitesBlocked && (
         <div style={{

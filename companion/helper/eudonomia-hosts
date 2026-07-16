@@ -1,0 +1,102 @@
+#!/bin/sh
+# eudonomia-hosts — privileged /etc/hosts manager for Eudonomia focus sessions.
+#
+# Installed once at /Library/Eudonomia/eudonomia-hosts (root:wheel, 0755) and
+# allowed NOPASSWD via /etc/sudoers.d/eudonomia so the companion can block and
+# unblock distraction domains during a session WITHOUT a password prompt each
+# time. The one-time install is the only moment the user enters their password.
+#
+# SECURITY NOTES (this file runs as root):
+#   * It lives in a root-owned, non-user-writable directory, so the NOPASSWD
+#     sudoers rule targeting this exact path cannot be turned into arbitrary
+#     root execution by swapping the file.
+#   * It never eval's input. Every domain argument is validated against a strict
+#     hostname pattern; anything else is skipped. So a caller cannot inject shell
+#     or write arbitrary lines into /etc/hosts.
+#   * It only ever touches the region between its own START/END markers; the
+#     user's own hosts entries are preserved untouched.
+#
+# Usage:
+#   eudonomia-hosts block <domain> [<domain> ...]
+#   eudonomia-hosts unblock
+#   eudonomia-hosts status      # prints "blocked" or "clean", no privilege change
+
+set -eu
+
+HOSTS=/etc/hosts
+START='# EUDONOMIA_START — focus session block (auto-managed, safe to delete)'
+END='# EUDONOMIA_END'
+
+# Strip our managed block (between markers, inclusive) from the current hosts.
+strip_block() {
+    awk -v s="$START" -v e="$END" '
+        $0 == s { skip = 1; next }
+        $0 == e { skip = 0; next }
+        skip != 1 { print }
+    ' "$HOSTS"
+}
+
+# A conservative hostname check: labels of [a-z0-9-] separated by dots, at least
+# one dot, max 253 chars. Anything else is ignored rather than written.
+valid_domain() {
+    printf '%s' "$1" | grep -Eiq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
+}
+
+flush_dns() {
+    dscacheutil -flushcache 2>/dev/null || true
+    killall -HUP mDNSResponder 2>/dev/null || true
+}
+
+cmd="${1:-}"
+case "$cmd" in
+    status)
+        if grep -qF "$START" "$HOSTS" 2>/dev/null; then
+            echo blocked
+        else
+            echo clean
+        fi
+        exit 0
+        ;;
+    unblock)
+        tmp=$(mktemp)
+        strip_block > "$tmp"
+        cat "$tmp" > "$HOSTS"
+        rm -f "$tmp"
+        flush_dns
+        exit 0
+        ;;
+    block)
+        shift
+        tmp=$(mktemp)
+        strip_block > "$tmp"
+        # Collect valid, deduped domains.
+        printed=0
+        {
+            for d in "$@"; do
+                # normalize: lowercase, strip scheme/path/www.
+                host=$(printf '%s' "$d" \
+                    | tr 'A-Z' 'a-z' \
+                    | sed -E 's#^[a-z]+://##; s#/.*$##; s#^www\.##; s#[[:space:]]##g')
+                [ -n "$host" ] || continue
+                valid_domain "$host" || continue
+                if [ "$printed" -eq 0 ]; then
+                    echo "$START"
+                    printed=1
+                fi
+                printf '127.0.0.1\t%s\n' "$host"
+                printf '127.0.0.1\twww.%s\n' "$host"
+                printf '::1\t%s\n' "$host"
+                printf '::1\twww.%s\n' "$host"
+            done
+            [ "$printed" -eq 1 ] && echo "$END"
+        } >> "$tmp"
+        cat "$tmp" > "$HOSTS"
+        rm -f "$tmp"
+        flush_dns
+        exit 0
+        ;;
+    *)
+        echo "usage: eudonomia-hosts block <domain...> | unblock | status" >&2
+        exit 2
+        ;;
+esac

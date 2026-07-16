@@ -93,6 +93,7 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         "permissionMissing": debug.permission_missing,
         "hostBlockActive": debug.host_block_active,
         "hostBlockError": debug.host_block_error,
+        "helperInstalled": crate::blocking::helper_available(),
         "companionVersion": env!("CARGO_PKG_VERSION"),
     })
     .to_string();
@@ -161,11 +162,51 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
     with_cors(response)
 }
 
+/// One-time install of the zero-prompt helper. Runs on a blocking thread
+/// because it shows a modal admin dialog. Triggered by a deliberate user action
+/// in the UI, so the single password prompt is expected.
+async fn install_helper() -> Response {
+    let result = tokio::task::spawn_blocking(crate::blocking::install_helper)
+        .await
+        .unwrap_or_else(|e| Err(format!("join: {e}")));
+
+    let body = match &result {
+        Ok(()) => serde_json::json!({ "ok": true }).to_string(),
+        Err(e) => serde_json::json!({ "ok": false, "error": e }).to_string(),
+    };
+    let response = (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response();
+    with_cors(response)
+}
+
+async fn uninstall_helper() -> Response {
+    let result = tokio::task::spawn_blocking(crate::blocking::uninstall_helper)
+        .await
+        .unwrap_or_else(|e| Err(format!("join: {e}")));
+    let body = match &result {
+        Ok(()) => serde_json::json!({ "ok": true }).to_string(),
+        Err(e) => serde_json::json!({ "ok": false, "error": e }).to_string(),
+    };
+    let response = (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response();
+    with_cors(response)
+}
+
 pub async fn run(state: AppState) {
     let app = Router::new()
         .route("/status", get(status).options(status))
         .route("/debug", get(debug).options(debug))
         .route("/session", post(session).options(preflight))
+        .route("/install-helper", post(install_helper).options(preflight))
+        .route("/uninstall-helper", post(uninstall_helper).options(preflight))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));

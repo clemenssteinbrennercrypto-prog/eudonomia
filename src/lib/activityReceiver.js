@@ -113,6 +113,22 @@ export async function fetchCompanionDebug() {
   return null
 }
 
+// Trigger the companion's one-time helper install. Shows a single macOS admin
+// password dialog; after that, website blocking runs silently (no more prompts).
+// Long timeout: the request only returns once the user answers the dialog.
+export async function installCompanionHelper() {
+  try {
+    const res = await fetch('http://localhost:7331/install-helper', {
+      method: 'POST',
+      signal: AbortSignal.timeout(120000),
+    })
+    if (res.ok) return res.json()
+    return { ok: false, error: `HTTP ${res.status}` }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+}
+
 export function isExtensionConnected() {
   return isDaemonConnected()
 }

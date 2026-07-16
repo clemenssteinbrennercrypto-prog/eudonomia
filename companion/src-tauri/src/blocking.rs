@@ -21,6 +21,100 @@ const HOSTS_PATH: &str = "/etc/hosts";
 const START_MARKER: &str = "# EUDONOMIA_START — focus session block (auto-managed, safe to delete)";
 const END_MARKER: &str = "# EUDONOMIA_END";
 
+// ── Zero-prompt privileged helper ─────────────────────────────────────────────
+// Installed once (one admin prompt) at HELPER_PATH with a matching NOPASSWD
+// sudoers rule, after which apply/clear run silently via `sudo -n`. The helper
+// script is embedded at compile time and is the single privileged writer of
+// /etc/hosts once installed. See helper/eudonomia-hosts for the security model.
+const HELPER_PATH: &str = "/Library/Eudonomia/eudonomia-hosts";
+const SUDOERS_PATH: &str = "/etc/sudoers.d/eudonomia";
+const HELPER_SRC: &str = include_str!("../../helper/eudonomia-hosts");
+
+/// True if the helper is installed AND callable without a password.
+pub fn helper_available() -> bool {
+    Command::new("sudo")
+        .args(["-n", HELPER_PATH, "status"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// One-time install of the helper script + a narrowly-scoped NOPASSWD sudoers
+/// rule. Shows exactly one admin password dialog. The privileged shell only
+/// references fixed, user-private staged paths and validates the sudoers file
+/// with `visudo -c` before installing it, so a bad rule can never break sudo.
+pub fn install_helper() -> Result<(), String> {
+    let user = std::env::var("USER").unwrap_or_default();
+    if user.is_empty() {
+        return Err("no USER in environment".into());
+    }
+
+    // Stage in the user-private temp dir (mode 700) so no other user can swap
+    // the files between staging and the privileged copy.
+    let dir = std::env::temp_dir();
+    let helper_stage = dir.join("eudonomia-hosts.helper");
+    let sudoers_stage = dir.join("eudonomia.sudoers");
+    std::fs::write(&helper_stage, HELPER_SRC).map_err(|e| format!("stage helper: {e}"))?;
+    std::fs::write(
+        &sudoers_stage,
+        format!("{user} ALL=(root) NOPASSWD: {HELPER_PATH}\n"),
+    )
+    .map_err(|e| format!("stage sudoers: {e}"))?;
+
+    let h = helper_stage.to_string_lossy().replace(['"', '\''], "");
+    let s = sudoers_stage.to_string_lossy().replace(['"', '\''], "");
+    let shell = format!(
+        "mkdir -p /Library/Eudonomia && cp '{h}' {HELPER_PATH} && \
+         chown root:wheel /Library/Eudonomia {HELPER_PATH} && \
+         chmod 755 /Library/Eudonomia && chmod 755 {HELPER_PATH} && \
+         visudo -cf '{s}' && install -m 440 -o root -g wheel '{s}' {SUDOERS_PATH}"
+    );
+    let apple = format!(
+        r#"do shell script "{}" with administrator privileges"#,
+        shell.replace('\\', "\\\\").replace('"', "\\\"")
+    );
+
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(&apple)
+        .output()
+        .map_err(|e| format!("osascript: {e}"))?;
+    let _ = std::fs::remove_file(&helper_stage);
+    let _ = std::fs::remove_file(&sudoers_stage);
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr);
+        if err.contains("-128") {
+            Err("cancelled".into())
+        } else {
+            Err(err.trim().to_string())
+        }
+    }
+}
+
+/// Uninstall the helper + sudoers rule (one admin prompt). Clears any block
+/// first so removal can't strand a block.
+pub fn uninstall_helper() -> Result<(), String> {
+    let _ = clear_block();
+    let shell = format!("rm -f {HELPER_PATH} {SUDOERS_PATH}; rmdir /Library/Eudonomia 2>/dev/null || true");
+    let apple = format!(
+        r#"do shell script "{}" with administrator privileges"#,
+        shell.replace('\\', "\\\\").replace('"', "\\\"")
+    );
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(&apple)
+        .output()
+        .map_err(|e| format!("osascript: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 /// Remove any existing Eudonomia block (between the markers, inclusive),
 /// leaving the rest of the file untouched. Idempotent.
 pub fn strip_eudonomia_block(content: &str) -> String {
@@ -172,9 +266,36 @@ fn write_hosts_via_admin(new_content: &str) -> Result<(), String> {
     }
 }
 
-/// Apply a block for `domains`. No-op (and no prompt) if the resulting file
-/// would be identical to what's already there.
+/// Apply a block for `domains`. Uses the silent helper if installed; otherwise
+/// falls back to a per-call admin prompt. No-op if nothing would change.
 pub fn apply_block(domains: &[String]) -> Result<(), String> {
+    let hosts: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        domains
+            .iter()
+            .filter_map(|d| normalize_host(d))
+            .filter(|h| seen.insert(h.clone()))
+            .collect()
+    };
+
+    if helper_available() {
+        if hosts.is_empty() {
+            return clear_block();
+        }
+        let mut args = vec!["-n".to_string(), HELPER_PATH.to_string(), "block".to_string()];
+        args.extend(hosts);
+        let out = Command::new("sudo")
+            .args(&args)
+            .output()
+            .map_err(|e| format!("sudo helper: {e}"))?;
+        return if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        };
+    }
+
+    // Fallback: no helper installed — write directly with a per-call admin prompt.
     let current = read_hosts().map_err(|e| format!("read hosts: {e}"))?;
     let desired = build_hosts_with_block(&current, domains);
     if desired == current {
@@ -183,8 +304,21 @@ pub fn apply_block(domains: &[String]) -> Result<(), String> {
     write_hosts_via_admin(&desired)
 }
 
-/// Remove the Eudonomia block entirely. No-op (and no prompt) if none present.
+/// Remove the Eudonomia block entirely. Uses the silent helper if installed;
+/// otherwise a per-call admin prompt. No-op if no block is present.
 pub fn clear_block() -> Result<(), String> {
+    if helper_available() {
+        let out = Command::new("sudo")
+            .args(["-n", HELPER_PATH, "unblock"])
+            .output()
+            .map_err(|e| format!("sudo helper: {e}"))?;
+        return if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        };
+    }
+
     let current = read_hosts().map_err(|e| format!("read hosts: {e}"))?;
     if !current.contains(START_MARKER) {
         return Ok(());
