@@ -1,8 +1,8 @@
 const STORAGE_KEY = 'eudaimonia_ext_activity'
 const STALE_MS = 10_000
-const DAEMON_STATUS_URL = 'http://localhost:7331/status'
-const DAEMON_SESSION_URL = 'http://localhost:7331/session'
-const DAEMON_DEBUG_URL = 'http://localhost:7331/debug'
+const DAEMON_STATUS_URL = 'http://127.0.0.1:7331/status'
+const DAEMON_SESSION_URL = 'http://127.0.0.1:7331/session'
+const DAEMON_DEBUG_URL = 'http://127.0.0.1:7331/debug'
 const DAEMON_POLL_MS = 3000
 
 let lastActivity = { url: null, domain: null, title: null, app: '', ts: 0 }
@@ -118,7 +118,7 @@ export async function fetchCompanionDebug() {
 // Long timeout: the request only returns once the user answers the dialog.
 export async function installCompanionHelper() {
   try {
-    const res = await fetch('http://localhost:7331/install-helper', {
+    const res = await fetch('http://127.0.0.1:7331/install-helper', {
       method: 'POST',
       signal: AbortSignal.timeout(120000),
     })

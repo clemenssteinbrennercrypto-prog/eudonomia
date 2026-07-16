@@ -41,6 +41,14 @@ fn with_cors(mut response: Response) -> Response {
         header::ACCESS_CONTROL_ALLOW_HEADERS,
         HeaderValue::from_static("Content-Type"),
     );
+    // Chrome/Brave "Private Network Access": a public HTTPS page fetching a
+    // localhost service triggers a preflight demanding this header, else the
+    // request is blocked. Without it the web app reports "Companion not found"
+    // in those browsers even though the server is up.
+    headers.insert(
+        "Access-Control-Allow-Private-Network",
+        HeaderValue::from_static("true"),
+    );
     response
 }
 
@@ -210,27 +218,42 @@ async fn uninstall_helper() -> Response {
     with_cors(response)
 }
 
-pub async fn run(state: AppState) {
-    let app = Router::new()
+fn router(state: AppState) -> Router {
+    Router::new()
         .route("/status", get(status).options(status))
         .route("/debug", get(debug).options(debug))
         .route("/session", post(session).options(preflight))
         .route("/install-helper", post(install_helper).options(preflight))
         .route("/uninstall-helper", post(uninstall_helper).options(preflight))
-        .with_state(state);
+        .with_state(state)
+}
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
+async fn serve_on(addr: SocketAddr, app: Router) {
     match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => {
-            eprintln!("eudonomia-companion: serving http://localhost:{PORT}/status");
+            eprintln!("eudonomia-companion: serving http://{addr}/status");
             if let Err(err) = axum::serve(listener, app).await {
-                eprintln!("eudonomia-companion: server error: {err}");
+                eprintln!("eudonomia-companion: server error on {addr}: {err}");
             }
         }
         Err(err) => {
-            // Port already taken (e.g. the old Python daemon) — log and keep
-            // the tray app alive rather than crashing.
-            eprintln!("eudonomia-companion: cannot bind port {PORT}: {err}");
+            // A failed bind on one stack (or a port already taken by the old
+            // Python daemon) must not kill the tray app — the other listener
+            // may still succeed. Just log.
+            eprintln!("eudonomia-companion: cannot bind {addr}: {err}");
         }
     }
+}
+
+pub async fn run(state: AppState) {
+    // Bind BOTH IPv4 and IPv6 localhost. macOS often resolves `localhost` to
+    // ::1 first; a browser hitting http://localhost:7331 would then fail if we
+    // only bound 127.0.0.1. Serving both makes the companion reachable however
+    // `localhost` resolves. Bind is localhost-only — never exposed off-machine.
+    let v4 = SocketAddr::from(([127, 0, 0, 1], PORT));
+    let v6 = SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, PORT));
+    tokio::join!(
+        serve_on(v4, router(state.clone())),
+        serve_on(v6, router(state)),
+    );
 }
