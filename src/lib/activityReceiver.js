@@ -6,13 +6,23 @@ const DAEMON_DEBUG_URL = 'http://127.0.0.1:7331/debug'
 const DAEMON_POLL_MS = 3000
 
 let lastActivity = { url: null, domain: null, title: null, app: '', ts: 0 }
+let lastExtensionTs = 0
+let lastDaemonTs = 0
 let pollingInterval = null
 let daemonInterval = null
 
-function applyIfFresher(activity, onUpdate) {
+function noteSource(source, ts) {
+  if (source === 'extension') lastExtensionTs = ts
+  if (source === 'daemon') lastDaemonTs = ts
+}
+
+function applyIfFresher(activity, onUpdate, source) {
   if (activity?.ts && activity.ts > lastActivity.ts) {
-    lastActivity = activity
+    noteSource(source, activity.ts)
+    lastActivity = { ...activity, source }
     onUpdate(lastActivity)
+  } else if (activity?.ts) {
+    noteSource(source, activity.ts)
   }
 }
 
@@ -20,7 +30,7 @@ function pollExtensionBridge(onUpdate) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    applyIfFresher(JSON.parse(raw), onUpdate)
+    applyIfFresher(JSON.parse(raw), onUpdate, 'extension')
   } catch {
     // The extension is optional; sessions continue without activity data.
   }
@@ -43,7 +53,7 @@ async function pollDaemon(onUpdate) {
       title: data.window || '',
       url: data.full_url || data.url || '',
       ts: data.ts,
-    }, onUpdate)
+    }, onUpdate, 'daemon')
   } catch {
     // The macOS daemon is optional and may not be running; ignore.
   }
@@ -76,7 +86,12 @@ export function getLastActivity() {
 }
 
 export function isDaemonConnected() {
-  return lastActivity.ts > 0 && (Date.now() - lastActivity.ts) < STALE_MS
+  return lastDaemonTs > 0 && (Date.now() - lastDaemonTs) < STALE_MS
+}
+
+export function isActivityConnected() {
+  const newestTs = Math.max(lastActivity.ts || 0, lastExtensionTs, lastDaemonTs)
+  return newestTs > 0 && (Date.now() - newestTs) < STALE_MS
 }
 
 // Push session state + blocking config to the Companion app (Tauri, port 7331).
@@ -130,5 +145,5 @@ export async function installCompanionHelper() {
 }
 
 export function isExtensionConnected() {
-  return isDaemonConnected()
+  return lastExtensionTs > 0 && (Date.now() - lastExtensionTs) < STALE_MS
 }

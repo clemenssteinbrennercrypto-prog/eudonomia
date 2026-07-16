@@ -5,7 +5,7 @@ import {
   isScreenRole,
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
-import { getLastActivity, isDaemonConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import { getLastActivity, isActivityConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
 
@@ -1152,8 +1152,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
       horizontalContext.kind === 'productive_right'
     const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
-    const daemonConnected = isDaemonConnected()
-    const activityClassification = classifyActivity(activityRef.current, focusAppsConfigRef.current, daemonConnected)
+    const activityConnected = isActivityConnected()
+    const activityClassification = classifyActivity(activityRef.current, focusAppsConfigRef.current, activityConnected)
     const activityScoringEnabled = focusModeEnabledRef.current
     const activityIsFocus = activityScoringEnabled && activityClassification.kind === 'focus'
     const activityIsDistraction = activityScoringEnabled && activityClassification.kind === 'distraction'
@@ -1672,7 +1672,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
 
   const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
   const showStreak = !isCalibrating && currentStreak > 30
-  const activityConnected = isDaemonConnected()
+  const activityConnected = isActivityConnected()
   const activityClassification = classifyActivity(activityStatus, focusAppsConfigRef.current, activityConnected)
 
   const dismissBreak = () => {

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ExtensionSetup from './ExtensionSetup'
 import {
   fetchCompanionDebug,
   getLastActivity,
   installCompanionHelper,
+  isActivityConnected,
   isExtensionConnected,
   pushCompanionSession,
   startActivityPolling,
@@ -463,24 +465,30 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
   const [extensionConnected, setExtensionConnected] = useState(() => isExtensionConnected())
+  const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
   const [testFeedback, setTestFeedback] = useState('')
+  const [testBlockingActive, setTestBlockingActive] = useState(false)
   const testTimerRef = useRef(null)
+  const testBlockingActiveRef = useRef(false)
+  const savedTimerRef = useRef(null)
 
   const configuredCount = focusApps.length + distractionApps.length
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
   const activityPreview = useMemo(
-    () => classifyCurrentActivity(activity, focusApps, distractionApps, extensionConnected),
-    [activity, focusApps, distractionApps, extensionConnected]
+    () => classifyCurrentActivity(activity, focusApps, distractionApps, activityConnected),
+    [activity, focusApps, distractionApps, activityConnected]
   )
 
   useEffect(() => {
     startActivityPolling((nextActivity) => {
       setActivity(nextActivity)
       setExtensionConnected(isExtensionConnected())
+      setActivityConnected(isActivityConnected())
     })
     const heartbeat = setInterval(() => {
       setActivity(getLastActivity())
       setExtensionConnected(isExtensionConnected())
+      setActivityConnected(isActivityConnected())
     }, 1000)
     return () => {
       clearInterval(heartbeat)
@@ -490,6 +498,28 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
 
   useEffect(() => () => {
     if (testTimerRef.current) clearTimeout(testTimerRef.current)
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    if (testBlockingActiveRef.current) {
+      pushCompanionSession({
+        active: false,
+        endTs: 0,
+        blockedApps: [],
+        blockedDomains: [],
+      })
+    }
+  }, [])
+
+  const stopTestBlocking = useCallback(() => {
+    pushCompanionSession({
+      active: false,
+      endTs: 0,
+      blockedApps: [],
+      blockedDomains: [],
+    })
+    setTestFeedback('')
+    testBlockingActiveRef.current = false
+    setTestBlockingActive(false)
+    testTimerRef.current = null
   }, [])
 
   const toggleFocusMode = () => {
@@ -507,32 +537,35 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     setFocusApps(next.focusApps)
     setDistractionApps(next.distractionApps)
     setSaved(true)
-    setTimeout(() => setSaved(false), 1800)
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    savedTimerRef.current = setTimeout(() => {
+      setSaved(false)
+      savedTimerRef.current = null
+    }, 1800)
   }
 
-  const handleTestBlocking = () => {
+  const handleTestBlocking = async () => {
     if (testTimerRef.current) clearTimeout(testTimerRef.current)
 
     const blockedApps = distractionApps
     const blockedDomains = [...new Set(domainsFor(distractionApps))]
-    pushCompanionSession({
+    const ok = await pushCompanionSession({
       active: true,
       endTs: Date.now() + 60_000,
       blockedApps,
       blockedDomains,
     })
+    if (!ok) {
+      testBlockingActiveRef.current = false
+      setTestBlockingActive(false)
+      setTestFeedback('Companion not reachable')
+      return
+    }
+    testBlockingActiveRef.current = true
+    setTestBlockingActive(true)
     setTestFeedback('Test session active for 60s')
 
-    testTimerRef.current = setTimeout(() => {
-      pushCompanionSession({
-        active: false,
-        endTs: 0,
-        blockedApps: [],
-        blockedDomains: [],
-      })
-      setTestFeedback('')
-      testTimerRef.current = null
-    }, 60_000)
+    testTimerRef.current = setTimeout(stopTestBlocking, 60_000)
   }
 
   return (
@@ -687,6 +720,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             <button
               type="button"
               onClick={handleTestBlocking}
+              disabled={testBlockingActive}
               style={{
                 background: '#1a2e4a',
                 border: 'none',
@@ -695,9 +729,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 color: '#fff',
                 fontSize: 12,
                 fontWeight: 900,
-                cursor: 'pointer',
+                cursor: testBlockingActive ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
                 whiteSpace: 'nowrap',
+                opacity: testBlockingActive ? 0.72 : 1,
               }}
             >
               Test Blocking (60s)
@@ -735,7 +770,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               whiteSpace: 'nowrap',
               maxWidth: 420,
             }}>
-              {extensionConnected ? (activity?.domain || activity?.title || activity?.url || 'Waiting for activity') : 'Companion not connected'}
+              {activityConnected ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity') : 'Waiting for activity'}
             </div>
           </div>
           <span style={{
