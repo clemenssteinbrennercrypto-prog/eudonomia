@@ -22,6 +22,26 @@ function normalizeDomain(value) {
   }
 }
 
+const PRESET_DOMAIN_MAP = {
+  youtube: ['youtube.com'],
+  instagram: ['instagram.com'],
+  'twitter/x': ['x.com', 'twitter.com'],
+  twitter: ['twitter.com', 'x.com'],
+  x: ['x.com'],
+  tiktok: ['tiktok.com'],
+  reddit: ['reddit.com'],
+  netflix: ['netflix.com'],
+  facebook: ['facebook.com'],
+  snapchat: ['snapchat.com'],
+  notion: ['notion.so'],
+  figma: ['figma.com'],
+}
+
+function getPresetDomains(appName) {
+  const key = String(appName || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  return PRESET_DOMAIN_MAP[key] || []
+}
+
 function domainMatches(domain, blockedDomains) {
   const normalizedDomain = normalizeDomain(domain)
   if (!normalizedDomain) return false
@@ -91,7 +111,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     const config = result.eudaimonia_focus_apps_config || { distractionApps: [], distractionDomains: [] }
     const blockedDomains = new Set([
-      ...(config.distractionApps || []),
+      ...(config.distractionApps || []).flatMap((app) => {
+        const presetDomains = getPresetDomains(app)
+        return presetDomains.length ? presetDomains : [app]
+      }),
       ...(config.distractionDomains || []),
     ].map(normalizeDomain).filter(Boolean))
     const blockedEntries = new Set(
