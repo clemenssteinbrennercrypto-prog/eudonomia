@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'eudaimonia_ext_activity'
+const EXT_SESSION_ACTIVE_KEY = 'eudaimonia_session_active'
+const EXT_SESSION_END_KEY = 'eudaimonia_session_end_ts'
 const STALE_MS = 10_000
 const DAEMON_BASE_URLS = ['http://127.0.0.1:7331', 'http://localhost:7331']
 const DAEMON_POLL_MS = 3000
@@ -142,6 +144,19 @@ export function getActivitySourceStatus() {
 export function isActivityConnected() {
   const newestTs = Math.max(lastActivity.ts || 0, lastExtensionTs, lastDaemonTs)
   return newestTs > 0 && (Date.now() - newestTs) < STALE_MS
+}
+
+// The extension is a legacy browser-only fallback. It should receive an active
+// session flag only when the native Companion cannot accept session ownership.
+export function setExtensionFallbackSession(active, endTs = 0) {
+  try {
+    localStorage.setItem(EXT_SESSION_ACTIVE_KEY, active ? 'true' : 'false')
+    if (active && endTs > Date.now()) {
+      localStorage.setItem(EXT_SESSION_END_KEY, String(endTs))
+    } else {
+      localStorage.removeItem(EXT_SESSION_END_KEY)
+    }
+  } catch {}
 }
 
 // Push session state + blocking config to the Companion app (Tauri, port 7331).

@@ -5,7 +5,15 @@ import {
   isScreenRole,
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
-import { fetchCompanionSession, getLastActivity, isActivityConnected, pushCompanionSession, startActivityPolling, stopActivityPolling } from '../lib/activityReceiver'
+import {
+  fetchCompanionSession,
+  getLastActivity,
+  isActivityConnected,
+  pushCompanionSession,
+  setExtensionFallbackSession,
+  startActivityPolling,
+  stopActivityPolling,
+} from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
 
@@ -787,7 +795,6 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const pausedAtRef     = useRef(null) // timestamp when paused
   const pausedTotalRef  = useRef(0)    // total ms spent paused
   const timeLeftRef     = useRef(totalSeconds)
-  const companionSessionRef = useRef({ active: false, sessionActive: false, sessionState: 'inactive', sessionEndTs: 0 })
   const companionSessionHadActiveRef = useRef(false)
 
   // ── Detection rolling buffers ─────────────────────────────────────────────
@@ -910,22 +917,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     timeLeftRef.current = timeLeft
   }, [timeLeft])
 
-  const setSessionStorageActive = useCallback((active, endTs = 0) => {
-    localStorage.setItem('eudaimonia_session_active', active ? 'true' : 'false')
-    if (active && endTs > Date.now()) {
-      localStorage.setItem('eudaimonia_session_end_ts', String(endTs))
-    } else {
-      localStorage.removeItem('eudaimonia_session_end_ts')
-    }
-  }, [])
-
   const applyCompanionSession = useCallback((session) => {
     if (!session || session === true) return false
-    companionSessionRef.current = session
     if (session.sessionState === 'active' || session.sessionState === 'paused') {
       companionSessionHadActiveRef.current = true
     }
-    setSessionStorageActive(session.active, session.sessionEndTs)
+    setExtensionFallbackSession(false)
 
     if (sessionEndedRef.current) return true
 
@@ -942,20 +939,20 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       setIsPaused(false)
     }
     return true
-  }, [setSessionStorageActive])
+  }, [])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
-    setSessionStorageActive(active, endTs)
     const companionSession = await pushCompanionSession({
       active,
       endTs,
       sessionState,
       ...companionBlockingRef.current,
     })
-    applyCompanionSession(companionSession)
+    const companionOwnsSession = applyCompanionSession(companionSession)
+    setExtensionFallbackSession(active && !companionOwnsSession, endTs)
     return companionSession
-  }, [applyCompanionSession, setSessionStorageActive])
+  }, [applyCompanionSession])
 
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
@@ -1021,11 +1018,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const endSession = useCallback((completed = false) => {
     if (sessionEndedRef.current) return
     sessionEndedRef.current = true
-    // Keep the key present (rather than removing it) so the extension content
-    // script — injected into every tab — can tell "this is the app's own tab,
-    // session just ended" apart from "this tab never touched the key at all".
-    localStorage.setItem('eudaimonia_session_active', 'false')
-    localStorage.removeItem('eudaimonia_session_end_ts')
+    setExtensionFallbackSession(false)
     pushBlockingState(false, 'ended')
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total

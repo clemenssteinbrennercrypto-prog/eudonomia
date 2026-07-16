@@ -94,13 +94,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const sessionActive = result.eudaimonia_session_active === true
     if (!sessionActive) return
 
-    // Failsafe: if the app tab was closed (or the browser crashed) before the
-    // session ended normally, the content script never flips session_active
-    // back to false — the flag would stay true forever and block distraction
-    // sites indefinitely. session_end_ts is the planned end of the session; if
-    // that moment has passed (+2 min grace for overtime), treat the session as
-    // over and clear the stale flag. A missing/invalid end_ts also means we
-    // cannot prove a session is genuinely running, so don't block.
+    // The native Companion owns normal app/site protection. This flag is set
+    // only when the app deliberately falls back to extension-only browser
+    // blocking. If the app tab/browser dies before clearing it, session_end_ts
+    // self-expires the fallback so redirects cannot outlive the session.
     const endTs = Number(result.eudaimonia_session_end_ts)
     const GRACE_MS = 2 * 60 * 1000
     if (!Number.isFinite(endTs) || endTs <= 0 || Date.now() > endTs + GRACE_MS) {
