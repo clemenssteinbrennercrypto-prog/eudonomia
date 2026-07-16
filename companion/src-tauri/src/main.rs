@@ -16,6 +16,7 @@ mod server;
 use activity::{
     ActivityState, DebugState, SessionConfig, SharedActivity, SharedDebug, SharedSession,
 };
+use serde::Serialize;
 use server::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -26,23 +27,128 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 
-/// Check GitHub Releases for a newer companion build and install it silently in
-/// the background. The update is applied on the next launch, so this never
-/// interrupts a running focus session. Signed with our updater key; the plugin
-/// verifies the signature before installing. Any failure (offline, no update)
-/// is ignored — the app runs fine on the current version.
-fn spawn_update_check(handle: tauri::AppHandle) {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeUpdateStatus {
+    supported: bool,
+    available: bool,
+    current_version: String,
+    version: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeUpdateInstallResult {
+    installed: bool,
+    version: Option<String>,
+    error: Option<String>,
+}
+
+/// Check GitHub Releases for a newer signed companion build. This only reports
+/// state; installation is a separate user action so the UI can distinguish a
+/// local WebView reload from a real native app update.
+#[tauri::command]
+async fn check_native_update(app: tauri::AppHandle) -> NativeUpdateStatus {
     use tauri_plugin_updater::UpdaterExt;
-    tauri::async_runtime::spawn(async move {
-        let Ok(updater) = handle.updater() else { return };
-        match updater.check().await {
-            Ok(Some(update)) => {
-                let _ = update.download_and_install(|_, _| {}, || {}).await;
-                // Installed; it applies the next time the user opens Eudonomia.
-            }
-            _ => {}
+
+    let current_version = app.package_info().version.to_string();
+
+    if tauri_plugin_updater::target().is_none() {
+        return NativeUpdateStatus {
+            supported: false,
+            available: false,
+            current_version,
+            version: None,
+            error: Some("Updater is not supported on this platform.".into()),
+        };
+    }
+
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(err) => {
+            return NativeUpdateStatus {
+                supported: true,
+                available: false,
+                current_version,
+                version: None,
+                error: Some(err.to_string()),
+            };
         }
-    });
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => NativeUpdateStatus {
+            supported: true,
+            available: true,
+            current_version,
+            version: Some(update.version.to_string()),
+            error: None,
+        },
+        Ok(None) => NativeUpdateStatus {
+            supported: true,
+            available: false,
+            current_version,
+            version: None,
+            error: None,
+        },
+        Err(err) => NativeUpdateStatus {
+            supported: true,
+            available: false,
+            current_version,
+            version: None,
+            error: Some(err.to_string()),
+        },
+    }
+}
+
+/// Install the currently available signed companion update and restart into it.
+/// A fresh check is performed so we never install a stale or fabricated update.
+#[tauri::command]
+async fn install_native_update(app: tauri::AppHandle) -> NativeUpdateInstallResult {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(err) => {
+            return NativeUpdateInstallResult {
+                installed: false,
+                version: None,
+                error: Some(err.to_string()),
+            };
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.to_string();
+            match update.download_and_install(|_, _| {}, || {}).await {
+                Ok(()) => {
+                    app.restart();
+                    NativeUpdateInstallResult {
+                        installed: true,
+                        version: Some(version),
+                        error: None,
+                    }
+                }
+                Err(err) => NativeUpdateInstallResult {
+                    installed: false,
+                    version: Some(version),
+                    error: Some(err.to_string()),
+                },
+            }
+        }
+        Ok(None) => NativeUpdateInstallResult {
+            installed: false,
+            version: None,
+            error: None,
+        },
+        Err(err) => NativeUpdateInstallResult {
+            installed: false,
+            version: None,
+            error: Some(err.to_string()),
+        },
+    }
 }
 
 /// Show and focus the main Eudonomia window (defined in tauri.conf.json).
@@ -84,13 +190,14 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![quit_app])
+        .invoke_handler(tauri::generate_handler![
+            check_native_update,
+            install_native_update,
+            quit_app
+        ])
         .setup(move |app| {
             // HTTP server on the tauri-managed tokio runtime.
             tauri::async_runtime::spawn(server::run(server_state.clone()));
-
-            // Check for a newer signed build in the background.
-            spawn_update_check(app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia", true, None::<&str>)?;

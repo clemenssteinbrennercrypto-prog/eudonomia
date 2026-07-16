@@ -10,7 +10,7 @@ import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
 import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
-import { useUpdateAvailable } from './lib/useUpdateAvailable'
+import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 
 // ── Persist helpers ───────────────────────────────────────────────────────────
 function loadDevices() {
@@ -23,6 +23,69 @@ function loadDevices() {
 function saveDevices(devices) {
   try { localStorage.setItem('eudaimonia_devices', JSON.stringify(normalizeWorkspaceObjects(devices))) }
   catch {}
+}
+
+function AppRefreshControl({ updateStatus }) {
+  const {
+    runtime,
+    checking,
+    installing,
+    updateAvailable,
+    updateVersion,
+    error,
+    reloadCurrentApp,
+    installNativeUpdate,
+  } = updateStatus
+
+  const isNative = runtime === 'native'
+  const versionText = updateVersion ? ` ${updateVersion}` : ''
+  const statusText = installing
+    ? 'Installing update...'
+    : updateAvailable
+      ? `${isNative ? 'Native' : 'Web'} update${versionText}`
+      : checking
+        ? 'Checking updates...'
+        : error
+          ? 'Reload only'
+          : isNative
+            ? 'Native app up to date'
+            : 'Reload current app'
+
+  const title = updateAvailable
+    ? isNative
+      ? 'A signed native app update is available. Reload only refreshes the current bundled UI.'
+      : 'A newer web build is available. Reload loads it.'
+    : error
+      ? `Update check unavailable: ${error}. Reload refreshes the current app only.`
+      : 'Reload refreshes the current app without claiming a new version.'
+
+  return (
+    <div className="app-refresh-control" title={title}>
+      <button
+        className="app-refresh-button"
+        type="button"
+        onClick={reloadCurrentApp}
+        aria-label="Reload current Eudonomia app"
+      >
+        <span className="app-refresh-icon" aria-hidden="true">↻</span>
+        <span>Reload</span>
+      </button>
+      <span className={`app-refresh-status ${updateAvailable ? 'is-update' : ''}`}>
+        {statusText}
+      </span>
+      {isNative && updateAvailable && (
+        <button
+          className="app-update-button"
+          type="button"
+          onClick={installNativeUpdate}
+          disabled={installing}
+          aria-label="Install native Eudonomia update"
+        >
+          {installing ? 'Installing' : 'Install'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default function App() {
@@ -38,7 +101,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
-  const updateAvailable = useUpdateAvailable()
+  const updateStatus = useAppUpdateStatus()
 
   const setDevices = useCallback((val) => {
     setDevicesRaw(prev => {
@@ -75,30 +138,29 @@ export default function App() {
   }
 
   if (flow === 'landing') {
-    return <LandingPage onEnter={() => setFlow('onboarding')} />
+    return (
+      <>
+        <AppRefreshControl updateStatus={updateStatus} />
+        <LandingPage onEnter={() => setFlow('onboarding')} />
+      </>
+    )
   }
 
   if (flow === 'onboarding') {
-    return <Onboarding onComplete={() => {
-      setFlow('app')
-      if (loadDevices().length === 0) setScreen('setup')
-    }} />
+    return (
+      <>
+        <AppRefreshControl updateStatus={updateStatus} />
+        <Onboarding onComplete={() => {
+          setFlow('app')
+          if (loadDevices().length === 0) setScreen('setup')
+        }} />
+      </>
+    )
   }
 
   return (
     <>
-      {updateAvailable && (
-        <button
-          className="update-available-pill"
-          type="button"
-          onClick={() => window.location.reload()}
-          aria-label="Reload to update Eudaimonia"
-          title="Reload to update"
-        >
-          <span className="update-available-icon" aria-hidden="true">↻</span>
-          <span>Update available</span>
-        </button>
-      )}
+      <AppRefreshControl updateStatus={updateStatus} />
       {screen === 'home' && (
         <HomeScreen
           task={task}

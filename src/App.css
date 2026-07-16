@@ -20,7 +20,7 @@ button:focus-visible {
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   --border: #E8E3DA;
-  --bg: #1a2e4a;
+  --bg: #F5F4F0;
   --surface: #FFFFFF;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 }
@@ -38,7 +38,7 @@ body {
   min-height: 100vh;
 }
 
-.update-available-pill {
+.app-refresh-control {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -47,37 +47,94 @@ body {
   align-items: center;
   gap: 8px;
   min-height: 38px;
-  padding: 0 14px 0 12px;
+  max-width: calc(100vw - 32px);
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
   background: rgba(26, 46, 74, 0.94);
   color: #ffffff;
   box-shadow: 0 10px 28px rgba(26, 46, 74, 0.22);
-  cursor: pointer;
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.update-available-pill:hover {
+.app-refresh-control:hover {
   background: var(--navy-hover);
   box-shadow: 0 12px 32px rgba(26, 46, 74, 0.28);
 }
 
-.update-available-pill:active {
+.app-refresh-button,
+.app-update-button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+
+.app-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.app-refresh-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.app-refresh-button:active,
+.app-update-button:active {
   transform: translateY(1px);
 }
 
-.update-available-icon {
+.app-refresh-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 17px;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
   line-height: 1;
+}
+
+.app-refresh-status {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  padding-right: 2px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-refresh-status.is-update {
+  color: #ffffff;
+}
+
+.app-update-button {
+  padding: 0 12px;
+  background: #ffffff;
+  color: var(--navy);
+}
+
+.app-update-button:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.app-update-button:disabled {
+  cursor: default;
+  opacity: 0.75;
 }
 
 /* ── HOME ── */
@@ -605,12 +662,21 @@ body {
     margin-top: 8px;
   }
 
-  .update-available-pill {
+  .app-refresh-control {
     top: 12px;
     right: 12px;
-    min-height: 34px;
-    padding: 0 11px 0 10px;
-    font-size: 12px;
+    max-width: calc(100vw - 24px);
+    gap: 6px;
+  }
+
+  .app-refresh-status {
+    max-width: 128px;
+  }
+
+  .app-refresh-button,
+  .app-update-button {
+    min-height: 28px;
+    padding: 0 9px;
   }
 }
 

@@ -1,8 +1,6 @@
 const STORAGE_KEY = 'eudaimonia_ext_activity'
 const STALE_MS = 10_000
-const DAEMON_STATUS_URL = 'http://127.0.0.1:7331/status'
-const DAEMON_SESSION_URL = 'http://127.0.0.1:7331/session'
-const DAEMON_DEBUG_URL = 'http://127.0.0.1:7331/debug'
+const DAEMON_BASE_URLS = ['http://127.0.0.1:7331', 'http://localhost:7331']
 const DAEMON_POLL_MS = 3000
 
 let lastActivity = { url: null, domain: null, title: null, app: '', ts: 0 }
@@ -26,6 +24,20 @@ function applyIfFresher(activity, onUpdate, source) {
   }
 }
 
+async function fetchDaemon(path, options = {}) {
+  let lastErr = null
+  for (const baseUrl of DAEMON_BASE_URLS) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, options)
+      if (res.ok) return res
+      lastErr = new Error(`HTTP ${res.status}`)
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr || new Error('Companion not reachable')
+}
+
 function pollExtensionBridge(onUpdate) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -38,8 +50,7 @@ function pollExtensionBridge(onUpdate) {
 
 async function pollDaemon(onUpdate) {
   try {
-    const res = await fetch(DAEMON_STATUS_URL, { signal: AbortSignal.timeout(1000) })
-    if (!res.ok) return
+    const res = await fetchDaemon('/status', { signal: AbortSignal.timeout(1000) })
     const data = await res.json()
     if (!data?.ts) return
     // Normalize the daemon's shape to match the browser-extension bridge shape
@@ -101,14 +112,15 @@ export function isActivityConnected() {
 // acts as the companion-side failsafe (blocking self-expires after endTs+grace).
 export async function pushCompanionSession({ active, endTs = 0, blockedApps = [], blockedDomains = [], strictMode = false, allowedApps = [] }) {
   try {
-    const res = await fetch(DAEMON_SESSION_URL, {
+    const res = await fetchDaemon('/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active, endTs, blockedApps, blockedDomains, strictMode, allowedApps }),
       signal: AbortSignal.timeout(1500),
     })
-    if (!res.ok) {
-      console.warn('[companion] session push failed', res.status)
+    const data = await res.json().catch(() => null)
+    if (active && data?.active !== true) {
+      console.warn('[companion] session push rejected stale session')
       return false
     }
     return true
@@ -120,10 +132,10 @@ export async function pushCompanionSession({ active, endTs = 0, blockedApps = []
 
 export async function fetchCompanionDebug() {
   try {
-    const res = await fetch(DAEMON_DEBUG_URL, {
+    const res = await fetchDaemon('/debug', {
       signal: AbortSignal.timeout(2000),
     })
-    if (res.ok) return res.json()
+    return res.json()
   } catch {}
   return null
 }
@@ -133,12 +145,11 @@ export async function fetchCompanionDebug() {
 // Long timeout: the request only returns once the user answers the dialog.
 export async function installCompanionHelper() {
   try {
-    const res = await fetch('http://127.0.0.1:7331/install-helper', {
+    const res = await fetchDaemon('/install-helper', {
       method: 'POST',
       signal: AbortSignal.timeout(120000),
     })
-    if (res.ok) return res.json()
-    return { ok: false, error: `HTTP ${res.status}` }
+    return res.json()
   } catch (err) {
     return { ok: false, error: String(err?.message || err) }
   }

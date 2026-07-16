@@ -81,8 +81,16 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         return preflight().await;
     }
 
-    let activity = state.activity.lock().map(|guard| guard.clone()).unwrap_or_default();
-    let debug = state.debug.lock().map(|guard| guard.clone()).unwrap_or_default();
+    let activity = state
+        .activity
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
+    let debug = state
+        .debug
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
 
     let body = serde_json::json!({
         "sessionActive": debug.session_active,
@@ -129,12 +137,34 @@ struct SessionPayload {
 }
 
 async fn session(State(state): State<AppState>, Json(payload): Json<SessionPayload>) -> Response {
-    let active = payload.active;
-    let end_ts = payload.end_ts;
-    let blocked_apps_count = payload.blocked_apps.len();
-    let blocked_domains_count = payload.blocked_domains.len();
-    let strict_mode = payload.strict_mode;
-    let allowed_apps_count = payload.allowed_apps.len();
+    let received_at = now_ms();
+    let active = payload.active && payload.end_ts > received_at;
+    let end_ts = if active { payload.end_ts } else { 0 };
+    let blocked_apps = if active {
+        payload.blocked_apps
+    } else {
+        Vec::new()
+    };
+    let blocked_domains = if active {
+        let mut seen = std::collections::HashSet::new();
+        payload
+            .blocked_domains
+            .into_iter()
+            .filter_map(|domain| crate::blocking::normalize_host(&domain))
+            .filter(|domain| seen.insert(domain.clone()))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let strict_mode = active && payload.strict_mode;
+    let allowed_apps = if active {
+        payload.allowed_apps
+    } else {
+        Vec::new()
+    };
+    let blocked_apps_count = blocked_apps.len();
+    let blocked_domains_count = blocked_domains.len();
+    let allowed_apps_count = allowed_apps.len();
 
     let accepted = if let Ok(mut cfg) = state.session.lock() {
         // Update the requested config, but PRESERVE host_block_applied /
@@ -143,10 +173,10 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
         // here would make reconcile re-prompt for admin on every keepalive push.
         cfg.active = active;
         cfg.end_ts = end_ts;
-        cfg.blocked_apps = payload.blocked_apps;
-        cfg.blocked_domains = payload.blocked_domains;
-        cfg.strict_mode = payload.strict_mode;
-        cfg.allowed_apps = payload.allowed_apps;
+        cfg.blocked_apps = blocked_apps;
+        cfg.blocked_domains = blocked_domains;
+        cfg.strict_mode = strict_mode;
+        cfg.allowed_apps = allowed_apps;
         // Allow an immediate app-hide notification after a fresh push.
         cfg.last_notify_ts = 0;
         true
@@ -167,7 +197,8 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
 
     let body = serde_json::json!({
         "ok": accepted,
-        "receivedAt": now_ms(),
+        "active": active,
+        "receivedAt": received_at,
     })
     .to_string();
 
@@ -224,7 +255,10 @@ fn router(state: AppState) -> Router {
         .route("/debug", get(debug).options(debug))
         .route("/session", post(session).options(preflight))
         .route("/install-helper", post(install_helper).options(preflight))
-        .route("/uninstall-helper", post(uninstall_helper).options(preflight))
+        .route(
+            "/uninstall-helper",
+            post(uninstall_helper).options(preflight),
+        )
         .with_state(state)
 }
 

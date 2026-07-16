@@ -98,7 +98,8 @@ pub fn install_helper() -> Result<(), String> {
 /// first so removal can't strand a block.
 pub fn uninstall_helper() -> Result<(), String> {
     let _ = clear_block();
-    let shell = format!("rm -f {HELPER_PATH} {SUDOERS_PATH}; rmdir /Library/Eudonomia 2>/dev/null || true");
+    let shell =
+        format!("rm -f {HELPER_PATH} {SUDOERS_PATH}; rmdir /Library/Eudonomia 2>/dev/null || true");
     let apple = format!(
         r#"do shell script "{}" with administrator privileges"#,
         shell.replace('\\', "\\\\").replace('"', "\\\"")
@@ -282,7 +283,11 @@ pub fn apply_block(domains: &[String]) -> Result<(), String> {
         if hosts.is_empty() {
             return clear_block();
         }
-        let mut args = vec!["-n".to_string(), HELPER_PATH.to_string(), "block".to_string()];
+        let mut args = vec![
+            "-n".to_string(),
+            HELPER_PATH.to_string(),
+            "block".to_string(),
+        ];
         args.extend(hosts);
         let out = Command::new("sudo")
             .args(&args)
@@ -335,9 +340,18 @@ mod tests {
 
     #[test]
     fn normalize_various_forms() {
-        assert_eq!(normalize_host("instagram.com"), Some("instagram.com".into()));
-        assert_eq!(normalize_host("https://www.YouTube.com/watch?v=x"), Some("youtube.com".into()));
-        assert_eq!(normalize_host("  reddit.com/r/all  "), Some("reddit.com".into()));
+        assert_eq!(
+            normalize_host("instagram.com"),
+            Some("instagram.com".into())
+        );
+        assert_eq!(
+            normalize_host("https://www.YouTube.com/watch?v=x"),
+            Some("youtube.com".into())
+        );
+        assert_eq!(
+            normalize_host("  reddit.com/r/all  "),
+            Some("reddit.com".into())
+        );
         assert_eq!(normalize_host("localhost"), None); // no dot
         assert_eq!(normalize_host(""), None);
         assert_eq!(normalize_host("Instagram"), None); // app name, not a domain
@@ -375,7 +389,11 @@ mod tests {
     fn dedupes_and_preserves_user_entries() {
         let out = build_hosts_with_block(
             SAMPLE,
-            &["youtube.com".into(), "www.youtube.com".into(), "youtube.com".into()],
+            &[
+                "youtube.com".into(),
+                "www.youtube.com".into(),
+                "youtube.com".into(),
+            ],
         );
         assert_eq!(out.matches("127.0.0.1\tyoutube.com\n").count(), 1);
         assert!(out.contains("127.0.0.1\tlocalhost")); // user entry intact

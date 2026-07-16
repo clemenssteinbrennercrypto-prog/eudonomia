@@ -25,12 +25,12 @@ shields, IPv6, mixed content).
 
 ## Updates
 
-The app **updates itself**. On launch it checks GitHub Releases for a newer
-signed build and installs it in the background (applies next launch). So neither
-the user nor a co-developer ever re-installs by hand — see
-`.github/workflows/companion-release.yml`, which builds, signs, and publishes a
-release on every `companion/**` change (CI assigns the version automatically, no
-manual bumping).
+The app checks GitHub Releases for a newer signed native build through Tauri's
+updater. The in-app refresh control always offers a local reload, and shows a
+separate install action only when the updater reports a real native app update.
+See `.github/workflows/companion-release.yml`, which builds, signs, and
+publishes a release on every `companion/**` change (CI assigns the version
+automatically, no manual bumping).
 
 Because the UI is bundled (`companion/webui`), a web-app change reaches the
 native app only when that bundle is refreshed and a new companion release is

@@ -126,13 +126,7 @@ fn should_hide_app(
 const BLOCK_GRACE_MS: u64 = 2 * 60 * 1000;
 const BLOCK_NOTIFY_COOLDOWN_MS: u64 = 15_000;
 
-const BROWSER_APPS: &[&str] = &[
-    "Safari",
-    "Google Chrome",
-    "Arc",
-    "Brave Browser",
-    "Firefox",
-];
+const BROWSER_APPS: &[&str] = &["Safari", "Google Chrome", "Arc", "Brave Browser", "Firefox"];
 
 fn run_osascript(
     script: &str,
@@ -143,6 +137,11 @@ fn run_osascript(
         .arg("-e")
         .arg(script)
         .output()
+        .map_err(|e| {
+            if let Ok(mut d) = debug.lock() {
+                d.last_osascript_error = Some(format!("osascript: {e}"));
+            }
+        })
         .ok()?;
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !output.status.success() {
@@ -182,7 +181,7 @@ fn frontmost_app_and_window(debug: &SharedDebug) -> Option<(String, String)> {
   end try
   return (name of frontApp) & "|" & w
 end tell"#;
-    let raw = run_osascript(script, debug, None)?;
+    let raw = run_osascript(script, debug, Some("System Events"))?;
     let mut parts = raw.splitn(2, '|');
     let app = parts.next().unwrap_or("").trim().to_string();
     let window = parts.next().unwrap_or("").trim().to_string();
@@ -195,13 +194,11 @@ end tell"#;
 
 fn browser_url(app: &str, debug: &SharedDebug) -> Option<String> {
     let script = match app {
-        "Safari" => {
-            r#"tell application "Safari"
+        "Safari" => r#"tell application "Safari"
   if (count of windows) > 0 then return URL of current tab of front window
   return ""
 end tell"#
-                .to_string()
-        }
+            .to_string(),
         // Chromium-family browsers all speak the same AppleScript dialect;
         // address each one by its own application name.
         "Google Chrome" | "Arc" | "Brave Browser" => format!(
@@ -319,12 +316,7 @@ enum BlockAction {
 /// Check the frontmost activity against the session's block lists and act.
 /// Decisions happen under the lock; the (slow) osascript calls happen after
 /// it is released.
-fn enforce_blocking(
-    session: &SharedSession,
-    debug: &SharedDebug,
-    app: &str,
-    domain: Option<&str>,
-) {
+fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, domain: Option<&str>) {
     let decision = {
         let Ok(mut cfg) = session.lock() else { return };
         if !cfg.active {
@@ -404,14 +396,40 @@ fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
     }
 
     let action = {
-        let Ok(cfg) = session.lock() else { return };
+        let Ok(mut cfg) = session.lock() else { return };
         let now = now_ms();
         let expired = cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS;
-        let want_block = cfg.active && !expired && !cfg.blocked_domains.is_empty();
+        if cfg.active && expired {
+            cfg.active = false;
+            cfg.strict_mode = false;
+            cfg.blocked_apps.clear();
+            cfg.blocked_domains.clear();
+            cfg.allowed_apps.clear();
+            if let Ok(mut d) = debug.lock() {
+                d.session_active = false;
+                d.session_end_ts = 0;
+                d.blocked_apps_count = 0;
+                d.blocked_domains_count = 0;
+                d.strict_mode = false;
+                d.allowed_apps_count = 0;
+            }
+        }
+
+        let mut valid_domains = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for domain in &cfg.blocked_domains {
+            if let Some(host) = crate::blocking::normalize_host(domain) {
+                if seen.insert(host.clone()) {
+                    valid_domains.push(host);
+                }
+            }
+        }
+
+        let want_block = cfg.active && !valid_domains.is_empty();
 
         if want_block {
-            if !cfg.host_block_applied || cfg.blocked_domains != cfg.applied_domains {
-                Some(Action::Apply(cfg.blocked_domains.clone()))
+            if !cfg.host_block_applied || valid_domains != cfg.applied_domains {
+                Some(Action::Apply(valid_domains))
             } else {
                 None
             }
@@ -524,9 +542,21 @@ mod tests {
         assert!(!should_hide_app(true, "google chrome", true, &allowed, &[]));
         // Base system app → never hidden, even if unlisted.
         assert!(!should_hide_app(true, "finder", false, &allowed, &[]));
-        assert!(!should_hide_app(true, "system settings", false, &allowed, &[]));
+        assert!(!should_hide_app(
+            true,
+            "system settings",
+            false,
+            &allowed,
+            &[]
+        ));
         // The companion itself → never hidden.
-        assert!(!should_hide_app(true, "eudonomia companion", false, &allowed, &[]));
+        assert!(!should_hide_app(
+            true,
+            "eudonomia companion",
+            false,
+            &allowed,
+            &[]
+        ));
     }
 
     #[test]
@@ -536,7 +566,13 @@ mod tests {
         assert!(!should_hide_app(false, "vs code", false, &[], &blocked));
         // In blocklist mode a browser CAN be hidden if the user lists it.
         let blocked_browser = v(&["Safari"]);
-        assert!(should_hide_app(false, "safari", true, &[], &blocked_browser));
+        assert!(should_hide_app(
+            false,
+            "safari",
+            true,
+            &[],
+            &blocked_browser
+        ));
     }
 
     #[test]
