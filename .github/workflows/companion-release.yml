@@ -1,0 +1,59 @@
+name: Release Companion
+
+# Builds, signs, and publishes the native Eudonomia companion whenever its
+# source changes. The installed app checks the resulting GitHub Release on
+# launch and updates itself ‚Äî so users never re-drag a new .app into
+# Applications. Only the Rust/Tauri companion needs this; the web UI keeps
+# auto-updating via Vercel.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'companion/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion/src-tauri
+
+      # Give every CI build a unique, monotonically increasing version so the
+      # updater always recognises it as newer than what's installed. No manual
+      # version bumping needed.
+      - name: Set build version
+        run: |
+          python3 - <<'PY'
+          import json
+          p = 'companion/src-tauri/tauri.conf.json'
+          d = json.load(open(p))
+          d['version'] = '0.1.${{ github.run_number }}'
+          json.dump(d, open(p, 'w'), indent=2)
+          print('version set to', d['version'])
+          PY
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: companion
+          tagName: companion-v__VERSION__
+          releaseName: 'Eudonomia v__VERSION__'
+          releaseBody: 'Automatic companion build ‚Äî the app updates itself on next launch.'
+          releaseDraft: false
+          prerelease: false
+          args: --target aarch64-apple-darwin
