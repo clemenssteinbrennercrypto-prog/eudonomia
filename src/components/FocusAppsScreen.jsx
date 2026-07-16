@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import ExtensionSetup from './ExtensionSetup'
 import {
   fetchCompanionDebug,
   getLastActivity,
@@ -578,35 +577,6 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           boxShadow: '0 2px 20px rgba(26,46,74,0.06)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              border: '1px solid #E8E3DA',
-              borderRadius: 100,
-              padding: '5px 10px',
-              color: extensionConnected ? '#166534' : '#92400e',
-              background: extensionConnected ? '#f0fdf4' : '#fffbeb',
-              fontSize: 12,
-              fontWeight: 800,
-            }}>
-              <span style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: extensionConnected ? '#22c55e' : '#f59e0b',
-                boxShadow: extensionConnected ? '0 0 0 2px #22c55e28' : '0 0 0 2px #f59e0b28',
-              }} />
-              {extensionConnected ? 'Extension connected' : 'Extension not detected'}
-            </span>
-            {!extensionConnected && (
-              <a
-                href="#extension-setup"
-                style={{ color: '#1a2e4a', fontSize: 12, fontWeight: 800, textDecoration: 'underline' }}
-              >
-                Install instructions
-              </a>
-            )}
             <span style={{ fontSize: 13, color: '#1a2e4a', fontWeight: 800 }}>
               {focusApps.length} focus apps · {distractionApps.length} blocked
             </span>
@@ -765,7 +735,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               whiteSpace: 'nowrap',
               maxWidth: 420,
             }}>
-              {extensionConnected ? (activity?.domain || activity?.title || activity?.url || 'Waiting for browser activity') : 'Waiting for extension'}
+              {extensionConnected ? (activity?.domain || activity?.title || activity?.url || 'Waiting for activity') : 'Companion not connected'}
             </div>
           </div>
           <span style={{
@@ -788,8 +758,6 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 : `${activityPreview.label} is currently detected as: unknown`}
           </span>
         </div>
-
-        {!extensionConnected && <ExtensionSetup />}
 
         {configuredCount === 0 && (
           <div style={{
