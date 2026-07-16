@@ -254,6 +254,27 @@ fn hide_app(app: &str, debug: &SharedDebug) {
     let _ = run_osascript(&script, debug, None);
 }
 
+/// Redirect the front tab of a browser away from a blocked domain. This is what
+/// catches Brave/Chrome when they use DNS-over-HTTPS (Secure DNS), which bypasses
+/// /etc/hosts entirely — so hosts blocking alone would miss them. Works by
+/// reading + rewriting the active tab's URL via AppleScript, independent of DNS.
+fn redirect_browser_tab(app: &str, debug: &SharedDebug) {
+    let script = match app {
+        "Safari" => {
+            r#"tell application "Safari" to set URL of current tab of front window to "about:blank""#
+                .to_string()
+        }
+        "Google Chrome" | "Arc" | "Brave Browser" => {
+            let esc = escape_applescript(app);
+            format!(
+                r#"tell application "{esc}" to set URL of active tab of front window to "about:blank""#
+            )
+        }
+        _ => return,
+    };
+    let _ = run_osascript(&script, debug, Some(app));
+}
+
 fn notify_blocked(label: &str, debug: &SharedDebug) {
     let esc = escape_applescript(label);
     let script = format!(
@@ -262,9 +283,6 @@ fn notify_blocked(label: &str, debug: &SharedDebug) {
     let _ = run_osascript(&script, debug, None);
 }
 
-// Retained for the /status domain classification and covered by unit tests,
-// though the hosts mechanism (not this) now performs website blocking.
-#[allow(dead_code)]
 fn normalize_domain_entry(entry: &str) -> Option<String> {
     let trimmed = entry.trim().to_lowercase();
     if trimmed.is_empty() {
@@ -285,13 +303,17 @@ fn normalize_domain_entry(entry: &str) -> Option<String> {
     }
 }
 
-#[allow(dead_code)]
 fn domain_is_blocked(domain: &str, blocked: &[String]) -> bool {
     let d = domain.trim_start_matches("www.").to_lowercase();
     blocked
         .iter()
         .filter_map(|entry| normalize_domain_entry(entry))
         .any(|b| d == b || d.ends_with(&format!(".{b}")))
+}
+
+enum BlockAction {
+    Hide,
+    Redirect,
 }
 
 /// Check the frontmost activity against the session's block lists and act.
@@ -321,35 +343,50 @@ fn enforce_blocking(
             return;
         }
 
-        // Website blocking is handled system-wide via /etc/hosts (see
-        // reconcile_host_blocking). Here we only hide blocked *native apps*,
-        // which hosts cannot touch. `domain` stays in the signature because the
-        // frontmost tab's domain still feeds /status for scoring.
-        let _ = domain;
         let app_lc = app.trim().to_lowercase();
         let is_browser = BROWSER_APPS.iter().any(|b| b.to_lowercase() == app_lc);
 
-        let should_hide = should_hide_app(
+        // Two independent block paths:
+        //  1. Browser showing a blocked domain → redirect the tab. This is the
+        //     belt to /etc/hosts's suspenders: browsers using DNS-over-HTTPS
+        //     (Brave/Chrome "Secure DNS") bypass /etc/hosts, so hosts alone
+        //     blocks some browsers but not others. Redirecting the tab catches
+        //     every browser regardless of how it resolves DNS.
+        //  2. Non-browser app that should be hidden (blocklist or strict mode).
+        let domain_blocked = domain
+            .map(|d| domain_is_blocked(d, &cfg.blocked_domains))
+            .unwrap_or(false);
+
+        let action = if is_browser && domain_blocked {
+            Some((BlockAction::Redirect, domain.unwrap_or("").to_string()))
+        } else if should_hide_app(
             cfg.strict_mode,
             &app_lc,
             is_browser,
             &cfg.allowed_apps,
             &cfg.blocked_apps,
-        );
+        ) {
+            Some((BlockAction::Hide, app.to_string()))
+        } else {
+            None
+        };
 
-        if !should_hide {
-            return;
-        }
-
+        let (block_action, label) = match action {
+            Some(a) => a,
+            None => return,
+        };
         let notify = now.saturating_sub(cfg.last_notify_ts) >= BLOCK_NOTIFY_COOLDOWN_MS;
         if notify {
             cfg.last_notify_ts = now;
         }
-        (app.to_string(), notify)
+        (block_action, label, notify)
     };
 
-    let (label, notify) = decision;
-    hide_app(app, debug);
+    let (block_action, label, notify) = decision;
+    match block_action {
+        BlockAction::Hide => hide_app(app, debug),
+        BlockAction::Redirect => redirect_browser_tab(app, debug),
+    }
     if notify {
         notify_blocked(&label, debug);
     }
