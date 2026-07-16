@@ -29,6 +29,11 @@ pub struct DebugState {
     pub session_end_ts: u64,
     pub blocked_apps_count: usize,
     pub blocked_domains_count: usize,
+    /// True while an /etc/hosts block is actually in place.
+    pub host_block_active: bool,
+    /// Last error/cancellation from applying or clearing the hosts block
+    /// (e.g. "cancelled" when the user dismissed the admin password dialog).
+    pub host_block_error: Option<String>,
 }
 
 pub type SharedDebug = Arc<Mutex<DebugState>>;
@@ -44,6 +49,12 @@ pub struct SessionConfig {
     pub blocked_domains: Vec<String>,
     /// Timestamp of the last user-facing block notification (throttling).
     pub last_notify_ts: u64,
+    /// Whether an /etc/hosts block is currently applied, and for which domains.
+    /// These track the real state of the file (not the requested config) so the
+    /// reconcile loop only prompts for admin on an actual transition. A fresh
+    /// POST /session must preserve these — never reset them blindly.
+    pub host_block_applied: bool,
+    pub applied_domains: Vec<String>,
 }
 
 pub type SharedSession = Arc<Mutex<SessionConfig>>;
@@ -182,24 +193,6 @@ fn hide_app(app: &str, debug: &SharedDebug) {
     let _ = run_osascript(&script, debug, None);
 }
 
-/// Redirect the front tab of a blocked browser page away from the distraction.
-fn redirect_browser_tab(app: &str, debug: &SharedDebug) {
-    let script = match app {
-        "Safari" => {
-            r#"tell application "Safari" to set URL of current tab of front window to "about:blank""#
-                .to_string()
-        }
-        "Google Chrome" | "Arc" | "Brave Browser" => {
-            let esc = escape_applescript(app);
-            format!(
-                r#"tell application "{esc}" to set URL of active tab of front window to "about:blank""#
-            )
-        }
-        _ => return,
-    };
-    let _ = run_osascript(&script, debug, Some(app));
-}
-
 fn notify_blocked(label: &str, debug: &SharedDebug) {
     let esc = escape_applescript(label);
     let script = format!(
@@ -208,6 +201,9 @@ fn notify_blocked(label: &str, debug: &SharedDebug) {
     let _ = run_osascript(&script, debug, None);
 }
 
+// Retained for the /status domain classification and covered by unit tests,
+// though the hosts mechanism (not this) now performs website blocking.
+#[allow(dead_code)]
 fn normalize_domain_entry(entry: &str) -> Option<String> {
     let trimmed = entry.trim().to_lowercase();
     if trimmed.is_empty() {
@@ -228,17 +224,13 @@ fn normalize_domain_entry(entry: &str) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn domain_is_blocked(domain: &str, blocked: &[String]) -> bool {
     let d = domain.trim_start_matches("www.").to_lowercase();
     blocked
         .iter()
         .filter_map(|entry| normalize_domain_entry(entry))
         .any(|b| d == b || d.ends_with(&format!(".{b}")))
-}
-
-enum BlockAction {
-    HideApp,
-    RedirectTab,
 }
 
 /// Check the frontmost activity against the session's block lists and act.
@@ -268,37 +260,101 @@ fn enforce_blocking(
             return;
         }
 
+        // Website blocking is handled system-wide via /etc/hosts (see
+        // reconcile_host_blocking). Here we only hide blocked *native apps*,
+        // which hosts cannot touch. `domain` stays in the signature because the
+        // frontmost tab's domain still feeds /status for scoring.
+        let _ = domain;
         let app_lc = app.trim().to_lowercase();
         let app_blocked = cfg
             .blocked_apps
             .iter()
             .any(|a| a.trim().to_lowercase() == app_lc);
-        let domain_blocked = domain
-            .map(|d| domain_is_blocked(d, &cfg.blocked_domains))
-            .unwrap_or(false);
-
-        let (action, label) = if app_blocked {
-            (BlockAction::HideApp, app.to_string())
-        } else if domain_blocked {
-            (BlockAction::RedirectTab, domain.unwrap_or("").to_string())
-        } else {
+        if !app_blocked {
             return;
-        };
+        }
 
         let notify = now.saturating_sub(cfg.last_notify_ts) >= BLOCK_NOTIFY_COOLDOWN_MS;
         if notify {
             cfg.last_notify_ts = now;
         }
-        (action, label, notify)
+        (app.to_string(), notify)
     };
 
-    let (action, label, notify) = decision;
-    match action {
-        BlockAction::HideApp => hide_app(app, debug),
-        BlockAction::RedirectTab => redirect_browser_tab(app, debug),
-    }
+    let (label, notify) = decision;
+    hide_app(app, debug);
     if notify {
         notify_blocked(&label, debug);
+    }
+}
+
+/// Bring the /etc/hosts block into agreement with the current session, applying
+/// or clearing only on a real transition so admin is prompted at most once per
+/// change — never per poll. This is Failsafe #2: a session that has expired
+/// (`now > end_ts + grace`) or gone inactive gets its block cleared here even if
+/// the web app never sent an explicit "session ended".
+fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
+    enum Action {
+        Apply(Vec<String>),
+        Clear,
+    }
+
+    let action = {
+        let Ok(cfg) = session.lock() else { return };
+        let now = now_ms();
+        let expired = cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS;
+        let want_block = cfg.active && !expired && !cfg.blocked_domains.is_empty();
+
+        if want_block {
+            if !cfg.host_block_applied || cfg.blocked_domains != cfg.applied_domains {
+                Some(Action::Apply(cfg.blocked_domains.clone()))
+            } else {
+                None
+            }
+        } else if cfg.host_block_applied {
+            Some(Action::Clear)
+        } else {
+            None
+        }
+    };
+
+    let Some(action) = action else { return };
+
+    match action {
+        Action::Apply(domains) => match crate::blocking::apply_block(&domains) {
+            Ok(()) => {
+                if let Ok(mut cfg) = session.lock() {
+                    cfg.host_block_applied = true;
+                    cfg.applied_domains = domains;
+                }
+                if let Ok(mut d) = debug.lock() {
+                    d.host_block_active = true;
+                    d.host_block_error = None;
+                }
+            }
+            Err(e) => {
+                if let Ok(mut d) = debug.lock() {
+                    d.host_block_error = Some(e);
+                }
+            }
+        },
+        Action::Clear => match crate::blocking::clear_block() {
+            Ok(()) => {
+                if let Ok(mut cfg) = session.lock() {
+                    cfg.host_block_applied = false;
+                    cfg.applied_domains.clear();
+                }
+                if let Ok(mut d) = debug.lock() {
+                    d.host_block_active = false;
+                    d.host_block_error = None;
+                }
+            }
+            Err(e) => {
+                if let Ok(mut d) = debug.lock() {
+                    d.host_block_error = Some(e);
+                }
+            }
+        },
     }
 }
 
@@ -307,6 +363,10 @@ fn poll_once(state: &SharedActivity, session: &SharedSession, debug: &SharedDebu
     if let Ok(mut d) = debug.lock() {
         d.last_poll_ts = poll_ts;
     }
+
+    // Reconcile hosts blocking first, unconditionally: session start/end/expiry
+    // cleanup must happen regardless of what (if anything) is frontmost.
+    reconcile_host_blocking(session, debug);
 
     let Some((app, window)) = frontmost_app_and_window(debug) else {
         return;

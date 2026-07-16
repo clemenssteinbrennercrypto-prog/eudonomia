@@ -7,6 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod activity;
+mod blocking;
 mod server;
 
 use activity::{
@@ -75,10 +76,20 @@ fn position_near_tray(
 
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
+    // Failsafe #3: never leave the machine blocked after the app closes.
+    let _ = blocking::clear_block();
     app.exit(0);
 }
 
 fn main() {
+    // Failsafe #1: if a previous run crashed mid-session, an Eudonomia block may
+    // still be sitting in /etc/hosts. Clear it on every startup so blocking can
+    // never outlive the process that created it. (Prompts for admin only if a
+    // leftover block actually exists — a clean file is a no-op.)
+    if blocking::hosts_has_block() {
+        let _ = blocking::clear_block();
+    }
+
     let state: SharedActivity = Arc::new(Mutex::new(ActivityState::default()));
     let session: SharedSession = Arc::new(Mutex::new(SessionConfig::default()));
     let debug: SharedDebug = Arc::new(Mutex::new(DebugState::default()));
@@ -112,6 +123,7 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
                     if event.id.as_ref() == "quit" {
+                        let _ = blocking::clear_block();
                         app.exit(0);
                     }
                 })

@@ -7,7 +7,7 @@
 // CORS is wide open (localhost bind only) so the Vercel-hosted app can talk
 // to us from the browser.
 
-use crate::activity::{now_ms, SessionConfig, SharedActivity, SharedDebug, SharedSession};
+use crate::activity::{now_ms, SharedActivity, SharedDebug, SharedSession};
 use axum::{
     extract::State,
     http::{header, HeaderValue, Method, StatusCode},
@@ -91,6 +91,8 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         },
         "lastOsascriptError": debug.last_osascript_error,
         "permissionMissing": debug.permission_missing,
+        "hostBlockActive": debug.host_block_active,
+        "hostBlockError": debug.host_block_error,
         "companionVersion": env!("CARGO_PKG_VERSION"),
     })
     .to_string();
@@ -120,15 +122,16 @@ async fn session(State(state): State<AppState>, Json(payload): Json<SessionPaylo
     let blocked_domains_count = payload.blocked_domains.len();
 
     let accepted = if let Ok(mut cfg) = state.session.lock() {
-        *cfg = SessionConfig {
-            active,
-            end_ts,
-            blocked_apps: payload.blocked_apps,
-            blocked_domains: payload.blocked_domains,
-            // Preserve nothing across pushes: a fresh push may immediately
-            // block the current app, so allow an immediate notification.
-            last_notify_ts: 0,
-        };
+        // Update the requested config, but PRESERVE host_block_applied /
+        // applied_domains — those track the real /etc/hosts state, and the
+        // reconcile loop decides when to (un)apply from them. Overwriting them
+        // here would make reconcile re-prompt for admin on every keepalive push.
+        cfg.active = active;
+        cfg.end_ts = end_ts;
+        cfg.blocked_apps = payload.blocked_apps;
+        cfg.blocked_domains = payload.blocked_domains;
+        // Allow an immediate app-hide notification after a fresh push.
+        cfg.last_notify_ts = 0;
         true
     } else {
         false

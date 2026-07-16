@@ -286,6 +286,13 @@ function CompanionStatus() {
   const lastActivity = debug?.lastActivity
   const activityLabel = lastActivity?.domain || lastActivity?.app || null
 
+  // Website blocking runs system-wide via /etc/hosts and needs an admin
+  // password once per session. Surface its real state so a dismissed prompt
+  // (hostBlockError "cancelled") doesn't look like silent success.
+  const hostCancelled = debug?.hostBlockError === 'cancelled'
+  const hostFailed = debug?.hostBlockError && !hostCancelled
+  const websitesBlocked = debug?.hostBlockActive
+
   return (
     <div style={{ display: 'grid', gap: 8 }}>
       <span style={{
@@ -315,6 +322,51 @@ function CompanionStatus() {
         }} />
         {label}
       </span>
+
+      {connected && debug?.sessionActive && websitesBlocked && (
+        <div style={{
+          border: '1px solid #bbf7d0',
+          background: '#f0fdf4',
+          color: '#166534',
+          borderRadius: 12,
+          padding: '8px 12px',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.45,
+        }}>
+          🌐 Websites blocked system-wide (all browsers) via /etc/hosts
+        </div>
+      )}
+
+      {hostCancelled && (
+        <div style={{
+          border: '1px solid #fbbf24',
+          background: '#fffbeb',
+          color: '#92400e',
+          borderRadius: 12,
+          padding: '10px 12px',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.45,
+        }}>
+          ⚠ Website blocking is OFF — you dismissed the admin password prompt. Restart the session and enter your Mac password to block sites across all browsers. (App blocking still works.)
+        </div>
+      )}
+
+      {hostFailed && (
+        <div style={{
+          border: '1px solid #fecaca',
+          background: '#fef2f2',
+          color: '#991b1b',
+          borderRadius: 12,
+          padding: '10px 12px',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.45,
+        }}>
+          ✗ Website blocking failed: {debug.hostBlockError}
+        </div>
+      )}
 
       {debug?.permissionMissing && (
         <div style={{
