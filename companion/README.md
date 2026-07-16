@@ -1,63 +1,49 @@
-# Eudonomia Companion
+# Eudonomia (native macOS app)
 
-A tiny macOS menubar app that feeds desktop activity into
-[Eudonomia](https://eudonomia.vercel.app) — the webcam-based focus tracker.
+A native macOS app (Tauri) that hosts the [Eudonomia](https://eudaimonia-psi.vercel.app)
+focus tracker in its own window and enforces distraction blocking on the whole
+machine. Running the UI in-app avoids every browser↔localhost problem (Brave
+shields, IPv6, mixed content).
 
 ## What it does
 
-- Lives in the **menubar only** (no Dock icon)
-- Every **3 seconds** it detects the frontmost app and — for Safari, Chrome,
-  Arc, and Brave — the active tab's URL, via AppleScript
-- Serves the result as JSON on **`http://localhost:7331/status`** (CORS open),
-  which the Eudonomia web app polls during a focus session
-- Click the menubar icon for a small popup showing what's currently tracked;
-  right-click for the Quit menu
+- **Hosts the UI** in its own window (loads the deployed web app) — no browser,
+  no extension needed. A menubar tray gives quick open/quit.
+- **Detects the frontmost app + browser tab URL** every 3 seconds via AppleScript
+  (Safari, Chrome, Arc, Brave) and serves it on `http://127.0.0.1:7331/status`.
+- **Blocks distractions during a session:**
+  - Websites → `/etc/hosts`, system-wide across **all** browsers. A one-time
+    privileged helper (installed with a single admin prompt) lets this run
+    silently thereafter — see `helper/eudonomia-hosts`.
+  - Apps → hidden while frontmost. Strict mode hides every non-browser app
+    except the allowed ones + base system apps.
+  - A triple failsafe (startup, session-end/expiry watchdog, quit) guarantees a
+    block never outlives its session.
 
-No data leaves your machine. The server binds to `127.0.0.1` only.
+## Updates
+
+The app **updates itself**. On launch it checks GitHub Releases for a newer
+signed build and installs it in the background (applies next launch). The web
+UI updates independently via Vercel. So neither the user nor a co-developer ever
+re-installs by hand — see `.github/workflows/companion-release.yml`, which builds,
+signs, and publishes a release on every `companion/**` change (CI assigns the
+version automatically, no manual bumping).
 
 ## Build
 
-Requires Rust (`rustup`) and the Tauri CLI:
-
 ```bash
-cargo install tauri-cli --locked
-cd eudonomia-companion/src-tauri
-cargo tauri build
+cd companion/src-tauri
+cargo tauri build      # → target/release/bundle/dmg/*.dmg
+cargo test             # pure blocking/scoring logic
 ```
 
-The `.dmg` lands in `src-tauri/target/release/bundle/dmg/`.
+## How it connects
 
-For a quick dev run without bundling:
-
-```bash
-cd eudonomia-companion/src-tauri
-cargo tauri dev
-```
-
-## Install
-
-1. Open the `.dmg` and drag **Eudonomia Companion** to Applications
-2. First launch: right-click → Open (unsigned app), confirm in
-   System Settings → Privacy & Security if prompted
-3. Grant the two permission prompts:
-   - **Accessibility / Automation → System Events** (frontmost-app detection)
-   - **Automation → Safari / Chrome** (tab URL detection)
-
-## How it connects to Eudonomia
-
-The web app's activity receiver polls `http://localhost:7331/status` every few
-seconds. When the Companion is running, Eudonomia automatically classifies the
-active app/site as focus or distraction based on your Focus Apps configuration
-— no extra setup needed.
-
+The in-app WebView talks to the companion's local server on
+`http://127.0.0.1:7331` (CORS + Private-Network headers, bound on IPv4 and IPv6).
 Response shape:
 
 ```json
-{
-  "app": "Safari",
-  "window": "YouTube",
-  "url": "https://www.youtube.com/watch?v=abc",
-  "domain": "youtube.com",
-  "ts": 1720000000000
-}
+{ "app": "Safari", "window": "YouTube", "url": "https://www.youtube.com/…",
+  "domain": "youtube.com", "ts": 1720000000000 }
 ```
