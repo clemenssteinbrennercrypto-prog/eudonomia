@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Webcam access for the focus/eye-tracking session (MediaPipe FaceMesh).
+         Video is processed locally and never recorded or transmitted. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Eudonomia uses your camera locally to measure how focused you are during a session. No video is recorded, stored, or sent anywhere — everything stays on your Mac.</string>
+
+    <!-- Allow the in-app WebView to reach the local companion server on
+         http://127.0.0.1:7331. Without this, App Transport Security blocks the
+         plain-HTTP request to localhost. Scoped to local networking only. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>
