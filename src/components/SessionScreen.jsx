@@ -70,6 +70,12 @@ const GENTLE_REMINDER_SEVERE_BUFFER_MS = 15_000
 const SCORE_UPDATE_SECS      = 5
 const CALIBRATION_SECS       = 20
 const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 min
+// Real horizontal gaze: iris deflection past the personal neutral, normalized by
+// eye width. Beyond normal on-screen scanning (~±0.10) but not full deflection.
+// Conservative to protect trust — combined with a 3-frame deadzone + hold, a
+// side glance or saccade never triggers a false "distracted".
+const IRIS_OFF_H             = 0.18
+const EYES_OFF_HOLD_SECS     = 2      // sustained eyes-off before the (mild) penalty
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000
@@ -269,6 +275,25 @@ function irisVerticalGaze(lms) {
   const lOff  = lH > 0.001 ? (lMid - lIris.y) / lH : 0
   return (rOff + lOff) / 2
 }
+// Horizontal eye gaze — the signal the old system was missing entirely.
+// Iris centre X relative to the midpoint between the eye's inner/outer corners,
+// normalized by eye width, averaged over both eyes. Sign is arbitrary until
+// calibrated against the user's neutral (looking-at-screen) position; positive
+// and negative just mean "iris shifted toward one side vs the other". Combined
+// with head yaw during scoring, this catches "head straight, eyes off to the
+// side/phone" — which head pose alone reads (wrongly) as focused.
+function irisHorizontalGaze(lms) {
+  if (!lms[IRIS_R_CTR] || !lms[IRIS_L_CTR]) return 0
+  const rOut = lms[33],  rIn = lms[133], rIris = lms[IRIS_R_CTR]
+  const lOut = lms[263], lIn = lms[362], lIris = lms[IRIS_L_CTR]
+  const rMid = (rOut.x + rIn.x) / 2
+  const lMid = (lOut.x + lIn.x) / 2
+  const rW   = Math.abs(rIn.x - rOut.x)
+  const lW   = Math.abs(lIn.x - lOut.x)
+  const rOff = rW > 0.001 ? (rIris.x - rMid) / rW : 0
+  const lOff = lW > 0.001 ? (lIris.x - lMid) / lW : 0
+  return (rOff + lOff) / 2
+}
 function headVariance(history) {
   if (history.length < 3) return 0
   const xs = history.map(p => p.x), ys = history.map(p => p.y)
@@ -296,8 +321,9 @@ function analyzeFrame(lms) {
   const yawSigned = yawMag * (noseDelta >= 0 ? 1 : -1)
   const mar  = mouthAspectRatio(lms)
   const irisV = irisVerticalGaze(lms)
+  const irisH = irisHorizontalGaze(lms)
   const faceScale = eyeW
-  return { avgEar, pitchDeg, pitchUpDeg, yawSigned, mar, irisV, faceScale, nosePt: { x: nose.x, y: nose.y } }
+  return { avgEar, pitchDeg, pitchUpDeg, yawSigned, mar, irisV, irisH, faceScale, nosePt: { x: nose.x, y: nose.y } }
 }
 
 // ── Web Audio ─────────────────────────────────────────────────────────────────
@@ -854,6 +880,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   // ── Personal EAR baseline refs ───────────────────────────────────────────
   const earBaselineRef      = useRef(0.28) // fallback default
   const earCalibSamplesRef  = useRef([])
+  // Personal iris neutral (looking-at-screen) baseline, learned during the
+  // 20s calibration. Gaze offsets are measured relative to these, so the
+  // "eyes off screen" signal is personal, not a generic guess.
+  const irisHNeutralRef     = useRef(0)
+  const irisVNeutralRef     = useRef(0)
+  const irisCalibSamplesRef = useRef([]) // { h, v } while looking at the screen
   const lastRecalibTimeRef  = useRef(0)    // timestamp of last EAR re-calibration
 
   // ── Detection confidence ref ──────────────────────────────────────────────
@@ -868,6 +900,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const headTurnLeftFramesRef  = useRef(0)
   const headTurnRightFramesRef = useRef(0)
   const headDownFramesRef      = useRef(0)
+  const eyesOffFramesRef       = useRef(0)   // consecutive frames with eyes off-screen
+  const eyesOffStartRef        = useRef(null)
 
   // ── Ambient sound refs ────────────────────────────────────────────────────
   const ambientRef = useRef(null) // { source, gain }
@@ -1102,7 +1136,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const shouldPrompt = faceAbsentMs >= 2000 && faceAbsentMs < FACE_ABSENT_HOLD_MS
     setFaceAbsentPrompt(shouldPrompt)
 
-    let avgEar = 0.30, pitchDeg = 0, pitchUpDeg = 0, yawSigned = 0, mar = 0, irisV = 0
+    let avgEar = 0.30, pitchDeg = 0, pitchUpDeg = 0, yawSigned = 0, mar = 0, irisV = 0, irisH = 0
 
     if (hasFace) {
       const f   = analyzeFrame(lmArray[0])
@@ -1112,6 +1146,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       yawSigned = f.yawSigned
       mar       = f.mar
       irisV     = f.irisV
+      irisH     = f.irisH
 
       // Computed personal EAR thresholds from baseline
       const earBlink = earBaselineRef.current * 0.72
@@ -1211,6 +1246,24 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       headTurnRightSecs = (now - headTurnRightStartRef.current) / 1000
     }
 
+    // ── Eyes-off-screen (horizontal eye gaze) deadzone ──────────────────────
+    // Real 2D gaze: iris shifted past the personal neutral means the eyes have
+    // left the screen even when the head is straight — the exact case head pose
+    // alone missed. 3-frame deadzone + hold, so a saccade or single bad frame
+    // never triggers it (R2). Resets on face absent via the else branch (R4).
+    const adjustedIrisH = hasFace ? irisH - irisHNeutralRef.current : 0
+    if (hasFace && Math.abs(adjustedIrisH) >= IRIS_OFF_H) {
+      eyesOffFramesRef.current += 1
+    } else {
+      eyesOffFramesRef.current = 0
+      eyesOffStartRef.current = null
+    }
+    let eyesOffSecs = 0
+    if (eyesOffFramesRef.current >= 3) {
+      if (!eyesOffStartRef.current) eyesOffStartRef.current = now
+      eyesOffSecs = (now - eyesOffStartRef.current) / 1000
+    }
+
     const fidgetVariance = headVariance(nosePtHistRef.current)
     const eyesRolledUp   = hasFace && irisV > 0.25
     const downwardContext = hasFace
@@ -1299,14 +1352,22 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       ? (now - distractionDownStartRef.current) >= DISTRACTION_DOWN_HOLD_MS
       : false
 
-    // During calibration: collect EAR samples for personal baseline, then return
+    // During calibration: collect EAR + iris-neutral samples for personal
+    // baselines, then return. The user is looking at the screen (where the
+    // calibrating ring is), so their iris position now = "eyes on task" neutral.
     if (calibrating) {
       if (hasFace && avgEar > 0.20) {
         earCalibSamplesRef.current.push(avgEar)
+        irisCalibSamplesRef.current.push({ h: irisH, v: irisV })
       }
       if (earCalibSamplesRef.current.length > 0) {
         const sum = earCalibSamplesRef.current.reduce((a, b) => a + b, 0)
         earBaselineRef.current = sum / earCalibSamplesRef.current.length
+      }
+      if (irisCalibSamplesRef.current.length > 0) {
+        const s = irisCalibSamplesRef.current
+        irisHNeutralRef.current = s.reduce((a, b) => a + b.h, 0) / s.length
+        irisVNeutralRef.current = s.reduce((a, b) => a + b.v, 0) / s.length
       }
       focusScoreRef.current = 68
       return
@@ -1426,6 +1487,14 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
         else if (adjustedYawSigned >= yawLT * 0.6) score -= 8
         if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
         else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
+      }
+      // Eyes off the screen (horizontal gaze past neutral) with the head straight
+      // — the case head pose alone read as "focused". Mild + debounced (gaze is
+      // noisy); gated like head-turn so a glance at a side monitor doesn't count.
+      // Reuses the 'lookingup' reason ("Eyes on the task").
+      if (!productiveHorizontal && eyesOffSecs >= EYES_OFF_HOLD_SECS) {
+        score -= 12
+        if (primaryReason === 'focused') primaryReason = 'lookingup'
       }
       if (eyesRolledUp) score -= 15
     }
