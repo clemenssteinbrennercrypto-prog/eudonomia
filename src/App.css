@@ -140,7 +140,7 @@ body {
 .app-build-identity {
   position: fixed;
   left: 14px;
-  bottom: 12px;
+  bottom: 14px;
   z-index: 240;
   max-width: calc(100vw - 28px);
   padding: 3px 7px;
