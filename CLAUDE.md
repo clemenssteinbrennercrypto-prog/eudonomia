@@ -104,6 +104,21 @@ been fixed. Check this list before and after editing scoring/detection logic.
    claims. Most regressions here were a one-character logic inversion that
    still "looked right" at a glance.
 
+7. **Horizontal yaw sign convention.** `analyzeFrame` produces
+   `yawSigned > 0` when the head turns to the USER'S LEFT — verified from
+   live nose/iris data, and consistent with the head-turn counters
+   (`adjustedYawSigned >= yawLT` is the LEFT turn, line ~1222) and with
+   `gazeCol`. Any code that maps yaw to a screen SIDE must therefore pair
+   positive yaw with a LEFT-side screen. `classifyHorizontalAttention` once
+   had this inverted (positive yaw → `productive_right`), so "looking left"
+   read as "productively facing the right monitor": it skipped the
+   head-turn penalty and even added the `+5` productive bonus for looking
+   away. Separately, the iris gaze signal uses the OPPOSITE mirror
+   convention (`irisH > 0` = eyes to the user's RIGHT), so "eyes on the
+   side monitor you're facing" means yaw and iris have OPPOSITE signs, and
+   "eyes wandered off it" means SAME sign — don't "simplify" the eyes-off
+   check without re-deriving this from data.
+
 ## GitHub
 
 https://github.com/clemenssteinbrennercrypto-prog/eudonomia

@@ -74,7 +74,7 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 // eye width. Beyond normal on-screen scanning (~±0.10) but not full deflection.
 // Conservative to protect trust — combined with a 3-frame deadzone + hold, a
 // side glance or saccade never triggers a false "distracted".
-const IRIS_OFF_H             = 0.13   // eye deflection (frac of eye width) past neutral that counts as off-screen
+const IRIS_OFF_H             = 0.07   // eye deflection past neutral = off-screen (live data: neutral ~0.00, full look-away ~0.10)
 const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
@@ -245,8 +245,14 @@ function classifyHorizontalAttention(devices = [], yawSigned = 0) {
 
   // Lower the yaw trigger threshold to 15 deg so moderate head turns are caught.
   // A 20 deg threshold was too high — users don't turn that far for a side monitor.
-  if (yawSigned > 15 && hasRightScreen) return { kind: 'productive_right' }
-  if (yawSigned < -15 && hasLeftScreen) return { kind: 'productive_left' }
+  // yaw+ = head turned to the user's LEFT — this matches the head-turn counters
+  // (line ~1222, `adjustedYawSigned >= yawLT` is the LEFT turn) and gazeCol, and is
+  // confirmed by live gaze data. So a LEFT turn is productive only when there's a
+  // LEFT-side screen, and a RIGHT turn only with a RIGHT screen. This pairing was
+  // previously inverted, which made "looking left" read as "productively facing the
+  // right monitor" — suppressing the head-turn penalty AND handing out a +5 bonus.
+  if (yawSigned > 15  && hasLeftScreen)  return { kind: 'productive_left' }
+  if (yawSigned < -15 && hasRightScreen) return { kind: 'productive_right' }
   if (Math.abs(yawSigned) > 30) return { kind: 'unknown_horizontal' }
   return { kind: 'center' }
 }
@@ -1279,9 +1285,13 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     let eyesOffScreen = false
     if (hasFace) {
       if (productiveHorizontal) {
-        eyesOffScreen = adjustedYawSigned > 0
-          ? adjustedIrisH <= -IRIS_OFF_H   // head → right monitor, eyes yank left = off it
-          : adjustedIrisH >=  IRIS_OFF_H   // head → left monitor,  eyes yank right = off it
+        // Facing a side monitor. yaw and iris use OPPOSITE mirror conventions here
+        // (yaw+ = head to user's LEFT; iris+ = eyes to user's RIGHT — both confirmed
+        // from live data), so eyes ON the faced monitor => yaw & iris have OPPOSITE
+        // signs, and eyes wandering OFF it => SAME sign. Only "off" counts, so a
+        // glance across the monitor you're facing never fires.
+        eyesOffScreen = adjustedIrisH * adjustedYawSigned > 0 &&
+          Math.abs(adjustedIrisH) >= IRIS_OFF_H
       } else {
         eyesOffScreen = Math.abs(adjustedIrisH) >= IRIS_OFF_H
       }
