@@ -76,6 +76,8 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 // side glance or saccade never triggers a false "distracted".
 const IRIS_OFF_H             = 0.07   // eye deflection past neutral = off-screen (live data: neutral ~0.00, full look-away ~0.10)
 const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
+const CONF_UNCERTAIN_MAX     = 0.55   // detection confidence at/below this = tracking unreliable (Stage 2 trust)
+const UNCERTAIN_HOLD_MS      = 700    // sustained low confidence before surfacing "signal weak" (anti-flicker)
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000
@@ -552,6 +554,7 @@ const STATUS_CONFIG = {
   focused:    { color: '#22c55e', label: 'Focused'    },
   distracted: { color: '#f97316', label: 'Distracted' },
   alert:      { color: '#ef4444', label: 'Alert'      },
+  uncertain:  { color: '#94a3b8', label: 'Signal weak'},
   calibrating:{ color: '#94a3b8', label: 'Calibrating'},
 }
 
@@ -908,6 +911,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const headDownFramesRef      = useRef(0)
   const eyesOffFramesRef       = useRef(0)   // consecutive frames with eyes off-screen
   const eyesOffStartRef        = useRef(null)
+  const lowConfSinceRef        = useRef(null)  // when confidence first dropped low (Stage 2 trust gating)
 
   // ── Ambient sound refs ────────────────────────────────────────────────────
   const ambientRef = useRef(null) // { source, gain }
@@ -1258,6 +1262,29 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     // direction-aware so a 2-monitor setup works correctly.
 
     const fidgetVariance = headVariance(nosePtHistRef.current)
+
+    // ── Detection confidence + trust gate (Stage 2) ──────────────────────────
+    // Computed BEFORE scoring so a poor signal can HOLD the score instead of
+    // letting noisy landmarks fake a "distracted" drop. High: face present, EAR
+    // sane, low jitter. Low: EAR degenerate (bad light / occlusion) AND jittery.
+    let conf = 0
+    if (hasFace) {
+      conf += 0.5
+      if (avgEar >= 0.15 && avgEar <= 0.45) conf += 0.3
+      if (fidgetVariance <= HEAD_DRIFT_THRESH) conf += 0.2
+    }
+    confidenceRef.current = conf
+    // Sustained low confidence (with a face, outside calibration) = tracking
+    // uncertain. Debounced against flicker. When uncertain we freeze the score
+    // and mute alerts rather than accusing the user of being distracted.
+    if (hasFace && !calibrating && conf <= CONF_UNCERTAIN_MAX) {
+      if (!lowConfSinceRef.current) lowConfSinceRef.current = now
+    } else {
+      lowConfSinceRef.current = null
+    }
+    const trackingUncertain = !!lowConfSinceRef.current &&
+      (now - lowConfSinceRef.current) >= UNCERTAIN_HOLD_MS
+
     const eyesRolledUp   = hasFace && irisV > 0.25
     const downwardContext = hasFace
       ? classifyDownwardAttention(devices, pitchDeg, adjustedYawSigned)
@@ -1555,7 +1582,9 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const inRecovery = msSinceDistraction < RECOVERY_WINDOW_MS
     const rampRate = inRecovery ? 0.4 : 1.0  // 40% speed while recovering
 
-    if (score >= 72) {
+    if (trackingUncertain) {
+      // signal unreliable — neither earn nor burn the focus ramp
+    } else if (score >= 72) {
       sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
@@ -1565,15 +1594,22 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const rawFinal = Math.min(100, score + rampBonus)
     rawScoreRef.current = rawFinal
     const smoothed = rawFinal * 0.3 + focusScoreRef.current * 0.7
-    focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
+    // Trust gate: when tracking is uncertain, HOLD the last trusted score rather
+    // than letting a noisy signal drag it down into a false "distracted".
+    if (!trackingUncertain) {
+      focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
+    }
 
     const newStatus   = focusScoreRef.current >= 65 ? 'focused' : focusScoreRef.current >= 38 ? 'distracted' : 'alert'
-    const displayReason = newStatus === 'focused' ? 'focused' : primaryReason
+    // Trust gate: surface "signal weak" instead of a (held, possibly low) status
+    // so the user knows it's the camera signal, not an accusation.
+    const displayStatus = trackingUncertain ? 'uncertain' : newStatus
+    const displayReason = (displayStatus === 'focused' || displayStatus === 'uncertain') ? 'focused' : primaryReason
 
-    if (newStatus !== attentionStatusRef.current || displayReason !== currentReasonRef.current) {
-      attentionStatusRef.current = newStatus
+    if (displayStatus !== attentionStatusRef.current || displayReason !== currentReasonRef.current) {
+      attentionStatusRef.current = displayStatus
       currentReasonRef.current   = displayReason
-      setAttentionStatus(newStatus)
+      setAttentionStatus(displayStatus)
       setDistractReason(displayReason)
     }
 
@@ -1584,7 +1620,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     //   • Low head fidget (stable gaze)
     //   • No active distraction reason
     //   • Maintained for FLOW_STABLE_MS (90s)
-    const flowConditions = focusScoreRef.current >= 72 &&
+    const flowConditions = !trackingUncertain &&
+      focusScoreRef.current >= 72 &&
       fidgetVariance <= HEAD_DRIFT_THRESH * 0.5 &&
       primaryReason === 'focused'
     if (flowConditions) {
@@ -1627,6 +1664,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
 
       if (
         gentleReminderEnabledRef.current &&
+        !trackingUncertain &&
         distractedFor >= GENTLE_REMINDER_DELAY_MS &&
         gentleCooldownOk &&
         !overlayActiveRef.current &&
@@ -1644,7 +1682,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
 
-      if (lowFor >= adaptedAlertMs && !overlayActiveRef.current && cooldownOk) {
+      if (lowFor >= adaptedAlertMs && !overlayActiveRef.current && cooldownOk && !trackingUncertain) {
         overlayActiveRef.current   = true
         lastAlertTimeRef.current   = now
         lastDistractionRef.current = now  // start recovery window
@@ -1681,17 +1719,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       }
     }
 
-    // ── Detection confidence ───────────────────────────────────────────────
-    // High confidence: face present, EAR in normal range, low head variance
-    // Low confidence: no face, or EAR extreme (< 0.1 or > 0.5), or high variance
-    let conf = 0
-    if (hasFace) {
-      conf += 0.5  // face present
-      const earOk = avgEar >= 0.15 && avgEar <= 0.45
-      if (earOk) conf += 0.3
-      if (fidgetVariance <= HEAD_DRIFT_THRESH) conf += 0.2
-    }
-    confidenceRef.current = conf
+    // (detection confidence + trust gate are computed earlier, before scoring)
   }, [alertDelayMs, devices, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
