@@ -47,7 +47,7 @@ jobs:
       - name: Set internal build identity
         run: |
           set -euo pipefail
-          version="0.1.${GITHUB_RUN_NUMBER}"
+          version="0.1.$(date -u +%y%m%d%H%M)"
 
           python3 - <<PY
           import json
