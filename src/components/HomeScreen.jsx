@@ -174,32 +174,16 @@ export default function HomeScreen({
       <div className="home-content">
 
         {/* Header row */}
-        <div className="home-header" style={{ position: 'relative' }}>
-          <div className="home-header-actions" style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: 8 }}>
-            <button
-              onClick={onShowSetup}
-              style={{
-                background: 'none', border: '1px solid #e5e7eb',
-                borderRadius: 100, padding: '6px 14px',
-                fontSize: 12, fontWeight: 500, color: '#6b7280',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
+        <div className="home-header">
+          <h1 className="app-title">Eudaimonia</h1>
+          <div className="home-header-actions">
+            <button className="home-header-action" onClick={onShowSetup}>
               Setup
             </button>
-            <button
-              onClick={onShowHistory}
-              style={{
-                background: 'none', border: '1px solid #e5e7eb',
-                borderRadius: 100, padding: '6px 14px',
-                fontSize: 12, fontWeight: 500, color: '#6b7280',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
+            <button className="home-header-action" onClick={onShowHistory}>
               History{sessionCount > 0 ? ` (${sessionCount})` : ''}
             </button>
           </div>
-          <h1 className="app-title">Eudaimonia</h1>
           {streak >= 2 && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
               <span style={{
