@@ -111,11 +111,6 @@ jobs:
 
           find "$bundle_root" -type f \( -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' -o -name 'latest.json' \) -exec cp {} "$release_dir/" \;
 
-          if [ ! -f "$release_dir/latest.json" ]; then
-            echo "latest.json was not produced; the test build cannot be used by the Tauri updater." >&2
-            exit 1
-          fi
-
           if ! find "$release_dir" -type f -name '*.app.tar.gz' | grep -q .; then
             echo "No .app.tar.gz updater archive was produced." >&2
             exit 1
@@ -126,6 +121,54 @@ jobs:
             exit 1
           fi
 
+          python3 - "$release_dir" <<'PY'
+          import json
+          import os
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.parse import quote
+
+          release_dir = Path(sys.argv[1])
+          archives = sorted(release_dir.glob("*.app.tar.gz"))
+          if len(archives) != 1:
+              raise SystemExit(f"Expected exactly one updater archive, found {len(archives)}")
+
+          archive = archives[0]
+          sig_path = release_dir / f"{archive.name}.sig"
+          if not sig_path.is_file():
+              raise SystemExit(f"Missing updater signature for {archive.name}")
+
+          signature = sig_path.read_text(encoding="utf-8").strip()
+          if not signature:
+              raise SystemExit(f"Updater signature is empty: {sig_path.name}")
+
+          version = os.environ.get("EUDONOMIA_BUILD_VERSION")
+          if not version:
+              raise SystemExit("EUDONOMIA_BUILD_VERSION is required to generate latest.json")
+
+          asset_url = (
+              "https://github.com/clemenssteinbrennercrypto-prog/eudonomia"
+              f"/releases/download/internal-test/{quote(archive.name)}"
+          )
+          platform = {"signature": signature, "url": asset_url}
+          latest = {
+              "version": version,
+              "notes": f"Internal test build {os.environ.get('GITHUB_RUN_NUMBER', '')} ({os.environ.get('GITHUB_SHA', '')[:7]})".strip(),
+              "pub_date": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+              "platforms": {
+                  "darwin-aarch64": platform,
+                  "darwin-x86_64": platform,
+                  "darwin-universal": platform,
+              },
+          }
+
+          (release_dir / "latest.json").write_text(
+              json.dumps(latest, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
           python3 - "$release_dir/latest.json" <<'PY'
           import json
           import sys
@@ -135,6 +178,11 @@ jobs:
           platforms = latest.get("platforms") or {}
           if not platforms:
               raise SystemExit("latest.json does not contain updater platforms")
+
+          required = {"darwin-aarch64", "darwin-x86_64"}
+          missing = required - set(platforms)
+          if missing:
+              raise SystemExit(f"latest.json is missing required platform(s): {', '.join(sorted(missing))}")
 
           bad = []
           for name, metadata in platforms.items():
