@@ -74,8 +74,8 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 // eye width. Beyond normal on-screen scanning (~±0.10) but not full deflection.
 // Conservative to protect trust — combined with a 3-frame deadzone + hold, a
 // side glance or saccade never triggers a false "distracted".
-const IRIS_OFF_H             = 0.18
-const EYES_OFF_HOLD_SECS     = 2      // sustained eyes-off before the (mild) penalty
+const IRIS_OFF_H             = 0.13   // eye deflection (frac of eye width) past neutral that counts as off-screen
+const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000
@@ -1247,22 +1247,9 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     }
 
     // ── Eyes-off-screen (horizontal eye gaze) deadzone ──────────────────────
-    // Real 2D gaze: iris shifted past the personal neutral means the eyes have
-    // left the screen even when the head is straight — the exact case head pose
-    // alone missed. 3-frame deadzone + hold, so a saccade or single bad frame
-    // never triggers it (R2). Resets on face absent via the else branch (R4).
-    const adjustedIrisH = hasFace ? irisH - irisHNeutralRef.current : 0
-    if (hasFace && Math.abs(adjustedIrisH) >= IRIS_OFF_H) {
-      eyesOffFramesRef.current += 1
-    } else {
-      eyesOffFramesRef.current = 0
-      eyesOffStartRef.current = null
-    }
-    let eyesOffSecs = 0
-    if (eyesOffFramesRef.current >= 3) {
-      if (!eyesOffStartRef.current) eyesOffStartRef.current = now
-      eyesOffSecs = (now - eyesOffStartRef.current) / 1000
-    }
+    // Horizontal eyes-off gaze is evaluated a few lines below, once the monitor
+    // context (productiveHorizontal / head-turn direction) is known — it has to be
+    // direction-aware so a 2-monitor setup works correctly.
 
     const fidgetVariance = headVariance(nosePtHistRef.current)
     const eyesRolledUp   = hasFace && irisV > 0.25
@@ -1277,6 +1264,40 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
       horizontalContext.kind === 'productive_right'
     const unknownHorizontal = horizontalContext.kind === 'unknown_horizontal'
+
+    // Real 2D gaze: iris shifted past the personal neutral = eyes have left the
+    // screen even with the head straight — the case head pose alone missed.
+    // Direction-aware so 2-monitor setups work: looking AT a side monitor means
+    // the eyes track the SAME way the head turned, so yawSigned and irisH share a
+    // sign (mirror-independent — both are +x-ward displacements in the same image).
+    // When facing a side monitor (productiveHorizontal), only eyes pulling the
+    // OPPOSITE way — off that monitor — counts (the "head at right monitor, eyes
+    // dart left" case). On a single/centred screen, either direction counts.
+    // 3-frame deadzone + hold so a saccade never triggers it (R2); resets on face
+    // absent via the else branch (R4).
+    const adjustedIrisH = hasFace ? irisH - irisHNeutralRef.current : 0
+    let eyesOffScreen = false
+    if (hasFace) {
+      if (productiveHorizontal) {
+        eyesOffScreen = adjustedYawSigned > 0
+          ? adjustedIrisH <= -IRIS_OFF_H   // head → right monitor, eyes yank left = off it
+          : adjustedIrisH >=  IRIS_OFF_H   // head → left monitor,  eyes yank right = off it
+      } else {
+        eyesOffScreen = Math.abs(adjustedIrisH) >= IRIS_OFF_H
+      }
+    }
+    if (eyesOffScreen) {
+      eyesOffFramesRef.current += 1
+    } else {
+      eyesOffFramesRef.current = 0
+      eyesOffStartRef.current = null
+    }
+    let eyesOffSecs = 0
+    if (eyesOffFramesRef.current >= 3) {
+      if (!eyesOffStartRef.current) eyesOffStartRef.current = now
+      eyesOffSecs = (now - eyesOffStartRef.current) / 1000
+    }
+
     const activityConnected = isActivityConnected()
     const activityClassification = classifyActivity(activityRef.current, focusAppsConfigRef.current, activityConnected)
     const activityScoringEnabled = focusModeEnabledRef.current
@@ -1488,12 +1509,13 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
         if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
         else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
       }
-      // Eyes off the screen (horizontal gaze past neutral) with the head straight
-      // — the case head pose alone read as "focused". Mild + debounced (gaze is
-      // noisy); gated like head-turn so a glance at a side monitor doesn't count.
-      // Reuses the 'lookingup' reason ("Eyes on the task").
-      if (!productiveHorizontal && eyesOffSecs >= EYES_OFF_HOLD_SECS) {
-        score -= 12
+      // Eyes off the screen (horizontal gaze past neutral). The direction-aware
+      // deadzone above already excludes looking AT a side monitor, so no
+      // productiveHorizontal gate here — this now fires even in the 2-monitor case
+      // when the eyes dart off the monitor being faced. Mild + debounced (gaze is
+      // noisy). Reuses the 'lookingup' reason ("Eyes on the task").
+      if (eyesOffSecs >= EYES_OFF_HOLD_SECS) {
+        score -= 15
         if (primaryReason === 'focused') primaryReason = 'lookingup'
       }
       if (eyesRolledUp) score -= 15
