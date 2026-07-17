@@ -109,6 +109,7 @@ function AppRefreshControl({ updateStatus }) {
 
 function BuildIdentity() {
   const [info, setInfo] = useState(bundledBuildInfo)
+  const [justUpdatedFrom, setJustUpdatedFrom] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -132,14 +133,40 @@ function BuildIdentity() {
     }
   }, [])
 
+  useEffect(() => {
+    const version = info.version
+    if (!version) return
+
+    const storageKey = 'eudonomia_last_seen_build_version'
+    const lastSeen = localStorage.getItem(storageKey)
+
+    if (lastSeen && lastSeen !== version) {
+      setJustUpdatedFrom(lastSeen)
+      const timeoutId = window.setTimeout(() => setJustUpdatedFrom(null), 12000)
+      localStorage.setItem(storageKey, version)
+      return () => window.clearTimeout(timeoutId)
+    }
+
+    if (!lastSeen) {
+      localStorage.setItem(storageKey, version)
+    }
+  }, [info.version])
+
   const version = info.version || 'dev'
   const build = info.shortSha || info.buildId || 'local'
   const channel = info.channel ? `${info.channel} ` : ''
 
   return (
-    <div className="app-build-identity" title={info.buildId || build}>
-      {channel}v{version} · {build}
-    </div>
+    <>
+      <div className="app-build-identity" title={info.buildId || build}>
+        {channel}v{version} · {build}
+      </div>
+      {justUpdatedFrom && (
+        <div className="app-update-toast" role="status" aria-live="polite">
+          Updated from v{justUpdatedFrom} to v{version}
+        </div>
+      )}
+    </>
   )
 }
 
