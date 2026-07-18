@@ -949,6 +949,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const activityRef            = useRef(getLastActivity())
   const focusAppsConfigRef     = useRef(loadFocusAppsConfig())
   const sessionIntentRef       = useRef(sessionIntent)
+  const activityClassCacheRef  = useRef(null)  // cross-frame memo of classifyGoalAwareActivity
   const activeDistractionAppRef = useRef(null)
   const activeDistractionSinceRef = useRef(null)
   const activeFocusAppRef       = useRef(null)
@@ -1457,12 +1458,35 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     }
 
     const activityConnected = isActivityConnected()
-    const activityClassification = classifyGoalAwareActivity(
-      activityRef.current,
-      focusAppsConfigRef.current,
-      activityConnected,
-      sessionIntentRef.current
-    )
+    // Memoized across frames: activityRef.current is only replaced with a new object
+    // when the daemon reports a fresher tick (see activityReceiver.applyIfFresher),
+    // so re-classify only when an input actually changes — not every frame.
+    // classifyGoalAwareActivity does URL parsing + Set/loop work that ran ~15x/s.
+    const activityCache = activityClassCacheRef.current
+    let activityClassification
+    if (
+      activityCache &&
+      activityCache.activity === activityRef.current &&
+      activityCache.connected === activityConnected &&
+      activityCache.intent === sessionIntentRef.current &&
+      activityCache.config === focusAppsConfigRef.current
+    ) {
+      activityClassification = activityCache.result
+    } else {
+      activityClassification = classifyGoalAwareActivity(
+        activityRef.current,
+        focusAppsConfigRef.current,
+        activityConnected,
+        sessionIntentRef.current
+      )
+      activityClassCacheRef.current = {
+        activity: activityRef.current,
+        connected: activityConnected,
+        intent: sessionIntentRef.current,
+        config: focusAppsConfigRef.current,
+        result: activityClassification,
+      }
+    }
     const activityScoringEnabled = focusModeEnabledRef.current
     const activityIsFocus = activityScoringEnabled &&
       (activityClassification.kind === 'aligned' || activityClassification.kind === 'supportive')
@@ -2072,12 +2096,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       }
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
-        const activityClassification = classifyGoalAwareActivity(
-          activityRef.current,
-          focusAppsConfigRef.current,
-          isActivityConnected(),
-          sessionIntentRef.current
-        )
+        // Reuse the classification already computed for scoring this frame.
         timelineSnapshotsRef.current.push({
           second: elapsedSecs,
           score: Math.round(focusScoreRef.current),
@@ -2094,12 +2113,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
       activityAlignmentRef.current = recordActivityAlignment(
         activityAlignmentRef.current,
-        classifyGoalAwareActivity(
-          activityRef.current,
-          focusAppsConfigRef.current,
-          isActivityConnected(),
-          sessionIntentRef.current
-        ),
+        activityClassification,
         elapsedSecs
       )
 
@@ -2165,11 +2179,11 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const overlayMsg = getPhaseAlertMessage(alertReason, focusPhase)
   const showStreak = !isCalibrating && currentStreak > 30
   const activityConnected = isActivityConnected()
-  const activityClassification = classifyGoalAwareActivity(
-    activityStatus,
-    focusAppsConfigRef.current,
-    activityConnected,
-    sessionIntent
+  // Per-render memo (renders fire several times/sec from score updates); reclassify
+  // only when the activity/intent actually changes.
+  const activityClassification = useMemo(
+    () => classifyGoalAwareActivity(activityStatus, focusAppsConfigRef.current, activityConnected, sessionIntent),
+    [activityStatus, activityConnected, sessionIntent]
   )
 
   const dismissBreak = () => {
