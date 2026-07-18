@@ -85,6 +85,9 @@ const ACTIVITY_FOCUS_BONUS_PER_TICK = 2
 const ACTIVITY_FOCUS_BONUS_MAX      = 10
 const ACTIVITY_DISTRACTION_PENALTY_PER_TICK = 5
 const ACTIVITY_DISTRACTION_PENALTY_MAX      = 25
+const PRE_DRIFT_HOLD_MS             = 10_000
+const PRE_DRIFT_DECAY_MULT          = 2.5
+const PRE_DRIFT_MAX_MS              = 30_000
 
 // ── Circadian thresholds ───────────────────────────────────────────────────────
 // Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
@@ -814,6 +817,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [milestone,       setMilestone]       = useState(null) // {msg}
   const [inFlowState,     setInFlowState]     = useState(false)
+  const [preDriftRisk,    setPreDriftRisk]    = useState({ active: false, level: 0, reason: 'stable' })
   const [distractionCount, setDistractionCount] = useState(0)
   const [hintVisible,     setHintVisible]     = useState(true)
   const [endConfirm,      setEndConfirm]      = useState(false)
@@ -865,6 +869,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
   const distractedSinceRef     = useRef(null)
   const lastGentleReminderRef  = useRef(0)
+  const preDriftRiskRef        = useRef({ active: false, level: 0, reason: 'stable' })
+  const preDriftChargeMsRef    = useRef(0)
   const activityRef            = useRef(getLastActivity())
   const focusAppsConfigRef     = useRef(loadFocusAppsConfig())
   const activeDistractionAppRef = useRef(null)
@@ -881,6 +887,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   // ── Session stats refs ────────────────────────────────────────────────────
   const focusedSecondsRef    = useRef(0)
   const distractionEventsRef = useRef(0)
+  const preDriftEventsRef    = useRef(0)
+  const preDriftSecondsRef   = useRef(0)
   const longestStreakRef     = useRef(0)
   const currentStreakRef     = useRef(0)
   const timelineSnapshotsRef = useRef([])
@@ -1078,6 +1086,8 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       completed,
       focusLostCount:       distractionEventsRef.current,
       distractionEvents:    distractionEventsRef.current,
+      preDriftEvents:       preDriftEventsRef.current,
+      preDriftSeconds:      preDriftSecondsRef.current,
       focusedSeconds:       focusedSecondsRef.current,
       longestFocusedStreak: longestStreakRef.current,
       peakFocusStreak:      longestStreakRef.current,
@@ -1466,6 +1476,11 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       activeDistractionSinceRef.current = null
       activityFocusBonusRef.current = 0
       activityDistractionPenaltyRef.current = 0
+      preDriftChargeMsRef.current = 0
+      if (preDriftRiskRef.current.active || preDriftRiskRef.current.level !== 0) {
+        preDriftRiskRef.current = { active: false, level: 0, reason: 'stable' }
+        setPreDriftRisk(preDriftRiskRef.current)
+      }
     } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
       score = focusScoreRef.current * 0.88
     } else if (hasFace) {
@@ -1605,6 +1620,62 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     // so the user knows it's the camera signal, not an accusation.
     const displayStatus = trackingUncertain ? 'uncertain' : newStatus
     const displayReason = (displayStatus === 'focused' || displayStatus === 'uncertain') ? 'focused' : primaryReason
+
+    // ── Pre-drift risk: sustained early destabilization before full distraction ─
+    // This never subtracts score. It accumulates only while weak or unstable
+    // signals persist, then decays quickly when the user stabilizes or resets on hard loss.
+    const earlyAwayGlance = faceAbsentMs >= 600 && faceAbsentMs < FACE_ABSENT_HOLD_MS
+    const unstableHead = hasFace &&
+      fidgetVariance > HEAD_DRIFT_THRESH &&
+      fidgetVariance <= HEAD_DRIFT_THRESH * 2.2
+    const softHeadTurn = hasFace && !productiveHorizontal && (
+      (adjustedYawSigned >= yawLT * 0.6 && headTurnLeftFramesRef.current >= 3 && headTurnLeftSecs < HEAD_TURN_HOLD) ||
+      (-adjustedYawSigned >= yawRT * 0.6 && headTurnRightFramesRef.current >= 3 && headTurnRightSecs < HEAD_TURN_HOLD)
+    )
+    const softHeadDown = hasFace && !productiveDownward &&
+      pitchDeg >= pitchDT * 0.75 &&
+      pitchDeg < pitchDT &&
+      headDownFramesRef.current >= 3
+    const weakFocus = hasFace && focusScoreRef.current >= 55 && focusScoreRef.current < 72 && primaryReason === 'focused'
+    const preDriftSignals = [
+      unstableHead && 'gaze instability',
+      earlyAwayGlance && 'away glances',
+      softHeadTurn && 'side glances',
+      softHeadDown && 'posture drift',
+      weakFocus && 'weak focus',
+    ].filter(Boolean)
+    const strongestPreDriftReason = preDriftSignals[0] || 'stable'
+    const riskInput = preDriftSignals.length >= 2 || unstableHead || earlyAwayGlance
+
+    if (newStatus === 'alert' || faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
+      preDriftChargeMsRef.current = 0
+    } else if (riskInput) {
+      preDriftChargeMsRef.current = Math.min(PRE_DRIFT_MAX_MS, preDriftChargeMsRef.current + frameDelta)
+    } else {
+      preDriftChargeMsRef.current = Math.max(0, preDriftChargeMsRef.current - frameDelta * PRE_DRIFT_DECAY_MULT)
+    }
+
+    const preDriftActive = preDriftChargeMsRef.current >= PRE_DRIFT_HOLD_MS && newStatus !== 'alert'
+    const preDriftLevel = Math.round((preDriftChargeMsRef.current / PRE_DRIFT_MAX_MS) * 100)
+    const prevPreDriftActive = preDriftRiskRef.current.active
+    const nextPreDriftRisk = {
+      active: preDriftActive,
+      level: preDriftLevel,
+      reason: preDriftActive ? strongestPreDriftReason : 'stable',
+    }
+    if (
+      nextPreDriftRisk.active !== preDriftRiskRef.current.active ||
+      nextPreDriftRisk.reason !== preDriftRiskRef.current.reason ||
+      Math.abs(nextPreDriftRisk.level - preDriftRiskRef.current.level) >= 5
+    ) {
+      preDriftRiskRef.current = nextPreDriftRisk
+      setPreDriftRisk(nextPreDriftRisk)
+    } else {
+      preDriftRiskRef.current = nextPreDriftRisk
+    }
+    if (preDriftActive && !prevPreDriftActive) {
+      preDriftEventsRef.current += 1
+    }
 
     if (displayStatus !== attentionStatusRef.current || displayReason !== currentReasonRef.current) {
       attentionStatusRef.current = displayStatus
@@ -1779,6 +1850,9 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       setCalibProgress(1)
 
       const focused = focusScoreRef.current >= 40
+      if (preDriftRiskRef.current.active) {
+        preDriftSecondsRef.current += 1
+      }
 
       if (focused) {
         focusedSecondsRef.current += 1
@@ -1809,7 +1883,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       }
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
-        timelineSnapshotsRef.current.push({ second: elapsedSecs, score: Math.round(focusScoreRef.current), focused })
+        timelineSnapshotsRef.current.push({
+          second: elapsedSecs,
+          score: Math.round(focusScoreRef.current),
+          focused,
+          preDrift: preDriftRiskRef.current.active,
+        })
       }
 
       // Break reminders at 25min (1500s), 50min (3000s), 90min (5400s)
@@ -2024,8 +2103,23 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
           </div>
         )}
 
+        {preDriftRisk.active && !isCalibrating && !inFlowState && attentionStatus !== 'alert' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            marginTop: 8,
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%', background: '#f59e0b',
+              boxShadow: '0 0 0 3px rgba(245,158,11,0.18)',
+            }} />
+            <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 700, letterSpacing: '0.04em' }}>
+              Drift risk: {preDriftRisk.reason}
+            </span>
+          </div>
+        )}
+
         {/* Streak counter */}
-        {showStreak && !inFlowState && (
+        {showStreak && !inFlowState && !preDriftRisk.active && (
           <p style={{
             fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>

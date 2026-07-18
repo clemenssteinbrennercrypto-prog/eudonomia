@@ -39,6 +39,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     actualSeconds        = 0,
     focusedSeconds       = 0,
     distractionEvents    = 0,
+    preDriftEvents       = 0,
+    preDriftSeconds      = 0,
     longestFocusedStreak = 0,
     timeline             = [],
     completed            = false,
@@ -171,6 +173,18 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           <div className="stat">
             <span className="stat-value">{distractionEvents}</span>
             <span className="stat-label">{distractionEvents === 1 ? 'alert' : 'alerts'}</span>
+          </div>
+          <div className="stat-divider" />
+          <div className="stat">
+            <span className="stat-value" style={{ color: preDriftEvents > 0 ? '#f59e0b' : undefined }}>
+              {preDriftEvents}
+            </span>
+            <span className="stat-label">drift risks</span>
+            {preDriftSeconds > 0 && (
+              <span style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, display: 'block' }}>
+                {fmt(preDriftSeconds)}
+              </span>
+            )}
           </div>
           <div className="stat-divider" />
           <div className="stat">
