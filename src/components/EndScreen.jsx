@@ -30,7 +30,84 @@ const DISTRACTION_LABELS = {
   away: 'Left camera',
   lookingup: 'Daydreaming',
   prolonged: 'Eyes closed',
+  distraction_app: 'Distracting app',
   default: 'Distracted',
+}
+
+const PHASE_LABELS = {
+  arrival: 'Arrival',
+  ramp: 'Ramp',
+  lock_in: 'Lock-in',
+  fade: 'Fade',
+  recovery: 'Recovery',
+  drift: 'Drift',
+}
+
+function countBy(items, getKey) {
+  return items.reduce((acc, item) => {
+    const key = getKey(item)
+    if (!key) return acc
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {})
+}
+
+function dominantEntry(counts = {}) {
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || null
+}
+
+function getLowestStretch(timeline = []) {
+  if (timeline.length === 0) return null
+  const sorted = [...timeline].sort((a, b) => (a.second || 0) - (b.second || 0))
+  const windowSize = Math.min(6, sorted.length)
+  let best = null
+  for (let i = 0; i <= sorted.length - windowSize; i += 1) {
+    const slice = sorted.slice(i, i + windowSize)
+    const avg = Math.round(slice.reduce((sum, pt) => sum + (pt.score ?? 0), 0) / slice.length)
+    if (!best || avg < best.avg) {
+      best = { avg, start: slice[0].second || 0, end: slice[slice.length - 1].second || 0 }
+    }
+  }
+  return best
+}
+
+function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases }) {
+  const phaseSeconds = focusPhases?.seconds || countBy(timeline, pt => pt.phase)
+  const dominantPhase = focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
+  const topDistraction = dominantEntry(countBy(distractionLog, ev => ev.reason))
+  const lowestStretch = getLowestStretch(timeline)
+  const lockInSeconds = phaseSeconds.lock_in || 0
+  const fadeSeconds = (phaseSeconds.fade || 0) + (phaseSeconds.drift || 0)
+
+  let headline = 'You built useful focus, but the session had no clear phase data yet.'
+  if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
+  else if (dominantPhase === 'lock_in') headline = 'The session was mostly lock-in: stable, sustained attention.'
+  else if (dominantPhase === 'ramp') headline = 'The session was mostly ramp: you were building attention rather than fully locked in.'
+  else if (dominantPhase === 'recovery') headline = 'The session spent a lot of time recovering after focus breaks.'
+  else if (dominantPhase === 'fade' || dominantPhase === 'drift') headline = 'The session tilted toward fade: attention weakened before it fully stabilized.'
+  else if (focusPct >= 70) headline = 'The session stayed productive, with most time above the focus threshold.'
+
+  const notes = []
+  if (lockInSeconds >= 60) {
+    notes.push(`Lock-in held for ${fmt(lockInSeconds)}, your strongest sustained block.`)
+  }
+  if (preDriftEvents > 0) {
+    notes.push(`${preDriftEvents} drift-risk ${preDriftEvents === 1 ? 'window' : 'windows'} appeared before severe alerts, lasting ${fmt(preDriftSeconds)} total.`)
+  }
+  if (topDistraction) {
+    notes.push(`Most repeated alert reason: ${DISTRACTION_LABELS[topDistraction[0]] ?? DISTRACTION_LABELS.default}.`)
+  }
+  if (lowestStretch && lowestStretch.avg < 55) {
+    notes.push(`Lowest stretch averaged ${lowestStretch.avg}% from ${fmtSecond(lowestStretch.start)} to ${fmtSecond(lowestStretch.end)}.`)
+  }
+  if (fadeSeconds >= 60 && !topDistraction) {
+    notes.push(`Fade/drift time totaled ${fmt(fadeSeconds)}, mostly below stable focus without a repeated alert reason.`)
+  }
+  if (notes.length === 0) {
+    notes.push('No major drift pattern stood out; the timeline stayed relatively stable.')
+  }
+
+  return { headline, notes: notes.slice(0, 4), dominantPhase, phaseSeconds }
 }
 
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
@@ -49,9 +126,19 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     tags                 = [],
     distractionLog       = [],
     plannedDuration      = 0,
+    focusPhases          = null,
   } = sessionData
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
+  const debrief = useMemo(() => makeDebrief({
+    focusPct,
+    actualSeconds,
+    distractionLog,
+    timeline,
+    preDriftEvents,
+    preDriftSeconds,
+    focusPhases,
+  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases])
   const [goalAchieved, setGoalAchieved] = useState(null)
 
   // Personal best detection
@@ -199,6 +286,72 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <span className="stat-label">distracted time</span>
           </div>
         </div>
+
+        {/* Session debrief */}
+        {actualSeconds > 0 && (
+          <div style={{
+            width: '100%', boxSizing: 'border-box',
+            background: '#FFFFFF',
+            border: '1px solid #E8E3DA',
+            borderRadius: 14,
+            padding: '16px 18px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>
+                Session debrief
+              </p>
+              {debrief.dominantPhase && (
+                <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                  Dominant phase: {PHASE_LABELS[debrief.dominantPhase] || debrief.dominantPhase}
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: 15, color: '#111827', fontWeight: 600, lineHeight: 1.45, margin: '0 0 12px' }}>
+              {debrief.headline}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {debrief.notes.map((note, i) => (
+                <p key={i} style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.45, margin: 0 }}>
+                  {note}
+                </p>
+              ))}
+            </div>
+            {Object.values(debrief.phaseSeconds).some(seconds => seconds > 0) && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+                  {Object.entries(debrief.phaseSeconds)
+                    .filter(([, seconds]) => seconds > 0)
+                    .map(([phase, seconds]) => {
+                      const colors = {
+                        arrival: '#38bdf8',
+                        ramp: '#22c55e',
+                        lock_in: '#a78bfa',
+                        fade: '#f59e0b',
+                        recovery: '#fb7185',
+                        drift: '#ef4444',
+                      }
+                      return (
+                        <div
+                          key={phase}
+                          title={`${PHASE_LABELS[phase] || phase}: ${fmt(seconds)}`}
+                          style={{ flex: seconds, minWidth: 2, background: colors[phase] || '#9ca3af' }}
+                        />
+                      )
+                    })}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: 8 }}>
+                  {Object.entries(debrief.phaseSeconds)
+                    .filter(([, seconds]) => seconds > 0)
+                    .map(([phase, seconds]) => (
+                      <span key={phase} style={{ fontSize: 11, color: '#6b7280' }}>
+                        {PHASE_LABELS[phase] || phase}: {fmt(seconds)}
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Goal section */}
         {goal && (

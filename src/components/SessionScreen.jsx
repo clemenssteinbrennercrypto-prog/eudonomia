@@ -88,6 +88,16 @@ const ACTIVITY_DISTRACTION_PENALTY_MAX      = 25
 const PRE_DRIFT_HOLD_MS             = 10_000
 const PRE_DRIFT_DECAY_MULT          = 2.5
 const PRE_DRIFT_MAX_MS              = 30_000
+const RECOVERY_WINDOW_MS            = 120_000
+
+const FOCUS_PHASES = {
+  arrival:  { label: 'Arrival',  tone: '#38bdf8' },
+  ramp:     { label: 'Ramp',     tone: '#22c55e' },
+  lock_in:  { label: 'Lock-in',  tone: '#a78bfa' },
+  fade:     { label: 'Fade',     tone: '#f59e0b' },
+  recovery: { label: 'Recovery', tone: '#fb7185' },
+  drift:    { label: 'Drift',    tone: '#ef4444' },
+}
 
 // ── Circadian thresholds ───────────────────────────────────────────────────────
 // Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
@@ -197,6 +207,23 @@ function computeThresholds(devices = []) {
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value))
+}
+
+function classifyFocusPhase({
+  elapsedSecs,
+  score,
+  sustainedGoodMs,
+  msSinceDistraction,
+  preDriftActive,
+  inFlow,
+}) {
+  if (score < 40) return 'drift'
+  if (msSinceDistraction < RECOVERY_WINDOW_MS) return 'recovery'
+  if (preDriftActive || (score >= 55 && score < 65)) return 'fade'
+  if (inFlow || (score >= 78 && sustainedGoodMs >= 90_000)) return 'lock_in'
+  if (score >= 65 && sustainedGoodMs >= 15_000) return 'ramp'
+  if (elapsedSecs < CALIBRATION_SECS + 90) return 'arrival'
+  return score >= 72 ? 'ramp' : 'arrival'
 }
 
 function classifyDownwardAttention(devices = [], pitchDeg = 0, yawSigned = 0) {
@@ -818,6 +845,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const [milestone,       setMilestone]       = useState(null) // {msg}
   const [inFlowState,     setInFlowState]     = useState(false)
   const [preDriftRisk,    setPreDriftRisk]    = useState({ active: false, level: 0, reason: 'stable' })
+  const [focusPhase,      setFocusPhase]      = useState('arrival')
   const [distractionCount, setDistractionCount] = useState(0)
   const [hintVisible,     setHintVisible]     = useState(true)
   const [endConfirm,      setEndConfirm]      = useState(false)
@@ -893,6 +921,9 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const currentStreakRef     = useRef(0)
   const timelineSnapshotsRef = useRef([])
   const distractionLogRef    = useRef([]) // [{second, reason}]
+  const focusPhaseRef        = useRef('arrival')
+  const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
+  const focusPhaseTransitionsRef = useRef([])
 
   // ── Personal EAR baseline refs ───────────────────────────────────────────
   const earBaselineRef      = useRef(0.28) // fallback default
@@ -1080,6 +1111,9 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     const avgFocusScore = snapshots.length > 0
       ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
       : Math.round(focusScoreRef.current)
+    const focusPhaseSeconds = { ...focusPhaseSecondsRef.current }
+    const dominantFocusPhase = Object.entries(focusPhaseSeconds)
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
     onEnd({
       plannedDuration:      duration,
       actualSeconds,
@@ -1095,6 +1129,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       finalScore:           Math.round(focusScoreRef.current),
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
+      focusPhases: {
+        seconds: focusPhaseSeconds,
+        dominant: dominantFocusPhase,
+        final: focusPhaseRef.current,
+        transitions: [...focusPhaseTransitionsRef.current],
+      },
     })
   }, [duration, onEnd, pushBlockingState, stopAmbient])
 
@@ -1592,7 +1632,6 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     // After a distraction, directed attention recovers gradually — ~2 min to re-engage.
     // We model this by building the ramp at 40% speed for 2 min post-distraction,
     // then full speed once recovery window has passed.
-    const RECOVERY_WINDOW_MS = 120_000
     const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
     const inRecovery = msSinceDistraction < RECOVERY_WINDOW_MS
     const rampRate = inRecovery ? 0.4 : 1.0  // 40% speed while recovering
@@ -1864,6 +1903,25 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       }
 
       const roundedScore = Math.round(focusScoreRef.current)
+      const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
+      const nextFocusPhase = classifyFocusPhase({
+        elapsedSecs,
+        score: roundedScore,
+        sustainedGoodMs: sustainedGoodMsRef.current,
+        msSinceDistraction,
+        preDriftActive: preDriftRiskRef.current.active,
+        inFlow: inFlowRef.current,
+      })
+      focusPhaseSecondsRef.current[nextFocusPhase] = (focusPhaseSecondsRef.current[nextFocusPhase] || 0) + 1
+      if (nextFocusPhase !== focusPhaseRef.current) {
+        focusPhaseTransitionsRef.current.push({
+          second: elapsedSecs,
+          from: focusPhaseRef.current,
+          to: nextFocusPhase,
+        })
+        focusPhaseRef.current = nextFocusPhase
+        setFocusPhase(nextFocusPhase)
+      }
       setFocusScore(roundedScore)
       // Keep sparkline history (max 60 values, pushed once per second = last 60s)
       scoreHistoryRef.current = [...scoreHistoryRef.current, roundedScore].slice(-60)
@@ -1888,6 +1946,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
           score: Math.round(focusScoreRef.current),
           focused,
           preDrift: preDriftRiskRef.current.active,
+          phase: nextFocusPhase,
         })
       }
 
@@ -2084,6 +2143,24 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
             prominent
           />
         </div>
+
+        {!isCalibrating && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            marginTop: 8,
+          }}>
+            <div style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: FOCUS_PHASES[focusPhase]?.tone || '#94a3b8',
+              boxShadow: `0 0 0 3px ${(FOCUS_PHASES[focusPhase]?.tone || '#94a3b8')}22`,
+            }} />
+            <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 700, letterSpacing: '0.04em' }}>
+              Phase: {FOCUS_PHASES[focusPhase]?.label || 'Arrival'}
+            </span>
+          </div>
+        )}
 
         {/* Flow state indicator */}
         {inFlowState && !isCalibrating && (
