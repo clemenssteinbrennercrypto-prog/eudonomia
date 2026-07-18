@@ -1671,13 +1671,20 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
     if (newStatus === 'alert' || faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
       preDriftChargeMsRef.current = 0
+    } else if (trackingUncertain) {
+      // Stage-2 trust gate: the gaze/head signals pre-drift reads are exactly
+      // what's unreliable while the signal is weak. Hold the charge — don't
+      // inflate it on camera noise, don't decay it either. Resumes on recovery.
     } else if (riskInput) {
       preDriftChargeMsRef.current = Math.min(PRE_DRIFT_MAX_MS, preDriftChargeMsRef.current + frameDelta)
     } else {
       preDriftChargeMsRef.current = Math.max(0, preDriftChargeMsRef.current - frameDelta * PRE_DRIFT_DECAY_MULT)
     }
 
-    const preDriftActive = preDriftChargeMsRef.current >= PRE_DRIFT_HOLD_MS && newStatus !== 'alert'
+    // Never surface/count pre-drift while tracking is uncertain: it would contradict
+    // the "Signal weak" state and pollute the debrief's drift-risk stats.
+    const preDriftActive = preDriftChargeMsRef.current >= PRE_DRIFT_HOLD_MS &&
+      newStatus !== 'alert' && !trackingUncertain
     const preDriftLevel = Math.round((preDriftChargeMsRef.current / PRE_DRIFT_MAX_MS) * 100)
     const prevPreDriftActive = preDriftRiskRef.current.active
     const nextPreDriftRisk = {
