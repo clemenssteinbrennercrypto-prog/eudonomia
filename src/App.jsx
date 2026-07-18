@@ -274,6 +274,8 @@ export default function App() {
       {screen === 'session' && (
         <SessionScreen
           task={task}
+          goal={goal}
+          tags={tags}
           duration={duration}
           devices={devices}
           focusModeEnabled={focusModeEnabled}

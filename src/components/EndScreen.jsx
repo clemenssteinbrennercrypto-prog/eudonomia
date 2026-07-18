@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { updateSession, loadSessions } from '../lib/storage'
+import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -43,6 +44,24 @@ const PHASE_LABELS = {
   drift: 'Drift',
 }
 
+const ACTIVITY_KIND_LABELS = {
+  blocked: 'Blocked',
+  aligned: 'Aligned',
+  supportive: 'Supportive',
+  unclear: 'Unclear',
+  off_goal: 'Off-goal',
+  distraction: 'Distraction',
+}
+
+const ACTIVITY_KIND_COLORS = {
+  blocked: '#ef4444',
+  aligned: '#22c55e',
+  supportive: '#14b8a6',
+  unclear: '#9ca3af',
+  off_goal: '#f59e0b',
+  distraction: '#f97316',
+}
+
 function countBy(items, getKey) {
   return items.reduce((acc, item) => {
     const key = getKey(item)
@@ -71,16 +90,22 @@ function getLowestStretch(timeline = []) {
   return best
 }
 
-function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases }) {
+function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment }) {
   const phaseSeconds = focusPhases?.seconds || countBy(timeline, pt => pt.phase)
   const dominantPhase = focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
   const topDistraction = dominantEntry(countBy(distractionLog, ev => ev.reason))
   const lowestStretch = getLowestStretch(timeline)
   const lockInSeconds = phaseSeconds.lock_in || 0
   const fadeSeconds = (phaseSeconds.fade || 0) + (phaseSeconds.drift || 0)
+  const alignment = summarizeSessionAlignment(activityAlignment, actualSeconds)
+  const unclearPct = alignment.observedSeconds > 0
+    ? Math.round(((alignment.secondsByKind.unclear || 0) / alignment.observedSeconds) * 100)
+    : null
 
   let headline = 'You built useful focus, but the session had no clear phase data yet.'
   if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
+  else if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) headline = 'Your attention signals were usable, but app/site activity drifted away from the stated aim.'
+  else if (alignment.observedSeconds >= 60 && alignment.alignedPct >= 70) headline = 'Your app/site activity mostly matched or supported the stated aim.'
   else if (dominantPhase === 'lock_in') headline = 'The session was mostly lock-in: stable, sustained attention.'
   else if (dominantPhase === 'ramp') headline = 'The session was mostly ramp: you were building attention rather than fully locked in.'
   else if (dominantPhase === 'recovery') headline = 'The session spent a lot of time recovering after focus breaks.'
@@ -97,6 +122,14 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
   if (topDistraction) {
     notes.push(`Most repeated alert reason: ${DISTRACTION_LABELS[topDistraction[0]] ?? DISTRACTION_LABELS.default}.`)
   }
+  if (alignment.observedSeconds >= 30 && alignment.alignedPct != null) {
+    notes.push(`Observed activity was aligned/supportive for ${alignment.alignedPct}% of tracked activity and off-goal/blocked/distracting for ${alignment.driftPct}%.`)
+  }
+  if (unclearPct != null && unclearPct >= 35) {
+    notes.push(`${unclearPct}% of tracked activity was unclear, so the goal-read is partial rather than definitive.`)
+  } else if (alignment.observedSeconds > 0 && alignment.observedSeconds < Math.min(actualSeconds * 0.5, 120)) {
+    notes.push('Activity telemetry was sparse, so the debrief leans more on focus signals than app/site context.')
+  }
   if (lowestStretch && lowestStretch.avg < 55) {
     notes.push(`Lowest stretch averaged ${lowestStretch.avg}% from ${fmtSecond(lowestStretch.start)} to ${fmtSecond(lowestStretch.end)}.`)
   }
@@ -107,7 +140,7 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
     notes.push('No major drift pattern stood out; the timeline stayed relatively stable.')
   }
 
-  return { headline, notes: notes.slice(0, 4), dominantPhase, phaseSeconds }
+  return { headline, notes: notes.slice(0, 5), dominantPhase, phaseSeconds, alignment }
 }
 
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
@@ -127,6 +160,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     distractionLog       = [],
     plannedDuration      = 0,
     focusPhases          = null,
+    sessionIntent        = null,
+    activityAlignment    = null,
   } = sessionData
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
@@ -138,7 +173,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     preDriftEvents,
     preDriftSeconds,
     focusPhases,
-  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases])
+    activityAlignment,
+  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment])
   const [goalAchieved, setGoalAchieved] = useState(null)
 
   // Personal best detection
@@ -348,6 +384,58 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                       </span>
                     ))}
                 </div>
+              </div>
+            )}
+            {debrief.alignment.observedSeconds > 0 && (
+              <div style={{ marginTop: 16, borderTop: '1px solid #f3f4f6', paddingTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#4b5563', margin: 0 }}>
+                    Goal alignment
+                  </p>
+                  <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                    {sessionIntent?.primaryLabel || 'General work'} · {sessionIntent?.confidence || 'partial'} confidence
+                  </span>
+                </div>
+                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+                  {Object.entries(debrief.alignment.secondsByKind)
+                    .filter(([, seconds]) => seconds > 0)
+                    .map(([kind, seconds]) => (
+                      <div
+                        key={kind}
+                        title={`${ACTIVITY_KIND_LABELS[kind] || kind}: ${fmt(seconds)}`}
+                        style={{ flex: seconds, minWidth: 2, background: ACTIVITY_KIND_COLORS[kind] || '#9ca3af' }}
+                      />
+                    ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: 8 }}>
+                  {Object.entries(debrief.alignment.secondsByKind)
+                    .filter(([, seconds]) => seconds > 0)
+                    .map(([kind, seconds]) => (
+                      <span key={kind} style={{ fontSize: 11, color: '#6b7280' }}>
+                        {ACTIVITY_KIND_LABELS[kind] || kind}: {fmt(seconds)}
+                      </span>
+                    ))}
+                </div>
+                {debrief.alignment.topActivities.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+                    {debrief.alignment.topActivities.map(item => (
+                      <div key={`${item.kind}-${item.label}`} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        fontSize: 12,
+                        color: '#4b5563',
+                      }}>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.label}
+                        </span>
+                        <span style={{ color: ACTIVITY_KIND_COLORS[item.kind] || '#9ca3af', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {ACTIVITY_KIND_LABELS[item.kind] || item.kind} · {fmt(item.seconds)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

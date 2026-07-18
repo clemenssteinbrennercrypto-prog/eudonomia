@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   defaultRoleForType,
   isProductiveDownwardRole,
@@ -16,6 +16,12 @@ import {
 } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
+import {
+  classifyGoalAwareActivity,
+  deriveSessionIntent,
+  emptyActivityAlignmentSummary,
+  recordActivityAlignment,
+} from '../lib/sessionIntent'
 
 // ── FaceMesh landmark indices ──────────────────────────────────────────────────
 const RIGHT_EYE   = [33,  160, 158, 133, 153, 144]
@@ -479,60 +485,6 @@ function formatShortDuration(ms) {
   return `${mins}m ${String(secs).padStart(2, '0')}s`
 }
 
-function normalizeDomain(value) {
-  const raw = String(value || '').trim().toLowerCase()
-  if (!raw) return ''
-  try {
-    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
-    return new URL(withProtocol).hostname.replace(/^www\./, '')
-  } catch {
-    return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split('?')[0]
-  }
-}
-
-function domainMatches(domain, candidates = []) {
-  const normalizedDomain = normalizeDomain(domain)
-  if (!normalizedDomain) return false
-  return candidates.some(candidate => {
-    const normalizedCandidate = normalizeDomain(candidate)
-    return normalizedCandidate &&
-      (normalizedDomain === normalizedCandidate || normalizedDomain.endsWith(`.${normalizedCandidate}`))
-  })
-}
-
-function classifyActivity(activity, config, daemonConnected) {
-  if (!daemonConnected) {
-    return { kind: 'unknown', app: '', domain: '', label: 'No activity data' }
-  }
-
-  const app = String(activity.app || '').trim()
-  const appKey = app.toLowerCase()
-  const domain = normalizeDomain(activity.domain || activity.full_url || activity.url)
-  const domainKey = domain.toLowerCase()
-  if (!appKey && !domainKey) {
-    return { kind: 'unknown', app: '', domain: '', label: 'No activity data' }
-  }
-
-  const focusApps = config?.focusApps || []
-  const distractionApps = config?.distractionApps || []
-  const focusDomains = config?.focusDomains || []
-  const distractionDomains = config?.distractionDomains || []
-  const focusAppKeys = new Set(focusApps.map(item => item.toLowerCase()))
-  const distractionAppKeys = new Set(distractionApps.map(item => item.toLowerCase()))
-
-  const isDistraction = Boolean(appKey && distractionAppKeys.has(appKey)) ||
-    Boolean(domainKey && distractionAppKeys.has(domainKey)) ||
-    domainMatches(domain, distractionDomains)
-  const isFocus = Boolean(appKey && focusAppKeys.has(appKey)) ||
-    Boolean(domainKey && focusAppKeys.has(domainKey)) ||
-    domainMatches(domain, focusDomains)
-  const label = domain || activity.title || app || 'Unknown'
-
-  if (isDistraction) return { kind: 'distraction', app, domain, label }
-  if (isFocus) return { kind: 'focus', app, domain, label }
-  return { kind: 'unknown', app, domain, label }
-}
-
 // ── Focus Ring (SVG) ──────────────────────────────────────────────────────────
 function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0 }) {
   const size   = 220
@@ -711,14 +663,23 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
 }
 
 function ActivityPill({ activity, classification, connected, activeSince, prominent = false }) {
-  const isFocus = connected && classification.kind === 'focus'
-  const isDistraction = connected && classification.kind === 'distraction'
-  const color = isFocus ? '#22c55e' : isDistraction ? '#ef4444' : '#6b7280'
-  const bg = isFocus ? '#17251d' : isDistraction ? '#2a1719' : '#1C1F28'
-  const border = isFocus ? '#22c55e40' : isDistraction ? '#ef444440' : '#2A2E3A'
+  const kind = classification?.kind || 'unclear'
+  const isFocus = connected && (kind === 'aligned' || kind === 'supportive')
+  const isDistraction = connected && (kind === 'blocked' || kind === 'distraction')
+  const isOffGoal = connected && kind === 'off_goal'
+  const color = isFocus ? '#22c55e' : isDistraction ? '#ef4444' : isOffGoal ? '#f59e0b' : '#6b7280'
+  const bg = isFocus ? '#17251d' : isDistraction ? '#2a1719' : isOffGoal ? '#2b2416' : '#1C1F28'
+  const border = isFocus ? '#22c55e40' : isDistraction ? '#ef444440' : isOffGoal ? '#f59e0b40' : '#2A2E3A'
   const label = connected ? classification.label : 'No activity data'
   const duration = isDistraction && activeSince ? formatShortDuration(Date.now() - activeSince) : null
-  const suffix = isFocus ? '✓ focus app' : null
+  const suffix = connected ? ({
+    aligned: 'aligned',
+    supportive: 'supportive',
+    blocked: 'blocked',
+    distraction: 'distraction',
+    off_goal: 'off goal',
+    unclear: null,
+  }[kind] || null) : null
   const titleParts = [
     activity?.domain,
     activity?.title,
@@ -800,7 +761,7 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
           letterSpacing: '0.01em',
           textShadow: '0 0 12px rgba(239,68,68,0.25)',
         }}>
-          Switch back to your work app
+          {kind === 'blocked' ? 'Blocked by your focus rules' : 'Likely distraction for this session'}
         </div>
       )}
     </div>
@@ -808,8 +769,9 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function SessionScreen({ task, duration, devices = [], focusModeEnabled = true, onEnd }) {
+export default function SessionScreen({ task, goal = '', tags = [], duration, devices = [], focusModeEnabled = true, onEnd }) {
   const totalSeconds = duration * 60
+  const sessionIntent = useMemo(() => deriveSessionIntent({ task, goal, tags }), [task, goal, tags])
   const {
     yawLeft: yawLT,
     yawRight: yawRT,
@@ -901,6 +863,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const preDriftChargeMsRef    = useRef(0)
   const activityRef            = useRef(getLastActivity())
   const focusAppsConfigRef     = useRef(loadFocusAppsConfig())
+  const sessionIntentRef       = useRef(sessionIntent)
   const activeDistractionAppRef = useRef(null)
   const activeDistractionSinceRef = useRef(null)
   const activeFocusAppRef       = useRef(null)
@@ -921,6 +884,7 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const currentStreakRef     = useRef(0)
   const timelineSnapshotsRef = useRef([])
   const distractionLogRef    = useRef([]) // [{second, reason}]
+  const activityAlignmentRef = useRef(emptyActivityAlignmentSummary())
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
   const focusPhaseTransitionsRef = useRef([])
@@ -995,6 +959,10 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   useEffect(() => {
     focusModeEnabledRef.current = focusModeEnabled
   }, [focusModeEnabled])
+
+  useEffect(() => {
+    sessionIntentRef.current = sessionIntent
+  }, [sessionIntent])
 
   useEffect(() => {
     timeLeftRef.current = timeLeft
@@ -1129,6 +1097,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       finalScore:           Math.round(focusScoreRef.current),
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
+      sessionIntent:        sessionIntentRef.current,
+      activityAlignment:    {
+        secondsByKind: { ...activityAlignmentRef.current.secondsByKind },
+        byActivity: { ...activityAlignmentRef.current.byActivity },
+        events: [...activityAlignmentRef.current.events],
+      },
       focusPhases: {
         seconds: focusPhaseSeconds,
         dominant: dominantFocusPhase,
@@ -1386,11 +1360,20 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
     }
 
     const activityConnected = isActivityConnected()
-    const activityClassification = classifyActivity(activityRef.current, focusAppsConfigRef.current, activityConnected)
+    const activityClassification = classifyGoalAwareActivity(
+      activityRef.current,
+      focusAppsConfigRef.current,
+      activityConnected,
+      sessionIntentRef.current
+    )
     const activityScoringEnabled = focusModeEnabledRef.current
-    const activityIsFocus = activityScoringEnabled && activityClassification.kind === 'focus'
-    const activityIsDistraction = activityScoringEnabled && activityClassification.kind === 'distraction'
-    const activeActivityKey = activityClassification.domain || activityClassification.app.toLowerCase()
+    const activityIsFocus = activityScoringEnabled &&
+      (activityClassification.kind === 'aligned' || activityClassification.kind === 'supportive')
+    const activityIsDistraction = activityScoringEnabled &&
+      (activityClassification.kind === 'blocked' || activityClassification.kind === 'distraction')
+    const activeActivityKey = activityClassification.domain ||
+      activityClassification.app.toLowerCase() ||
+      activityClassification.label
 
     if (activityIsFocus) {
       if (activeFocusAppRef.current !== activeActivityKey) {
@@ -1941,14 +1924,36 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
       }
 
       if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
+        const activityClassification = classifyGoalAwareActivity(
+          activityRef.current,
+          focusAppsConfigRef.current,
+          isActivityConnected(),
+          sessionIntentRef.current
+        )
         timelineSnapshotsRef.current.push({
           second: elapsedSecs,
           score: Math.round(focusScoreRef.current),
           focused,
           preDrift: preDriftRiskRef.current.active,
           phase: nextFocusPhase,
+          activity: {
+            kind: activityClassification.kind,
+            label: activityClassification.label,
+            basis: activityClassification.basis,
+          },
         })
       }
+
+      activityAlignmentRef.current = recordActivityAlignment(
+        activityAlignmentRef.current,
+        classifyGoalAwareActivity(
+          activityRef.current,
+          focusAppsConfigRef.current,
+          isActivityConnected(),
+          sessionIntentRef.current
+        ),
+        elapsedSecs
+      )
 
       // Break reminders at 25min (1500s), 50min (3000s), 90min (5400s)
       const breakMins = [25, 50, 90]
@@ -2012,7 +2017,12 @@ export default function SessionScreen({ task, duration, devices = [], focusModeE
   const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
   const showStreak = !isCalibrating && currentStreak > 30
   const activityConnected = isActivityConnected()
-  const activityClassification = classifyActivity(activityStatus, focusAppsConfigRef.current, activityConnected)
+  const activityClassification = classifyGoalAwareActivity(
+    activityStatus,
+    focusAppsConfigRef.current,
+    activityConnected,
+    sessionIntent
+  )
 
   const dismissBreak = () => {
     if (breakBanner) {
