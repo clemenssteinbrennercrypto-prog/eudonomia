@@ -105,6 +105,89 @@ const FOCUS_PHASES = {
   drift:    { label: 'Drift',    tone: '#ef4444' },
 }
 
+const PHASE_INTERVENTION_POLICY = {
+  arrival: {
+    alertDelayMult: 1.35,
+    gentleDelayMs: 90_000,
+    preDriftNudge: false,
+    cue: 'Settle in before the system gets strict.',
+  },
+  ramp: {
+    alertDelayMult: 0.8,
+    gentleDelayMs: 35_000,
+    preDriftNudge: true,
+    cue: 'Protect the ramp: close the detour now.',
+  },
+  lock_in: {
+    alertDelayMult: 1.25,
+    gentleDelayMs: 150_000,
+    preDriftNudge: false,
+    cue: 'Lock-in is stable; only major breaks interrupt it.',
+  },
+  fade: {
+    alertDelayMult: 0.85,
+    gentleDelayMs: 30_000,
+    preDriftNudge: true,
+    cue: 'Fade is starting. Reset posture or close the off-goal window.',
+  },
+  recovery: {
+    alertDelayMult: 1.4,
+    gentleDelayMs: 90_000,
+    preDriftNudge: false,
+    cue: 'Recover deliberately: one clean minute back on task.',
+  },
+  drift: {
+    alertDelayMult: 0.75,
+    gentleDelayMs: 25_000,
+    preDriftNudge: true,
+    cue: 'Drift is active. Switch back or pause the session.',
+  },
+}
+
+const PHASE_ALERT_COPY = {
+  arrival: {
+    default: { text: 'Settle back into the session.', sub: 'Take one clean minute on the intended task' },
+    distraction_app: { text: 'Start on the intended work.', sub: 'Close the detour before the ramp begins' },
+    phone: { text: 'Put the phone down.', sub: 'Set the workspace before focus starts' },
+  },
+  ramp: {
+    default: { text: 'Catch this drift now.', sub: 'The ramp is where focus either locks in or slips' },
+    distraction_app: { text: 'Switch back now.', sub: 'Protect the ramp before the detour becomes the session' },
+    away: { text: 'Back to the work.', sub: 'The ramp needs a clean minute' },
+  },
+  lock_in: {
+    default: { text: 'Brief reset, then return.', sub: 'You were in lock-in; keep the interruption small' },
+    distraction_app: { text: 'Close the interruption.', sub: 'Preserve the lock-in block' },
+    yawn: { text: 'Take a real break.', sub: 'Lock-in is fading into fatigue' },
+    prolonged: { text: 'Take a real break.', sub: 'Rest your eyes before continuing' },
+  },
+  fade: {
+    default: { text: 'Reset before this becomes drift.', sub: 'Stand up, breathe, or simplify the next step' },
+    distraction_app: { text: 'Close the off-goal window.', sub: 'Fade is turning into a detour' },
+    lookingup: { text: 'Name the next action.', sub: 'Make the task smaller and restart' },
+  },
+  recovery: {
+    default: { text: 'Recover cleanly.', sub: 'One minute back on task before pushing harder' },
+    distraction_app: { text: 'Return to the recovery task.', sub: 'Do not stack another detour on the break' },
+    phone: { text: 'Put the phone away.', sub: 'Recovery needs fewer inputs, not more' },
+  },
+  drift: {
+    default: { text: 'Pause or switch back.', sub: 'The session has left productive focus' },
+    distraction_app: { text: 'Switch back or end the session.', sub: 'This is now active drift' },
+    away: { text: 'Return or pause.', sub: 'Do not leave the timer running unattended' },
+  },
+}
+
+function getPhasePolicy(phase) {
+  return PHASE_INTERVENTION_POLICY[phase] || PHASE_INTERVENTION_POLICY.arrival
+}
+
+function getPhaseAlertMessage(reason, phase) {
+  const base = ALERT_MESSAGES[reason] ?? ALERT_MESSAGES.default
+  const phaseCopy = PHASE_ALERT_COPY[phase]?.[reason] || PHASE_ALERT_COPY[phase]?.default
+  return phaseCopy ? { ...base, ...phaseCopy } : base
+}
+
 // ── Circadian thresholds ───────────────────────────────────────────────────────
 // Research: post-lunch dip 13:00–15:00 (Monk 2005); night fatigue 23:00–06:00 (Czeisler 1999)
 // We lenient-shift PROLONGED_CLOSE_MS and ALERT delay in these windows.
@@ -805,6 +888,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const [breakBanner,     setBreakBanner]     = useState(null) // {msg, id}
   const [dismissedBreaks, setDismissedBreaks] = useState(new Set())
   const [milestone,       setMilestone]       = useState(null) // {msg}
+  const [phaseCue,        setPhaseCue]        = useState(null) // {msg, phase}
   const [inFlowState,     setInFlowState]     = useState(false)
   const [preDriftRisk,    setPreDriftRisk]    = useState({ active: false, level: 0, reason: 'stable' })
   const [focusPhase,      setFocusPhase]      = useState('arrival')
@@ -859,6 +943,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const lastNoAlertCheckRef    = useRef(0)   // timestamp of last no-alert check
   const distractedSinceRef     = useRef(null)
   const lastGentleReminderRef  = useRef(0)
+  const lastPhaseCueRef        = useRef(0)
   const preDriftRiskRef        = useRef({ active: false, level: 0, reason: 'stable' })
   const preDriftChargeMsRef    = useRef(0)
   const activityRef            = useRef(getLastActivity())
@@ -888,6 +973,12 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
   const focusPhaseTransitionsRef = useRef([])
+  const phaseInterventionRef = useRef({
+    gentleReminders: 0,
+    preDriftNudges: 0,
+    alertsByPhase: {},
+    log: [],
+  })
 
   // ── Personal EAR baseline refs ───────────────────────────────────────────
   const earBaselineRef      = useRef(0.28) // fallback default
@@ -1102,6 +1193,12 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         secondsByKind: { ...activityAlignmentRef.current.secondsByKind },
         byActivity: { ...activityAlignmentRef.current.byActivity },
         events: [...activityAlignmentRef.current.events],
+      },
+      phaseInterventions: {
+        gentleReminders: phaseInterventionRef.current.gentleReminders,
+        preDriftNudges: phaseInterventionRef.current.preDriftNudges,
+        alertsByPhase: { ...phaseInterventionRef.current.alertsByPhase },
+        log: [...phaseInterventionRef.current.log],
       },
       focusPhases: {
         seconds: focusPhaseSeconds,
@@ -1742,6 +1839,8 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     // ── Circadian-adjusted alert delay ────────────────────────────────────
     const circFactor      = getCircadianFactor()
     const adjustedAlertMs = alertDelayMs * circFactor  // tired hours (< 1.0) → alert fires sooner
+    const currentPhase = focusPhaseRef.current
+    const phasePolicy = getPhasePolicy(currentPhase)
 
     // Score dipped below 55 = mark latest distraction timestamp (reset on each new dip)
     // This ensures the recovery ramp is measured from the MOST RECENT distraction,
@@ -1750,7 +1849,33 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       lastDistractionRef.current = now
     }
 
-    const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current
+    const adaptedAlertMs = adjustedAlertMs * adaptiveAlertMultRef.current * phasePolicy.alertDelayMult
+
+    if (
+      preDriftActive &&
+      phasePolicy.preDriftNudge &&
+      gentleReminderEnabledRef.current &&
+      !trackingUncertain &&
+      !overlayActiveRef.current &&
+      (now - lastPhaseCueRef.current) >= GENTLE_REMINDER_COOLDOWN_MS &&
+      (now - lastGentleReminderRef.current) >= GENTLE_REMINDER_COOLDOWN_MS
+    ) {
+      const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
+      lastPhaseCueRef.current = now
+      lastGentleReminderRef.current = now
+      phaseInterventionRef.current.preDriftNudges += 1
+      phaseInterventionRef.current.log.push({
+        second: elapsedSecs,
+        type: 'pre_drift_nudge',
+        phase: currentPhase,
+        reason: preDriftRiskRef.current.reason,
+      })
+      setPhaseCue({ msg: phasePolicy.cue, phase: currentPhase })
+      setTimeout(() => {
+        setPhaseCue(cue => cue?.phase === currentPhase && cue?.msg === phasePolicy.cue ? null : cue)
+      }, 8000)
+      playGentleReminderSound()
+    }
 
     // ── Gentle reminder: earlier, optional nudge before the severe overlay ─
     if (newStatus !== 'focused') {
@@ -1765,12 +1890,20 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       if (
         gentleReminderEnabledRef.current &&
         !trackingUncertain &&
-        distractedFor >= GENTLE_REMINDER_DELAY_MS &&
+        distractedFor >= Math.max(5_000, phasePolicy.gentleDelayMs || GENTLE_REMINDER_DELAY_MS) &&
         gentleCooldownOk &&
         !overlayActiveRef.current &&
         !severeAlertSoon
       ) {
+        const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
         lastGentleReminderRef.current = now
+        phaseInterventionRef.current.gentleReminders += 1
+        phaseInterventionRef.current.log.push({
+          second: elapsedSecs,
+          type: 'gentle_reminder',
+          phase: currentPhase,
+          reason: primaryReason,
+        })
         playGentleReminderSound()
       }
     } else {
@@ -1797,7 +1930,15 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           adaptiveAlertMultRef.current = Math.min(1.5, adaptiveAlertMultRef.current * 1.5)
         }
         const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
-        distractionLogRef.current.push({ second: elapsedSecs, reason: primaryReason })
+        phaseInterventionRef.current.alertsByPhase[currentPhase] =
+          (phaseInterventionRef.current.alertsByPhase[currentPhase] || 0) + 1
+        phaseInterventionRef.current.log.push({
+          second: elapsedSecs,
+          type: 'alert',
+          phase: currentPhase,
+          reason: primaryReason,
+        })
+        distractionLogRef.current.push({ second: elapsedSecs, reason: primaryReason, phase: currentPhase })
         setAlertReason(primaryReason)
         setShowOverlay(true)
         playAlertSound()
@@ -2021,7 +2162,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey) }
   }, [])
 
-  const overlayMsg = ALERT_MESSAGES[alertReason] ?? ALERT_MESSAGES.default
+  const overlayMsg = getPhaseAlertMessage(alertReason, focusPhase)
   const showStreak = !isCalibrating && currentStreak > 30
   const activityConnected = isActivityConnected()
   const activityClassification = classifyGoalAwareActivity(
@@ -2126,6 +2267,28 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
               color: '#6b7280', fontSize: 16, lineHeight: 1, padding: 0,
             }}
           >×</button>
+        </div>
+      )}
+
+      {phaseCue && !showOverlay && (
+        <div style={{
+          position: 'fixed',
+          top: breakBanner && !dismissedBreaks.has(breakBanner.id) ? 86 : 40,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 21,
+          background: '#1C1F28',
+          border: `1px solid ${(FOCUS_PHASES[phaseCue.phase]?.tone || '#fbbf24')}66`,
+          borderRadius: 100,
+          padding: '8px 18px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+          fontSize: 13,
+          fontWeight: 700,
+          color: FOCUS_PHASES[phaseCue.phase]?.tone || '#fbbf24',
+          pointerEvents: 'none',
+          animation: 'milestoneSlide 0.4s ease',
+        }}>
+          {phaseCue.msg}
         </div>
       )}
 

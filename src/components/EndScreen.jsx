@@ -62,6 +62,15 @@ const ACTIVITY_KIND_COLORS = {
   distraction: '#f97316',
 }
 
+const PHASE_COLORS = {
+  arrival: '#38bdf8',
+  ramp: '#22c55e',
+  lock_in: '#a78bfa',
+  fade: '#f59e0b',
+  recovery: '#fb7185',
+  drift: '#ef4444',
+}
+
 function countBy(items, getKey) {
   return items.reduce((acc, item) => {
     const key = getKey(item)
@@ -90,7 +99,66 @@ function getLowestStretch(timeline = []) {
   return best
 }
 
-function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment }) {
+function makeRecommendations({
+  focusPct,
+  actualSeconds,
+  phaseSeconds,
+  alignment,
+  preDriftEvents,
+  preDriftSeconds,
+  topDistraction,
+  lowestStretch,
+  phaseInterventions,
+}) {
+  const recommendations = []
+  const phaseTotal = Object.values(phaseSeconds || {}).reduce((sum, seconds) => sum + seconds, 0)
+  const pct = (phase) => phaseTotal > 0 ? ((phaseSeconds[phase] || 0) / phaseTotal) * 100 : 0
+  const fadeDriftSeconds = (phaseSeconds.fade || 0) + (phaseSeconds.drift || 0)
+  const recoverySeconds = phaseSeconds.recovery || 0
+  const lockInSeconds = phaseSeconds.lock_in || 0
+  const rampSeconds = phaseSeconds.ramp || 0
+  const interventionCount = (phaseInterventions?.gentleReminders || 0) + (phaseInterventions?.preDriftNudges || 0)
+
+  if (actualSeconds < 180) {
+    recommendations.push('Run at least 5 minutes next time; the phase read is too short to tune behavior confidently.')
+  } else if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) {
+    recommendations.push('Tighten the task wording or focus-app list before starting; the largest leak was app/site drift away from the stated aim.')
+  } else if ((phaseSeconds.arrival || 0) > 120 && rampSeconds < 60) {
+    recommendations.push('Start with a smaller first action. The session spent too long arriving and did not build a stable ramp.')
+  }
+
+  if (preDriftEvents >= 2 || preDriftSeconds >= 45) {
+    recommendations.push('Treat the first drift-risk cue as the intervention point: close the detour, straighten posture, or name the next action before a full alert is needed.')
+  }
+  if (pct('lock_in') >= 35 && fadeDriftSeconds < 60) {
+    recommendations.push('Repeat this setup. Lock-in held without much fade, so keep the same duration and workspace rules.')
+  } else if (lockInSeconds >= 90 && fadeDriftSeconds >= 90) {
+    recommendations.push('End or break sooner after lock-in drops. The useful block happened, then the tail started costing focus.')
+  }
+  if (recoverySeconds >= 120) {
+    recommendations.push('After an alert, use one deliberate recovery minute before pushing on; repeated recovery time suggests the session restarted too noisily.')
+  }
+  if (topDistraction?.[0] === 'distraction_app') {
+    recommendations.push('Add the repeated off-goal app/site to blockers or narrow allowed apps for this task type.')
+  } else if (topDistraction?.[0] === 'phone') {
+    recommendations.push('Move the phone out of reach before starting; phone checks were strong enough to break the session state.')
+  } else if (topDistraction?.[0] === 'yawn' || topDistraction?.[0] === 'prolonged') {
+    recommendations.push('Use a shorter session or take a real break first; fatigue signals drove the interruptions.')
+  }
+  if (lowestStretch && lowestStretch.avg < 55 && fadeDriftSeconds < 60 && alignment.driftPct < 20) {
+    recommendations.push(`Watch the ${fmtSecond(lowestStretch.start)}-${fmtSecond(lowestStretch.end)} zone next time; attention dipped there without a clear app/site cause.`)
+  }
+  if (interventionCount > 0 && preDriftEvents === 0 && focusPct >= 70) {
+    recommendations.push('Keep gentle reminders on. The session recovered through light nudges without escalating into drift-risk windows.')
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push('Keep the same structure next time; no single phase, alert reason, or alignment leak dominated the session.')
+  }
+  return recommendations.slice(0, 3)
+}
+
+function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions }) {
   const phaseSeconds = focusPhases?.seconds || countBy(timeline, pt => pt.phase)
   const dominantPhase = focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
   const topDistraction = dominantEntry(countBy(distractionLog, ev => ev.reason))
@@ -140,7 +208,19 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
     notes.push('No major drift pattern stood out; the timeline stayed relatively stable.')
   }
 
-  return { headline, notes: notes.slice(0, 5), dominantPhase, phaseSeconds, alignment }
+  const recommendations = makeRecommendations({
+    focusPct,
+    actualSeconds,
+    phaseSeconds,
+    alignment,
+    preDriftEvents,
+    preDriftSeconds,
+    topDistraction,
+    lowestStretch,
+    phaseInterventions,
+  })
+
+  return { headline, notes: notes.slice(0, 5), recommendations, dominantPhase, phaseSeconds, alignment }
 }
 
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
@@ -162,6 +242,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     focusPhases          = null,
     sessionIntent        = null,
     activityAlignment    = null,
+    phaseInterventions   = null,
   } = sessionData
 
   const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
@@ -174,7 +255,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     preDriftSeconds,
     focusPhases,
     activityAlignment,
-  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment])
+    phaseInterventions,
+  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions])
   const [goalAchieved, setGoalAchieved] = useState(null)
 
   // Personal best detection
@@ -259,11 +341,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                 const g = Math.round(68 + (197 - 68) * (s / 100))
                 const b = Math.round(68 - (68 - 94) * (s / 100))
                 const color = `rgb(${r},${g},${b})`
+                const phaseColor = PHASE_COLORS[pt.phase] || '#9ca3af'
+                const activityKind = pt.activity?.kind
+                const titleParts = [
+                  `${fmtSecond(pt.second || 0)}: ${s}% focus`,
+                  pt.phase ? `Phase: ${PHASE_LABELS[pt.phase] || pt.phase}` : null,
+                  pt.preDrift ? 'Drift risk active' : null,
+                  activityKind ? `Activity: ${ACTIVITY_KIND_LABELS[activityKind] || activityKind}` : null,
+                ].filter(Boolean)
                 return (
                   <div key={i} style={{
                     flex: 1, background: color, minWidth: 1,
+                    borderBottom: `3px solid ${phaseColor}`,
+                    opacity: pt.preDrift ? 0.62 : 1,
                     borderRadius: i === 0 ? '6px 0 0 6px' : i === timeline.length - 1 ? '0 6px 6px 0' : 0,
-                  }} />
+                  }} title={titleParts.join(' | ')} />
                 )
               })}
             </div>
@@ -352,25 +444,31 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                 </p>
               ))}
             </div>
+            {debrief.recommendations.length > 0 && (
+              <div style={{ marginTop: 14, borderTop: '1px solid #f3f4f6', paddingTop: 14 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#4b5563', margin: '0 0 8px' }}>
+                  Next session
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {debrief.recommendations.map((recommendation, i) => (
+                    <p key={i} style={{ fontSize: 13, color: '#374151', lineHeight: 1.45, margin: 0 }}>
+                      {recommendation}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
             {Object.values(debrief.phaseSeconds).some(seconds => seconds > 0) && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
                   {Object.entries(debrief.phaseSeconds)
                     .filter(([, seconds]) => seconds > 0)
                     .map(([phase, seconds]) => {
-                      const colors = {
-                        arrival: '#38bdf8',
-                        ramp: '#22c55e',
-                        lock_in: '#a78bfa',
-                        fade: '#f59e0b',
-                        recovery: '#fb7185',
-                        drift: '#ef4444',
-                      }
                       return (
                         <div
                           key={phase}
                           title={`${PHASE_LABELS[phase] || phase}: ${fmt(seconds)}`}
-                          style={{ flex: seconds, minWidth: 2, background: colors[phase] || '#9ca3af' }}
+                          style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || '#9ca3af' }}
                         />
                       )
                     })}

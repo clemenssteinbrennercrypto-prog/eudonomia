@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
+import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
 // ── Month Calendar ─────────────────────────────────────────────────────────────
 function MonthCalendar({ sessions, onDayClick, selectedDay }) {
@@ -143,6 +144,44 @@ function motivational(pct) {
   return 'Keep going'
 }
 
+const PHASE_LABELS = {
+  arrival: 'Arrival',
+  ramp: 'Ramp',
+  lock_in: 'Lock-in',
+  fade: 'Fade',
+  recovery: 'Recovery',
+  drift: 'Drift',
+}
+
+const PHASE_COLORS = {
+  arrival: '#38bdf8',
+  ramp: '#22c55e',
+  lock_in: '#a78bfa',
+  fade: '#f59e0b',
+  recovery: '#fb7185',
+  drift: '#ef4444',
+}
+
+function dominantEntry(counts = {}) {
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || null
+}
+
+function phaseInsight(session, focusPct) {
+  const phaseSeconds = session.focusPhases?.seconds || {}
+  const dominant = session.focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
+  const fadeDrift = (phaseSeconds.fade || 0) + (phaseSeconds.drift || 0)
+  const lockIn = phaseSeconds.lock_in || 0
+  const alignment = summarizeSessionAlignment(session.activityAlignment, session.actualSeconds || 0)
+  if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) {
+    return `Goal drift: ${alignment.driftPct}% off-goal or blocked activity.`
+  }
+  if (lockIn >= 90 && fadeDrift < 60) return `Clean lock-in: ${fmt(lockIn)} with little fade.`
+  if (fadeDrift >= 90) return `Fade/drift tail: ${fmt(fadeDrift)} below stable focus.`
+  if ((session.preDriftEvents || 0) > 0) return `${session.preDriftEvents} drift-risk cue${session.preDriftEvents === 1 ? '' : 's'} before full alerts.`
+  if (dominant) return `Mostly ${PHASE_LABELS[dominant] || dominant.toLowerCase()} phase.`
+  return focusPct >= 70 ? 'Stable session shape.' : 'No strong phase pattern saved.'
+}
+
 // ── Mini timeline bar ─────────────────────────────────────────────────────────
 function MiniTimeline({ timeline }) {
   if (!timeline?.length) return null
@@ -158,6 +197,8 @@ function MiniTimeline({ timeline }) {
           <div key={i} style={{
             flex: 1, minWidth: 1,
             background: color,
+            borderBottom: pt.phase ? `2px solid ${PHASE_COLORS[pt.phase] || '#9ca3af'}` : 'none',
+            opacity: pt.preDrift ? 0.6 : 1,
           }} />
         )
       })}
@@ -319,6 +360,10 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
         {session.completed && <span style={{ color: '#22c55e' }}>Completed</span>}
       </div>
 
+      <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0', lineHeight: 1.4 }}>
+        {phaseInsight(session, focusPct)}
+      </p>
+
       <MiniTimeline timeline={session.timeline} />
 
       {/* Tags */}
@@ -423,6 +468,34 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
           {/* Session note */}
           <SessionNote session={session} onNoteUpdate={onNoteUpdate} />
 
+          {session.focusPhases?.seconds && Object.values(session.focusPhases.seconds).some(seconds => seconds > 0) && (
+            <div style={{ marginTop: 20 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Phase shape
+              </p>
+              <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+                {Object.entries(session.focusPhases.seconds)
+                  .filter(([, seconds]) => seconds > 0)
+                  .map(([phase, seconds]) => (
+                    <div
+                      key={phase}
+                      title={`${PHASE_LABELS[phase] || phase}: ${fmt(seconds)}`}
+                      style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || '#9ca3af' }}
+                    />
+                  ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: 8 }}>
+                {Object.entries(session.focusPhases.seconds)
+                  .filter(([, seconds]) => seconds > 0)
+                  .map(([phase, seconds]) => (
+                    <span key={phase} style={{ fontSize: 11, color: '#6b7280' }}>
+                      {PHASE_LABELS[phase] || phase}: {fmt(seconds)}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* Full timeline */}
           {session.timeline?.length > 0 && (
             <div style={{ marginTop: 20 }}>
@@ -440,7 +513,14 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
                     <div key={i} style={{
                       flex: 1, minWidth: 2,
                       background: color,
-                    }} />
+                      borderBottom: pt.phase ? `3px solid ${PHASE_COLORS[pt.phase] || '#9ca3af'}` : 'none',
+                      opacity: pt.preDrift ? 0.6 : 1,
+                    }} title={[
+                      `${fmt(pt.second || 0)}: ${s}% focus`,
+                      pt.phase ? `Phase: ${PHASE_LABELS[pt.phase] || pt.phase}` : null,
+                      pt.preDrift ? 'Drift risk active' : null,
+                      pt.activity?.kind ? `Activity: ${pt.activity.kind}` : null,
+                    ].filter(Boolean).join(' | ')} />
                   )
                 })}
               </div>
