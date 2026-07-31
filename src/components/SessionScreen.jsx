@@ -122,6 +122,8 @@ const PRE_DRIFT_HOLD_MS             = 10_000
 const PRE_DRIFT_DECAY_MULT          = 2.5
 const PRE_DRIFT_MAX_MS              = 30_000
 const RECOVERY_WINDOW_MS            = 120_000
+const RAMP_STREAK_SECS              = 20   // unbroken seconds at/above the focused threshold → Ramp
+const LOCK_IN_STREAK_SECS           = 240  // …and 4 min of it → Lock-in
 
 const FOCUS_PHASES = {
   arrival:  { label: 'Arrival',  tone: '#38bdf8' },
@@ -325,10 +327,15 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, value))
 }
 
+// Phases are driven by goodStreakSecs — how long the (smoothed) score has held
+// at/above the 'focused' threshold — NOT by sustainedGoodMsRef. That accumulator
+// only grows while the RAW score is >= 72 and decays at 3x, so from a base of 68
+// any small dip wiped it out: it effectively never reached the 15s this used to
+// require, and every phase fell through to 'arrival' for the whole session.
 function classifyFocusPhase({
   elapsedSecs,
   score,
-  sustainedGoodMs,
+  goodStreakSecs,
   msSinceDistraction,
   preDriftActive,
   inFlow,
@@ -336,10 +343,10 @@ function classifyFocusPhase({
   if (score < 40) return 'drift'
   if (msSinceDistraction < RECOVERY_WINDOW_MS) return 'recovery'
   if (preDriftActive || (score >= 55 && score < 65)) return 'fade'
-  if (inFlow || (score >= 78 && sustainedGoodMs >= 90_000)) return 'lock_in'
-  if (score >= 65 && sustainedGoodMs >= 15_000) return 'ramp'
+  if (inFlow || goodStreakSecs >= LOCK_IN_STREAK_SECS) return 'lock_in'
+  if (goodStreakSecs >= RAMP_STREAK_SECS) return 'ramp'
   if (elapsedSecs < CALIBRATION_SECS + 90) return 'arrival'
-  return score >= 72 ? 'ramp' : 'arrival'
+  return score >= 65 ? 'ramp' : 'arrival'
 }
 
 function classifyDownwardAttention(devices = [], pitchDeg = 0, yawSigned = 0) {
@@ -1002,6 +1009,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const timelineSnapshotsRef = useRef([])
   const distractionLogRef    = useRef([]) // [{second, reason}]
   const activityAlignmentRef = useRef(emptyActivityAlignmentSummary())
+  const goodStreakSecsRef    = useRef(0)   // unbroken seconds at/above the focused threshold
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
   const focusPhaseTransitionsRef = useRef([])
@@ -2134,8 +2142,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       // camera busy, unplugged mid-session, blocked CDN, MediaPipe crash.
       const lastFrame = lastFrameAtRef.current
       const frameGapMs = now - (lastFrame || startTimeRef.current)
-      if (cameraFaultRef.current === 'stalled' && lastFrame && frameGapMs < CAMERA_STALL_MS) {
-        cameraFaultRef.current = null            // frames came back — self-heal
+      const healable = cameraFaultRef.current === 'stalled' || cameraFaultRef.current === 'no_frames'
+      if (healable && lastFrame && frameGapMs < CAMERA_STALL_MS) {
+        cameraFaultRef.current = null            // frames arrived — self-heal
         setCameraFault(null)
       } else if (!cameraFaultRef.current && frameGapMs > CAMERA_STALL_MS) {
         // Never received a single frame = tracking never started (e.g. the
@@ -2148,6 +2157,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       if (cameraFaultRef.current) {
         // No trustworthy signal: never accumulate focus/streak/phase/timeline
         // stats. The timer above keeps running so the user can end the session.
+        goodStreakSecsRef.current = 0        // don't let a streak survive a blackout (R4)
         if (currentStreakRef.current !== 0) {
           currentStreakRef.current = 0
           setCurrentStreak(0)
@@ -2186,10 +2196,13 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
       const roundedScore = Math.round(focusScoreRef.current)
       const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
+      // Unbroken run at/above the 'focused' threshold — the phase driver.
+      if (roundedScore >= 65) goodStreakSecsRef.current += 1
+      else goodStreakSecsRef.current = 0
       const nextFocusPhase = classifyFocusPhase({
         elapsedSecs,
         score: roundedScore,
-        sustainedGoodMs: sustainedGoodMsRef.current,
+        goodStreakSecs: goodStreakSecsRef.current,
         msSinceDistraction,
         preDriftActive: preDriftRiskRef.current.active,
         inFlow: inFlowRef.current,
