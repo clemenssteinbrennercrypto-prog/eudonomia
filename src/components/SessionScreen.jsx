@@ -83,6 +83,8 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 const IRIS_OFF_H             = 0.07   // eye deflection past neutral = off-screen (live data: neutral ~0.00, full look-away ~0.10)
 const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
 const CAMERA_STALL_MS        = 10_000 // no camera frame for this long = pipeline fault (generous: MediaPipe WASM cold-start)
+const CAMERA_RECOVER_MS      = 3_000  // frames stopped AFTER having flowed = try rebuilding the pipeline (sleep/wake)
+const CAMERA_RECOVER_TRIES   = 3      // silent rebuild attempts before surfacing a fault
 const CAMERA_FAULT_COPY = {
   permission: {
     title: 'Eudaimonia can’t see your camera',
@@ -909,7 +911,8 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const [camHidden,       setCamHidden]       = useState(false)
   const [camSize,         setCamSize]         = useState('full') // 'full' | 'mini'
   const [isPaused,        setIsPaused]        = useState(false)
-  const [cameraFault,     setCameraFault]     = useState(null) // null | 'permission' | 'busy' | 'no_camera' | 'library' | 'stalled'
+  const [cameraFault,     setCameraFault]     = useState(null) // null | 'permission' | 'busy' | 'no_camera' | 'library' | 'stalled' | 'no_frames'
+  const [cameraEpoch,     setCameraEpoch]     = useState(0)    // bump = tear down and rebuild the camera pipeline
   const [isCalibrating,   setIsCalibrating]   = useState(true)
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
   const [showReady,       setShowReady]       = useState(false) // brief "Ready" flash
@@ -966,6 +969,8 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const focusScoreRef          = useRef(68)
   const lastFrameAtRef         = useRef(0)     // last time the camera pipeline delivered a frame
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
+  const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
+  const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
   const scoreLowSinceRef       = useRef(null)
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
@@ -1122,6 +1127,43 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     }
     return true
   }, [])
+
+  // Rebuild the whole camera pipeline. macOS suspends the webcam when the lid
+  // closes, which permanently ends the MediaStream track — MediaPipe keeps
+  // requesting frames from a dead stream and never recovers on its own, so the
+  // app appeared broken until it was fully restarted and re-permitted.
+  const restartCamera = useCallback((manual = false) => {
+    const now = Date.now()
+    if (!manual && now - lastRecoverAtRef.current < CAMERA_RECOVER_MS) return
+    lastRecoverAtRef.current = now
+    cameraRecoverTriesRef.current = manual ? 0 : cameraRecoverTriesRef.current + 1
+    // Give the new pipeline a fresh grace period before the stall check judges it.
+    lastFrameAtRef.current = now
+    if (manual) {
+      cameraFaultRef.current = null
+      setCameraFault(null)
+    }
+    setCameraEpoch(e => e + 1)
+  }, [])
+
+  // Waking from sleep (or refocusing the window) is the moment to rebuild.
+  useEffect(() => {
+    const onWake = () => {
+      if (document.visibilityState !== 'visible') return
+      if (sessionEndedRef.current) return
+      const lastFrame = lastFrameAtRef.current
+      if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
+        cameraRecoverTriesRef.current = 0   // a fresh wake deserves fresh attempts
+        restartCamera()
+      }
+    }
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('focus', onWake)
+    return () => {
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('focus', onWake)
+    }
+  }, [restartCamera])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
@@ -2118,7 +2160,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       try { camera.stop() } catch {}
       faceMesh.close?.()
     }
-  }, [handleFaceResults])
+    // cameraEpoch is the restart trigger: bumping it tears this down and
+    // rebuilds a fresh FaceMesh + Camera against a live MediaStream.
+  }, [handleFaceResults, cameraEpoch])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
@@ -2144,9 +2188,19 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       const lastFrame = lastFrameAtRef.current
       const frameGapMs = now - (lastFrame || startTimeRef.current)
       const healable = cameraFaultRef.current === 'stalled' || cameraFaultRef.current === 'no_frames'
+      if (lastFrame && frameGapMs < CAMERA_RECOVER_MS) {
+        cameraRecoverTriesRef.current = 0        // frames flowing — attempts reset
+      }
       if (healable && lastFrame && frameGapMs < CAMERA_STALL_MS) {
         cameraFaultRef.current = null            // frames arrived — self-heal
         setCameraFault(null)
+      } else if (
+        !cameraFaultRef.current &&
+        lastFrame &&                             // only once frames HAVE flowed (never mid cold-start)
+        frameGapMs > CAMERA_RECOVER_MS &&
+        cameraRecoverTriesRef.current < CAMERA_RECOVER_TRIES
+      ) {
+        restartCamera()                          // silent rebuild — the sleep/wake path
       } else if (!cameraFaultRef.current && frameGapMs > CAMERA_STALL_MS) {
         // Never received a single frame = tracking never started (e.g. the
         // MediaPipe model files failed to download); frames that stopped after
@@ -2289,7 +2343,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [])
+  }, [restartCamera])
 
   useEffect(() => {
     if (timeLeft === 0) endSession(true)
@@ -2358,17 +2412,28 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0', maxWidth: 420, lineHeight: 1.6 }}>
             Your focus score is on hold — this time won't be counted as focused.
           </p>
-          <button
-            onClick={() => endSession(false)}
-            style={{
-              marginTop: 8,
-              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 100, padding: '10px 28px',
-              fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
-            }}
-          >
-            End session
-          </button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            <button
+              onClick={() => restartCamera(true)}
+              style={{
+                background: 'rgba(34,197,94,0.14)', border: '1px solid rgba(34,197,94,0.45)',
+                borderRadius: 100, padding: '10px 28px',
+                fontSize: 14, fontWeight: 600, color: '#86efac', cursor: 'pointer',
+              }}
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => endSession(false)}
+              style={{
+                background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 100, padding: '10px 28px',
+                fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
+              }}
+            >
+              End session
+            </button>
+          </div>
         </div>
       )}
       {/* Pause overlay */}
