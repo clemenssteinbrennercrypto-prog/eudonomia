@@ -334,6 +334,72 @@ function clamp01(value) {
 // only grows while the RAW score is >= 72 and decays at 3x, so from a base of 68
 // any small dip wiped it out: it effectively never reached the 15s this used to
 // require, and every phase fell through to 'arrival' for the whole session.
+// ── Camera lifecycle ──────────────────────────────────────────────────────────
+// We own this rather than using MediaPipe's Camera helper, which: pops a raw
+// `alert()` on failure, drives frames off requestAnimationFrame (which STOPS
+// entirely once the page is hidden — i.e. the moment the user switches to the
+// app they're actually working in), and has no way to notice or recover from a
+// dead MediaStream. Owning it gives us instant track-loss events, our own error
+// classification, and a frame pump that survives backgrounding.
+const CAMERA_FRAME_MS = 67   // ~15fps, matching the previous cap
+const MUTE_GRACE_MS   = 1200 // a track can mute briefly; only a sustained mute is a loss
+
+function createCameraController(videoEl, { width, height, onFrame, onTrackLost }) {
+  let stream = null
+  let timer = null
+  let muteTimer = null
+  let stopped = false
+  let inFlight = false
+
+  const pump = () => {
+    if (stopped) return
+    // A timer-driven pump is throttled in a hidden page but never suspended,
+    // unlike rAF; tracking degrades to a lower frame rate instead of stopping.
+    timer = setTimeout(pump, CAMERA_FRAME_MS)
+    if (inFlight || videoEl.readyState < 2) return
+    inFlight = true
+    Promise.resolve(onFrame()).catch(() => {}).finally(() => { inFlight = false })
+  }
+
+  const watchTrack = (track) => {
+    track.addEventListener('ended', () => { if (!stopped) onTrackLost('ended') })
+    track.addEventListener('mute', () => {
+      if (stopped || muteTimer) return
+      muteTimer = setTimeout(() => {
+        muteTimer = null
+        if (!stopped && track.muted) onTrackLost('muted')
+      }, MUTE_GRACE_MS)
+    })
+    track.addEventListener('unmute', () => {
+      if (muteTimer) { clearTimeout(muteTimer); muteTimer = null }
+    })
+  }
+
+  return {
+    async start() {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width, height } })
+      if (stopped) {                       // unmounted while acquiring
+        stream.getTracks().forEach(t => t.stop())
+        stream = null
+        return
+      }
+      videoEl.srcObject = stream
+      stream.getVideoTracks().forEach(watchTrack)
+      try { await videoEl.play() } catch { /* autoplay is muted+inline; pump anyway */ }
+      pump()
+    },
+    stop() {
+      stopped = true
+      if (timer) { clearTimeout(timer); timer = null }
+      if (muteTimer) { clearTimeout(muteTimer); muteTimer = null }
+      try { videoEl.pause() } catch {}
+      if (stream) stream.getTracks().forEach(t => t.stop())
+      if (videoEl.srcObject === stream) videoEl.srcObject = null
+      stream = null
+    },
+  }
+}
+
 function classifyFocusPhase({
   elapsedSecs,
   score,
@@ -2095,10 +2161,11 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!videoRef.current) return
-    // The MediaPipe libs come from a CDN (see index.html). If they're blocked
-    // (offline, firewall, content blocker) this used to return silently and the
-    // session ran on with a frozen default score — surface it instead.
-    if (!window.FaceMesh || !window.Camera) {
+    // FaceMesh comes from a CDN (see index.html). If it's blocked (offline,
+    // firewall, content blocker) this used to return silently and the session
+    // ran on with a frozen default score — surface it instead. We no longer
+    // need MediaPipe's camera_utils at all; we drive the camera ourselves.
+    if (!window.FaceMesh) {
       cameraFaultRef.current = 'library'
       setCameraFault('library')
       return
@@ -2111,18 +2178,6 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
     })
     faceMesh.onResults(handleFaceResults)
-    let lastFrameTime = 0
-    const camera = new window.Camera(videoRef.current, {
-      onFrame: async () => {
-        const now = Date.now()
-        if (now - lastFrameTime < 67) return // ~15fps cap
-        lastFrameTime = now
-        if (videoRef.current && !sessionEndedRef.current) {
-          await faceMesh.send({ image: videoRef.current })
-        }
-      },
-      width: 320, height: 240,
-    })
 
     let cancelled = false
     const faultFor = (err) => {
@@ -2139,30 +2194,28 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       setCameraFault(fault)
     }
 
-    // MediaPipe's Camera helper does `console.error(m); alert(m); throw` when
-    // getUserMedia fails — a raw blocking browser dialog reading
-    // "NotAllowedError" is not what a paying user should meet on first run.
-    // It DOES rethrow, so our own catch below still classifies the failure;
-    // we only need to swallow the dialog. Deliberately NOT pre-flighting the
-    // camera ourselves: acquiring and releasing a stream just before MediaPipe
-    // reacquires it risks a NotReadableError race on real hardware, which would
-    // break working cameras to prettify a failure path.
-    const origAlert = window.alert
-    window.alert = () => {}
-    const restoreAlert = () => { if (window.alert !== origAlert) window.alert = origAlert }
-    Promise.resolve(camera.start())
-      .catch(raiseFault)
-      .finally(restoreAlert)
+    const camera = createCameraController(videoRef.current, {
+      width: 320, height: 240,
+      onFrame: () => {
+        if (cancelled || !videoRef.current || sessionEndedRef.current) return
+        return faceMesh.send({ image: videoRef.current })
+      },
+      // A track that ends or stays muted is dead for good (lid closed, camera
+      // taken by another app, USB unplugged). Rebuild immediately rather than
+      // waiting for the heartbeat to infer it seconds later.
+      onTrackLost: () => { if (!cancelled) restartCamera() },
+    })
+
+    camera.start().catch(raiseFault)
 
     return () => {
       cancelled = true
-      restoreAlert()
-      try { camera.stop() } catch {}
+      camera.stop()
       faceMesh.close?.()
     }
     // cameraEpoch is the restart trigger: bumping it tears this down and
-    // rebuilds a fresh FaceMesh + Camera against a live MediaStream.
-  }, [handleFaceResults, cameraEpoch])
+    // rebuilds a fresh FaceMesh + camera against a live MediaStream.
+  }, [handleFaceResults, cameraEpoch, restartCamera])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {

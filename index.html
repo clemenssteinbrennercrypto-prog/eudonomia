@@ -7,8 +7,10 @@
 
     <meta name="theme-color" content="#1a2e4a" />
 
-    <!-- MediaPipe -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe FaceMesh. camera_utils is deliberately NOT loaded: the app
+         drives the webcam itself (see createCameraController) so it can detect
+         and recover from a dead MediaStream, and never shows MediaPipe's raw
+         alert() dialog on a camera error. -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js" crossorigin="anonymous"></script>
   </head>
   <body>
