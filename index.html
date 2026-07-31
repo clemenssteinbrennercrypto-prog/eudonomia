@@ -7,11 +7,14 @@
 
     <meta name="theme-color" content="#1a2e4a" />
 
-    <!-- MediaPipe FaceMesh. camera_utils is deliberately NOT loaded: the app
-         drives the webcam itself (see createCameraController) so it can detect
-         and recover from a dead MediaStream, and never shows MediaPipe's raw
-         alert() dialog on a camera error. -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe FaceMesh, served from our own origin (copied out of
+         node_modules into public/mediapipe by scripts/copy-mediapipe.mjs).
+         Not a CDN: the app must work offline and behind content blockers, and
+         "nothing leaves your device" has to be true of the model download too.
+         camera_utils is deliberately absent — the app drives the webcam itself
+         (see createCameraController) so it can recover from a dead MediaStream
+         and never shows MediaPipe's raw alert() dialog on a camera error. -->
+    <script src="./mediapipe/face_mesh.js"></script>
   </head>
   <body>
     <div id="root"></div>

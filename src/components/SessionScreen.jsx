@@ -2171,7 +2171,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       return
     }
     const faceMesh = new window.FaceMesh({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${file}`,
+      // Resolved against the document base so the same build works on Vercel and
+      // inside the native app (vite base is './'). Local files, never a CDN.
+      locateFile: (file) => new URL(`mediapipe/${file}`, document.baseURI).href,
     })
     faceMesh.setOptions({
       maxNumFaces: 1, refineLandmarks: true,

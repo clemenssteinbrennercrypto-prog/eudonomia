@@ -7,10 +7,15 @@
 
     <meta name="theme-color" content="#1a2e4a" />
 
-    <!-- MediaPipe -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js" crossorigin="anonymous"></script>
-    <script type="module" crossorigin src="./assets/index-CTUBrFAz.js"></script>
+    <!-- MediaPipe FaceMesh, served from our own origin (copied out of
+         node_modules into public/mediapipe by scripts/copy-mediapipe.mjs).
+         Not a CDN: the app must work offline and behind content blockers, and
+         "nothing leaves your device" has to be true of the model download too.
+         camera_utils is deliberately absent — the app drives the webcam itself
+         (see createCameraController) so it can recover from a dead MediaStream
+         and never shows MediaPipe's raw alert() dialog on a camera error. -->
+    <script src="./mediapipe/face_mesh.js"></script>
+    <script type="module" crossorigin src="./assets/index-vv0ioVEi.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-B4hD9SRr.css">
   </head>
   <body>

@@ -3,3 +3,6 @@ dist/
 .env
 .env.*
 .vercel
+.claude/settings.local.json
+public/mediapipe/
+companion/webui/mediapipe/

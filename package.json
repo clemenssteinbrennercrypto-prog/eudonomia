@@ -8,9 +8,13 @@
     "refresh:companion-webui": "node scripts/refresh-companion-webui.mjs",
     "verify:companion-webui": "node scripts/refresh-companion-webui.mjs --verify",
     "build:companion": "npm run refresh:companion-webui && cd companion/src-tauri && cargo tauri build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mediapipe:copy": "node scripts/copy-mediapipe.mjs",
+    "predev": "node scripts/copy-mediapipe.mjs",
+    "prebuild": "node scripts/copy-mediapipe.mjs"
   },
   "dependencies": {
+    "@mediapipe/face_mesh": "^0.4.1633559619",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

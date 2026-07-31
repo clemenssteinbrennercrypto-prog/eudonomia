@@ -81,6 +81,18 @@ async function verifyWebui(dir) {
     throw new Error('companion webui index does not reference bundled relative CSS assets')
   }
 
+  // The FaceMesh runtime ships inside the app so it works offline. It is copied
+  // out of node_modules at build time and deliberately not committed, so a build
+  // that skipped that step would produce an app whose tracking can never start.
+  // Fail here rather than shipping it.
+  const modelDir = path.join(dir, 'mediapipe')
+  if (!existsSync(path.join(modelDir, 'face_mesh.js'))) {
+    throw new Error('companion webui is missing the bundled mediapipe runtime — run `npm run mediapipe:copy` then rebuild')
+  }
+  if (index.includes('cdn.jsdelivr.net')) {
+    throw new Error('companion webui still loads MediaPipe from a CDN — the app must run offline')
+  }
+
   const info = await readJson(buildInfoPath)
   for (const key of ['version', 'channel', 'buildId', 'sha', 'shortSha', 'builtAt']) {
     if (!info[key]) {
