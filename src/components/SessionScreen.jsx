@@ -2097,23 +2097,24 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       setCameraFault(fault)
     }
 
-    // Pre-flight the camera ourselves before handing off to MediaPipe. Its
-    // Camera helper does `console.error(msg); alert(msg); throw` on failure —
-    // a raw blocking browser dialog reading "NotAllowedError" is not something
-    // to show a paying user on their first run. Acquiring (and immediately
-    // releasing) the stream here means: on failure we never call camera.start(),
-    // so no alert; on success the permission is already granted, so MediaPipe's
-    // own getUserMedia resolves from the same grant and never alerts either.
-    navigator.mediaDevices?.getUserMedia({ video: { width: 320, height: 240 } })
-      .then((stream) => {
-        stream.getTracks().forEach(t => t.stop())   // release before MediaPipe reacquires
-        if (cancelled) return
-        return Promise.resolve(camera.start()).catch(raiseFault)
-      })
+    // MediaPipe's Camera helper does `console.error(m); alert(m); throw` when
+    // getUserMedia fails — a raw blocking browser dialog reading
+    // "NotAllowedError" is not what a paying user should meet on first run.
+    // It DOES rethrow, so our own catch below still classifies the failure;
+    // we only need to swallow the dialog. Deliberately NOT pre-flighting the
+    // camera ourselves: acquiring and releasing a stream just before MediaPipe
+    // reacquires it risks a NotReadableError race on real hardware, which would
+    // break working cameras to prettify a failure path.
+    const origAlert = window.alert
+    window.alert = () => {}
+    const restoreAlert = () => { if (window.alert !== origAlert) window.alert = origAlert }
+    Promise.resolve(camera.start())
       .catch(raiseFault)
+      .finally(restoreAlert)
 
     return () => {
       cancelled = true
+      restoreAlert()
       try { camera.stop() } catch {}
       faceMesh.close?.()
     }
