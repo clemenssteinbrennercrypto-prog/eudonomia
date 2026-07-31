@@ -82,6 +82,33 @@ const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 mi
 // side glance or saccade never triggers a false "distracted".
 const IRIS_OFF_H             = 0.07   // eye deflection past neutral = off-screen (live data: neutral ~0.00, full look-away ~0.10)
 const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
+const CAMERA_STALL_MS        = 10_000 // no camera frame for this long = pipeline fault (generous: MediaPipe WASM cold-start)
+const CAMERA_FAULT_COPY = {
+  permission: {
+    title: 'Eudaimonia can’t see your camera',
+    hint: 'Camera access was blocked. Allow it for this app in your browser or in System Settings → Privacy & Security → Camera, then start a new session.',
+  },
+  busy: {
+    title: 'Your camera is in use by another app',
+    hint: 'Something else (a video call, or another browser tab) is holding the camera. Close it, then start a new session.',
+  },
+  no_camera: {
+    title: 'No camera found',
+    hint: 'Focus tracking needs a webcam. Connect one and start a new session.',
+  },
+  library: {
+    title: 'Face tracking couldn’t load',
+    hint: 'The tracking engine is downloaded on first use and couldn’t be reached — check your internet connection or any content blocker, then reload.',
+  },
+  stalled: {
+    title: 'The camera stopped sending video',
+    hint: 'The camera feed dropped mid-session. Reconnecting it resumes tracking automatically — otherwise close whatever took the camera and start a new session.',
+  },
+  no_frames: {
+    title: 'Face tracking didn’t start',
+    hint: 'The camera was allowed, but the tracking engine never began analysing. It downloads on first use — check your internet connection or any content blocker, then start a new session.',
+  },
+}
 const CONF_UNCERTAIN_MAX     = 0.55   // detection confidence at/below this = tracking unreliable (Stage 2 trust)
 const UNCERTAIN_HOLD_MS      = 700    // sustained low confidence before surfacing "signal weak" (anti-flicker)
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
@@ -875,6 +902,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const [camHidden,       setCamHidden]       = useState(false)
   const [camSize,         setCamSize]         = useState('full') // 'full' | 'mini'
   const [isPaused,        setIsPaused]        = useState(false)
+  const [cameraFault,     setCameraFault]     = useState(null) // null | 'permission' | 'busy' | 'no_camera' | 'library' | 'stalled'
   const [isCalibrating,   setIsCalibrating]   = useState(true)
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
   const [showReady,       setShowReady]       = useState(false) // brief "Ready" flash
@@ -909,6 +937,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   const pausedTotalRef  = useRef(0)    // total ms spent paused
   const timeLeftRef     = useRef(totalSeconds)
   const companionSessionHadActiveRef = useRef(false)
+  const lastActivePushAtRef    = useRef(0)   // when we last told the companion this session is active
 
   // ── Detection rolling buffers ─────────────────────────────────────────────
   const blinkTimestampsRef     = useRef([])
@@ -928,6 +957,8 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   // ── Score & alert refs ────────────────────────────────────────────────────
   const scoreHistoryRef        = useRef([68]) // last 60 score values for sparkline
   const focusScoreRef          = useRef(68)
+  const lastFrameAtRef         = useRef(0)     // last time the camera pipeline delivered a frame
+  const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
   const rawScoreRef            = useRef(68)
   const scoreLowSinceRef       = useRef(null)
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
@@ -1086,6 +1117,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
+    if (active) lastActivePushAtRef.current = Date.now()
     const companionSession = await pushCompanionSession({
       active,
       endTs,
@@ -1168,9 +1200,16 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
     const actualSeconds = Math.round((Date.now() - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     const snapshots = timelineSnapshotsRef.current
-    const avgFocusScore = snapshots.length > 0
+    // A session whose camera never delivered usable frames has no measurement:
+    // focusScoreRef is still sitting at its 68 default. Reporting that as a score
+    // wrote a fabricated "68% focus" into history. Both consumers (HomeScreen,
+    // HistoryDashboard) already treat null as "no score", so say nothing instead
+    // of saying something false.
+    const trackingFaulted = !!cameraFaultRef.current
+    const hasMeasurement = snapshots.length > 0
+    const avgFocusScore = hasMeasurement
       ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
-      : Math.round(focusScoreRef.current)
+      : (trackingFaulted ? null : Math.round(focusScoreRef.current))
     const focusPhaseSeconds = { ...focusPhaseSecondsRef.current }
     const dominantFocusPhase = Object.entries(focusPhaseSeconds)
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
@@ -1186,7 +1225,8 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       longestFocusedStreak: longestStreakRef.current,
       peakFocusStreak:      longestStreakRef.current,
       avgFocusScore,
-      finalScore:           Math.round(focusScoreRef.current),
+      finalScore:           (trackingFaulted && !hasMeasurement) ? null : Math.round(focusScoreRef.current),
+      trackingFaulted,
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
       sessionIntent:        sessionIntentRef.current,
@@ -1215,7 +1255,19 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       const companionSession = await fetchCompanionSession()
       if (!companionSession || sessionEndedRef.current) return
       if (companionSession.sessionState === 'inactive' || companionSession.sessionState === 'ended') {
-        if (companionSessionHadActiveRef.current) endSession(false)
+        // Only honour an end signal the companion produced AFTER our latest
+        // "this session is active" push. Otherwise it's a stale echo — e.g. a
+        // leftover state from a previous session, or our own teardown push
+        // landing out of order (React's dev double-mount reproduces this
+        // exactly: the first mount's cleanup pushes 'inactive', and the live
+        // session then read it back and killed itself seconds after starting).
+        // Re-assert instead of dying; a genuine end still arrives next tick.
+        const signalTs = companionSession.sessionUpdatedTs || 0
+        if (companionSessionHadActiveRef.current && signalTs > lastActivePushAtRef.current) {
+          endSession(false)
+        } else if (!sessionEndedRef.current) {
+          pushBlockingState(true)
+        }
         return
       }
       applyCompanionSession(companionSession)
@@ -1224,7 +1276,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     syncCompanionSession()
     const interval = setInterval(syncCompanionSession, 3000)
     return () => clearInterval(interval)
-  }, [applyCompanionSession, endSession])
+  }, [applyCompanionSession, endSession, pushBlockingState])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1249,6 +1301,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
   // ── Per-frame analysis ────────────────────────────────────────────────────
   const handleFaceResults = useCallback((results) => {
+    // Frame heartbeat: proof that the camera pipeline is actually delivering.
+    // Recorded before the pause/end guard so a paused session isn't judged stalled.
+    lastFrameAtRef.current = Date.now()
     if (sessionEndedRef.current || isPausedRef.current) return
 
     const lmArray        = results.multiFaceLandmarks
@@ -1989,7 +2044,15 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!videoRef.current || !window.FaceMesh || !window.Camera) return
+    if (!videoRef.current) return
+    // The MediaPipe libs come from a CDN (see index.html). If they're blocked
+    // (offline, firewall, content blocker) this used to return silently and the
+    // session ran on with a frozen default score — surface it instead.
+    if (!window.FaceMesh || !window.Camera) {
+      cameraFaultRef.current = 'library'
+      setCameraFault('library')
+      return
+    }
     const faceMesh = new window.FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${file}`,
     })
@@ -2010,8 +2073,42 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       },
       width: 320, height: 240,
     })
-    camera.start()
-    return () => { camera.stop(); faceMesh.close?.() }
+
+    let cancelled = false
+    const faultFor = (err) => {
+      const name = err?.name || ''
+      if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission'
+      if (name === 'NotReadableError' || name === 'AbortError') return 'busy'
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no_camera'
+      return 'permission'
+    }
+    const raiseFault = (err) => {
+      if (cancelled) return
+      const fault = faultFor(err)
+      cameraFaultRef.current = fault
+      setCameraFault(fault)
+    }
+
+    // Pre-flight the camera ourselves before handing off to MediaPipe. Its
+    // Camera helper does `console.error(msg); alert(msg); throw` on failure —
+    // a raw blocking browser dialog reading "NotAllowedError" is not something
+    // to show a paying user on their first run. Acquiring (and immediately
+    // releasing) the stream here means: on failure we never call camera.start(),
+    // so no alert; on success the permission is already granted, so MediaPipe's
+    // own getUserMedia resolves from the same grant and never alerts either.
+    navigator.mediaDevices?.getUserMedia({ video: { width: 320, height: 240 } })
+      .then((stream) => {
+        stream.getTracks().forEach(t => t.stop())   // release before MediaPipe reacquires
+        if (cancelled) return
+        return Promise.resolve(camera.start()).catch(raiseFault)
+      })
+      .catch(raiseFault)
+
+    return () => {
+      cancelled = true
+      try { camera.stop() } catch {}
+      faceMesh.close?.()
+    }
   }, [handleFaceResults])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
@@ -2027,6 +2124,36 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       const now = Date.now()
       const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
       const calibrating = elapsedSecs < CALIBRATION_SECS
+
+      // ── Camera health ────────────────────────────────────────────────────
+      // The scoring pipeline only runs from MediaPipe frames. If frames stop
+      // (or never start), focusScoreRef stays frozen at its 68 default — and
+      // because 68 >= 40 the loop below counted every second as "focused",
+      // producing a fabricated ~100% session for a camera that was never on.
+      // A frame heartbeat catches every cause at once: denied permission,
+      // camera busy, unplugged mid-session, blocked CDN, MediaPipe crash.
+      const lastFrame = lastFrameAtRef.current
+      const frameGapMs = now - (lastFrame || startTimeRef.current)
+      if (cameraFaultRef.current === 'stalled' && lastFrame && frameGapMs < CAMERA_STALL_MS) {
+        cameraFaultRef.current = null            // frames came back — self-heal
+        setCameraFault(null)
+      } else if (!cameraFaultRef.current && frameGapMs > CAMERA_STALL_MS) {
+        // Never received a single frame = tracking never started (e.g. the
+        // MediaPipe model files failed to download); frames that stopped after
+        // arriving = the feed dropped. Different causes, different advice.
+        const fault = lastFrame ? 'stalled' : 'no_frames'
+        cameraFaultRef.current = fault
+        setCameraFault(fault)
+      }
+      if (cameraFaultRef.current) {
+        // No trustworthy signal: never accumulate focus/streak/phase/timeline
+        // stats. The timer above keeps running so the user can end the session.
+        if (currentStreakRef.current !== 0) {
+          currentStreakRef.current = 0
+          setCurrentStreak(0)
+        }
+        return
+      }
 
       if (calibrating) {
         setIsCalibrating(true)
@@ -2195,6 +2322,41 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
   return (
     <div className="session-root">
+      {/* Camera fault — tracking is not running, so say so instead of scoring nothing */}
+      {cameraFault && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 60,
+          background: 'rgba(13,15,20,0.94)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 14,
+          padding: 32, textAlign: 'center',
+          backdropFilter: 'blur(3px)',
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: '#f97316', textTransform: 'uppercase' }}>
+            Tracking paused
+          </span>
+          <p style={{ fontSize: 21, fontWeight: 500, color: '#f1f5f9', margin: 0, maxWidth: 460, lineHeight: 1.4 }}>
+            {CAMERA_FAULT_COPY[cameraFault]?.title || CAMERA_FAULT_COPY.stalled.title}
+          </p>
+          <p style={{ fontSize: 14, color: '#94a3b8', margin: 0, maxWidth: 420, lineHeight: 1.6 }}>
+            {CAMERA_FAULT_COPY[cameraFault]?.hint || CAMERA_FAULT_COPY.stalled.hint}
+          </p>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0', maxWidth: 420, lineHeight: 1.6 }}>
+            Your focus score is on hold — this time won't be counted as focused.
+          </p>
+          <button
+            onClick={() => endSession(false)}
+            style={{
+              marginTop: 8,
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 100, padding: '10px 28px',
+              fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
+            }}
+          >
+            End session
+          </button>
+        </div>
+      )}
       {/* Pause overlay */}
       {isPaused && (
         <div style={{
