@@ -622,6 +622,12 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [focusInput, setFocusInput] = useState('')
   const [distractionInput, setDistractionInput] = useState('')
   const [saved, setSaved] = useState(false)
+  // Mirrors what is actually persisted, so we can tell edited from saved.
+  const [savedConfig, setSavedConfig] = useState({
+    focusApps: initial.focusApps,
+    distractionApps: initial.distractionApps,
+  })
+  const [confirmingBack, setConfirmingBack] = useState(false)
   const [strictMode, setStrictMode] = useState(() => loadStrictMode())
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
@@ -693,10 +699,37 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     setStrictMode(saveStrictMode(!strictMode))
   }
 
+  // Leaving this screen used to discard unsaved edits without a word, while the
+  // header meanwhile counted them as if they were live ("1 focus apps · 1
+  // blocked"). Track what's actually on disk so Back can say something.
+  const savedSnapshot = JSON.stringify({
+    focusApps: [...savedConfig.focusApps].sort(),
+    distractionApps: [...savedConfig.distractionApps].sort(),
+  })
+  const hasUnsavedChanges = savedSnapshot !== JSON.stringify({
+    focusApps: [...focusApps].sort(),
+    distractionApps: [...distractionApps].sort(),
+  })
+
+  const handleBack = () => {
+    if (hasUnsavedChanges && !confirmingBack) {
+      setConfirmingBack(true)
+      return
+    }
+    onBack()
+  }
+
+  const handleSaveAndBack = () => {
+    handleSave()
+    onBack()
+  }
+
   const handleSave = () => {
     const next = saveFocusAppsConfig({ focusApps, distractionApps })
     setFocusApps(next.focusApps)
     setDistractionApps(next.distractionApps)
+    setSavedConfig({ focusApps: next.focusApps, distractionApps: next.distractionApps })
+    setConfirmingBack(false)
     setSaved(true)
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
     savedTimerRef.current = setTimeout(() => {
@@ -750,23 +783,53 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               Configure the native Companion's app and website rules for focus sessions.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onBack}
-            style={{
-              background: '#fff',
-              border: '1px solid #E8E3DA',
-              borderRadius: 100,
-              padding: '8px 15px',
-              fontSize: 12,
-              fontWeight: 700,
-              color: '#6b7280',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            Back
-          </button>
+          {confirmingBack ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#b45309' }}>
+                Unsaved changes
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveAndBack}
+                style={{
+                  background: '#15803d', border: '1px solid #15803d', borderRadius: 100,
+                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: '#fff',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Save &amp; leave
+              </button>
+              <button
+                type="button"
+                onClick={onBack}
+                style={{
+                  background: '#fff', border: '1px solid #E8E3DA', borderRadius: 100,
+                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: '#b91c1c',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleBack}
+              style={{
+                background: '#fff',
+                border: '1px solid #E8E3DA',
+                borderRadius: 100,
+                padding: '8px 15px',
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#6b7280',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Back
+            </button>
+          )}
         </div>
 
         <div style={{

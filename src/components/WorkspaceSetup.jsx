@@ -319,9 +319,13 @@ function Wizard({ setDevices, onContinue, onPreview }) {
     })
   }
 
+  // The total isn't known until the branching answers are given, and it was
+  // rendering a literal "Step 1 of ?" — which reads as a broken placeholder in
+  // the very first thing a new user does. Show the plain step number until the
+  // total is actually known, then show it.
   const stepLabel = mainScreen === 'both'
     ? 'Step 1 of 1'
-    : `Step ${step} of ${extraCount === null ? '?' : totalSteps}`
+    : extraCount === null ? `Step ${step}` : `Step ${step} of ${totalSteps}`
 
   return (
     <div style={{
