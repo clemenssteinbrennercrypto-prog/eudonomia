@@ -22,6 +22,11 @@ const bundledBuildInfo = {
 }
 
 function getInitialFlow() {
+  // ?onboarding=1 forces the intro flow — lets you re-experience the first-run
+  // moment even after you've onboarded (handy for demos/testing).
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('onboarding')) {
+    return 'onboarding'
+  }
   if (!isNativeRuntime() && !import.meta.env.DEV) return 'landing'
   return localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'onboarding'
 }
@@ -236,7 +241,11 @@ export default function App() {
 
   return (
     <>
-      <AppRefreshControl updateStatus={updateStatus} />
+      {/* Hidden during a session: a reload tears down all in-memory session
+          state (scores, streaks, timers live in refs), so hitting it mid-session
+          silently destroys the run. There is no reason to reload while tracking,
+          and an update can always wait until the session ends. */}
+      {screen !== 'session' && <AppRefreshControl updateStatus={updateStatus} />}
       <BuildIdentity />
       {screen === 'home' && (
         <HomeScreen
