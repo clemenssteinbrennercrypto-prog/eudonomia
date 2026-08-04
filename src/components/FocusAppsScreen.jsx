@@ -272,16 +272,16 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
 
 function statusColors(tone) {
   return {
-    green: { border: '#bbf7d0', bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
-    yellow: { border: '#fde68a', bg: '#fffbeb', text: '#92400e', dot: '#f59e0b' },
-    red: { border: '#fecaca', bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
-  }[tone] || { border: '#e5e7eb', bg: '#f9fafb', text: '#374151', dot: '#6b7280' }
+    green: { border: 'rgba(47,227,168,0.20)', bg: 'rgba(47,227,168,0.10)', text: 'var(--good)', dot: 'var(--good)' },
+    yellow: { border: 'rgba(255,179,64,0.20)', bg: 'rgba(255,179,64,0.09)', text: 'var(--warn)', dot: 'var(--warn)' },
+    red: { border: 'rgba(255,77,106,0.20)', bg: 'rgba(255,77,106,0.10)', text: 'var(--bad)', dot: 'var(--bad)' },
+  }[tone] || { border: 'var(--line)', bg: 'rgba(122,152,255,0.05)', text: 'var(--text-secondary)', dot: 'var(--text-muted)' }
 }
 
 function AppChip({ app, tone, onRemove }) {
   const colors = tone === 'focus'
-    ? { bg: '#f7fbf8', border: '#cfe9d7', text: '#1f5132', xBg: '#e8f5ec', xText: '#2f6f46' }
-    : { bg: '#fff8f7', border: '#f2d2ce', text: '#7a2f28', xBg: '#fde9e7', xText: '#9a3a32' }
+    ? { bg: 'rgba(47,227,168,0.07)', border: 'rgba(47,227,168,0.30)', text: 'var(--good)', xBg: 'rgba(47,227,168,0.10)', xText: 'var(--good)' }
+    : { bg: 'rgba(255,77,106,0.07)', border: 'rgba(255,77,106,0.30)', text: 'var(--bad)', xBg: 'rgba(255,77,106,0.12)', xText: 'var(--bad)' }
 
   return (
     <span
@@ -343,17 +343,17 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
     <section style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div>
-          <h2 style={{ margin: 0, color: '#1a2e4a', fontSize: 20, fontWeight: 800, letterSpacing: 0 }}>{title}</h2>
-          <p style={{ margin: '4px 0 0', color: '#8a8177', fontSize: 13, lineHeight: 1.45 }}>{subtitle}</p>
+          <h2 style={{ margin: 0, color: 'var(--ultra-bright)', fontSize: 20, fontWeight: 800, letterSpacing: 0 }}>{title}</h2>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.45 }}>{subtitle}</p>
         </div>
         <span style={{
-          border: '1px solid #E8E3DA',
+          border: '1px solid var(--line)',
           borderRadius: 100,
           padding: '4px 10px',
-          color: '#6b7280',
+          color: 'var(--text-muted)',
           fontSize: 12,
           fontWeight: 700,
-          background: '#fff',
+          background: 'var(--surface)',
           flexShrink: 0,
         }}>
           {apps.length}
@@ -379,11 +379,11 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
           type="button"
           onClick={() => addApp()}
           style={{
-            background: '#1a2e4a',
+            background: 'var(--ultra)',
             border: 'none',
             borderRadius: 13,
             padding: '0 16px',
-            color: '#fff',
+            color: 'var(--text)',
             fontSize: 13,
             fontWeight: 800,
             cursor: 'pointer',
@@ -407,13 +407,13 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
         {apps.length === 0 && (
           <div style={{
             width: '100%',
-            border: '1.5px dashed #ded8cf',
+            border: '1.5px dashed var(--line)',
             borderRadius: 14,
             padding: '14px 16px',
-            color: '#9a9288',
+            color: 'var(--text-muted)',
             fontSize: 13,
             lineHeight: 1.45,
-            background: 'rgba(255,255,255,0.55)',
+            background: 'rgba(122,152,255,0.06)',
           }}>
             Nothing here yet. Add a preset or type your own.
           </div>
@@ -427,11 +427,11 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
             type="button"
             onClick={() => addApp(preset)}
             style={{
-              background: '#fff',
-              border: '1px solid #d8d2c8',
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
               borderRadius: 100,
               padding: '6px 12px',
-              color: '#5f6d7f',
+              color: 'var(--text-muted)',
               fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
@@ -519,7 +519,7 @@ function CompanionStatus() {
           </div>
           <span style={{
             border: `1px solid ${colors.border}`,
-            background: '#fff',
+            background: 'var(--surface)',
             borderRadius: 100,
             padding: '5px 9px',
             fontSize: 11,
@@ -539,16 +539,16 @@ function CompanionStatus() {
             <div
               key={item.label}
               style={{
-                border: '1px solid rgba(26,46,74,0.12)',
-                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(122,152,255,0.12)',
+                background: 'rgba(122,152,255,0.06)',
                 borderRadius: 10,
                 padding: '9px 10px',
                 minWidth: 0,
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 950, color: '#1a2e4a' }}>{item.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 950, color: 'var(--ultra-bright)' }}>{item.label}</div>
               <div style={{ marginTop: 2, fontSize: 12, fontWeight: 900, color: colors.text }}>{item.state}</div>
-              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 650, color: '#6b6357', lineHeight: 1.35 }}>
+              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 650, color: 'var(--text-muted)', lineHeight: 1.35 }}>
                 {item.detail}
               </div>
             </div>
@@ -559,15 +559,15 @@ function CompanionStatus() {
       {connected && !helperInstalled && (
         <div style={{
           border: '1px solid #93c5fd',
-          background: '#eff6ff',
-          color: '#1e3a8a',
+          background: 'rgba(122,152,255,0.09)',
+          color: 'var(--ultra-bright)',
           borderRadius: 12,
           padding: '12px 14px',
           display: 'grid',
           gap: 8,
         }}>
           <div style={{ fontSize: 13, fontWeight: 900 }}>⚡ Frictionless blocking (one-time setup)</div>
-          <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: '#1d4ed8' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: 'var(--ultra-bright)' }}>
             Enter your Mac password <b>once</b> to let Eudonomia block distraction sites silently — no password on every session. It installs a small helper that only edits your block list.
           </div>
           <button
@@ -581,32 +581,32 @@ function CompanionStatus() {
               fontSize: 13,
               fontWeight: 900,
               cursor: installing ? 'default' : 'pointer',
-              background: installing ? '#93c5fd' : '#2563eb',
-              color: '#fff',
+              background: installing ? '#93c5fd' : 'var(--ultra-bright)',
+              color: 'var(--text)',
             }}
           >
             {installing ? 'Waiting for password…' : 'Enable — enter password once'}
           </button>
           {installError && (
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#991b1b' }}>⚠ {installError}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--bad)' }}>⚠ {installError}</div>
           )}
         </div>
       )}
 
       {connected && helperInstalled && (
-        <div style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+        <div style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
           Silent website blocking helper installed; no password prompt expected per session.
         </div>
       )}
 
       {connected && debug?.sessionActive && websitesBlocked && (
-        <div style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+        <div style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
           Website blocking is confirmed system-wide via /etc/hosts.
         </div>
       )}
 
       {connected && (
-        <div style={{ color: '#8a8177', fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>
           {activityLabel ? `Last activity: ${activityLabel}` : 'Last activity: none yet'}
           {debug?.lastOsascriptError ? ` · osascript: ${debug.lastOsascriptError}` : ''}
         </div>
@@ -774,26 +774,26 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
       : 'Waiting for Companion activity'
 
   return (
-    <div className="screen-center" style={{ background: '#F5F4F0' }}>
+    <div className="screen-center" style={{ background: 'var(--bg)' }}>
       <div className="home-content" style={{ maxWidth: 720, gap: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <h1 className="app-title" style={{ marginBottom: 4, color: '#1a2e4a' }}>Focus Apps</h1>
+            <h1 className="app-title" style={{ marginBottom: 4, color: 'var(--ultra-bright)' }}>Focus Apps</h1>
             <p className="app-tagline" style={{ margin: 0 }}>
               Configure the native Companion's app and website rules for focus sessions.
             </p>
           </div>
           {confirmingBack ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#b45309' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warn)' }}>
                 Unsaved changes
               </span>
               <button
                 type="button"
                 onClick={handleSaveAndBack}
                 style={{
-                  background: '#15803d', border: '1px solid #15803d', borderRadius: 100,
-                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: '#fff',
+                  background: 'var(--good)', border: '1px solid var(--good)', borderRadius: 100,
+                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: 'var(--text)',
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
@@ -803,8 +803,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 type="button"
                 onClick={onBack}
                 style={{
-                  background: '#fff', border: '1px solid #E8E3DA', borderRadius: 100,
-                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: '#b91c1c',
+                  background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 100,
+                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: 'var(--bad)',
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
@@ -816,13 +816,13 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               type="button"
               onClick={handleBack}
               style={{
-                background: '#fff',
-                border: '1px solid #E8E3DA',
+                background: 'var(--surface)',
+                border: '1px solid var(--line)',
                 borderRadius: 100,
                 padding: '8px 15px',
                 fontSize: 12,
                 fontWeight: 700,
-                color: '#6b7280',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
@@ -838,14 +838,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           justifyContent: 'space-between',
           gap: 14,
           flexWrap: 'wrap',
-          background: '#fff',
-          border: '1px solid #E8E3DA',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
           borderRadius: 16,
           padding: '12px 16px',
-          boxShadow: '0 2px 20px rgba(26,46,74,0.06)',
+          boxShadow: '0 2px 20px rgba(122,152,255,0.06)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: '#1a2e4a', fontWeight: 800 }}>
+            <span style={{ fontSize: 13, color: 'var(--ultra-bright)', fontWeight: 800 }}>
               {focusApps.length} focus apps · {distractionApps.length} blocked
             </span>
           </div>
@@ -853,7 +853,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             display: 'inline-flex',
             alignItems: 'center',
             gap: 9,
-            color: '#1a2e4a',
+            color: 'var(--ultra-bright)',
             fontSize: 12,
             fontWeight: 800,
             cursor: 'pointer',
@@ -868,8 +868,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 width: 42,
                 height: 24,
                 borderRadius: 100,
-                border: `1px solid ${modeEnabled ? '#22c55e' : '#d1d5db'}`,
-                background: modeEnabled ? '#22c55e' : '#e5e7eb',
+                border: `1px solid ${modeEnabled ? 'var(--good)' : 'var(--line-strong)'}`,
+                background: modeEnabled ? 'var(--good)' : 'var(--line)',
                 padding: 2,
                 cursor: 'pointer',
               }}
@@ -879,7 +879,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 width: 18,
                 height: 18,
                 borderRadius: '50%',
-                background: '#fff',
+                background: 'var(--surface)',
                 transform: modeEnabled ? 'translateX(18px)' : 'translateX(0)',
                 transition: 'transform 0.18s ease',
                 boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
@@ -894,18 +894,18 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           justifyContent: 'space-between',
           gap: 14,
           flexWrap: 'wrap',
-          background: '#fff',
-          border: '1px solid #E8E3DA',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
           borderRadius: 16,
           padding: '12px 16px',
-          boxShadow: '0 2px 20px rgba(26,46,74,0.05)',
+          boxShadow: '0 2px 20px rgba(122,152,255,0.05)',
         }}>
           <CompanionStatus />
 
           <div style={{
             marginTop: 12,
-            border: `1.5px solid ${strictMode ? '#1a2e4a' : '#e5e0d8'}`,
-            background: strictMode ? '#f5f8fc' : '#fbfaf8',
+            border: `1.5px solid ${strictMode ? 'var(--ultra)' : 'var(--line)'}`,
+            background: strictMode ? 'rgba(122,152,255,0.06)' : 'var(--surface)',
             borderRadius: 12,
             padding: '13px 15px',
             display: 'flex',
@@ -914,10 +914,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             gap: 14,
           }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, color: '#1a2e4a' }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ultra-bright)' }}>
                 Strict Mode {strictMode ? '· on' : '· off'}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6b6357', lineHeight: 1.5, marginTop: 3 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 3 }}>
                 The Companion hides every non-browser app except your focus apps and base system apps. Browsers stay open; blocked sites are handled by the native website block list.
               </div>
             </div>
@@ -932,7 +932,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 borderRadius: 999,
                 border: 'none',
                 cursor: 'pointer',
-                background: strictMode ? '#1a2e4a' : '#cdc7bd',
+                background: strictMode ? 'var(--ultra)' : 'var(--line)',
                 position: 'relative',
                 transition: 'background 0.15s',
               }}
@@ -944,7 +944,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 width: 21,
                 height: 21,
                 borderRadius: '50%',
-                background: '#fff',
+                background: 'var(--surface)',
                 transition: 'left 0.15s',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
               }} />
@@ -957,11 +957,11 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               onClick={handleTestBlocking}
               disabled={testBlockingActive}
               style={{
-                background: '#1a2e4a',
+                background: 'var(--ultra)',
                 border: 'none',
                 borderRadius: 12,
                 padding: '9px 13px',
-                color: '#fff',
+                color: 'var(--text)',
                 fontSize: 12,
                 fontWeight: 900,
                 cursor: testBlockingActive ? 'not-allowed' : 'pointer',
@@ -973,7 +973,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               Test Blocking (60s)
             </button>
             {testFeedback && (
-              <span style={{ color: '#166534', fontSize: 11, fontWeight: 800 }}>
+              <span style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
                 {testFeedback}
               </span>
             )}
@@ -986,19 +986,19 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           justifyContent: 'space-between',
           gap: 14,
           flexWrap: 'wrap',
-          background: '#fff',
-          border: '1px solid #E8E3DA',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
           borderRadius: 16,
           padding: '13px 16px',
-          boxShadow: '0 2px 20px rgba(26,46,74,0.05)',
+          boxShadow: '0 2px 20px rgba(122,152,255,0.05)',
         }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#8a8177', fontWeight: 800, marginBottom: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800, marginBottom: 3 }}>
               Current activity from {activityRuntimeLabel}
             </div>
             <div style={{
               fontSize: 14,
-              color: '#1a2e4a',
+              color: 'var(--ultra-bright)',
               fontWeight: 800,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -1008,17 +1008,17 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               {currentActivityValue}
             </div>
             {activitySources.primarySource === 'extension' && (
-              <div style={{ marginTop: 4, color: '#9a6a1d', fontSize: 11, fontWeight: 750, lineHeight: 1.35 }}>
+              <div style={{ marginTop: 4, color: 'var(--warn)', fontSize: 11, fontWeight: 750, lineHeight: 1.35 }}>
                 Legacy fallback only. Start the Companion app for native tracking and blocking.
               </div>
             )}
           </div>
           <span style={{
-            border: `1px solid ${activityPreview.kind === 'focus' ? '#bbf7d0' : activityPreview.kind === 'distraction' ? '#fecaca' : '#e5e7eb'}`,
+            border: `1px solid ${activityPreview.kind === 'focus' ? 'rgba(47,227,168,0.20)' : activityPreview.kind === 'distraction' ? 'rgba(255,77,106,0.20)' : 'var(--line)'}`,
             borderRadius: 100,
             padding: '6px 11px',
-            color: activityPreview.kind === 'focus' ? '#166534' : activityPreview.kind === 'distraction' ? '#991b1b' : '#6b7280',
-            background: activityPreview.kind === 'focus' ? '#f0fdf4' : activityPreview.kind === 'distraction' ? '#fef2f2' : '#f9fafb',
+            color: activityPreview.kind === 'focus' ? 'var(--good)' : activityPreview.kind === 'distraction' ? 'var(--bad)' : 'var(--text-muted)',
+            background: activityPreview.kind === 'focus' ? 'rgba(47,227,168,0.10)' : activityPreview.kind === 'distraction' ? 'rgba(255,77,106,0.10)' : 'rgba(122,152,255,0.05)',
             fontSize: 12,
             fontWeight: 900,
             whiteSpace: 'nowrap',
@@ -1036,14 +1036,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
 
         {configuredCount === 0 && (
           <div style={{
-            background: '#1a2e4a',
+            background: 'var(--ultra)',
             borderRadius: 18,
             padding: '18px 20px',
-            color: '#eef4fb',
-            boxShadow: '0 14px 36px rgba(26,46,74,0.18)',
+            color: 'rgba(122,152,255,0.08)',
+            boxShadow: '0 14px 36px rgba(122,152,255,0.18)',
           }}>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Start with a few presets.</p>
-            <p style={{ margin: '5px 0 0', fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
+            <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
               Add the tools you use for deep work, then add the sites that usually interrupt it.
             </p>
           </div>
@@ -1052,8 +1052,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
         <div style={{
           display: 'grid',
           gap: 28,
-          background: '#F5F4F0',
-          border: '1px solid #E8E3DA',
+          background: 'var(--bg)',
+          border: '1px solid var(--line)',
           borderRadius: 20,
           padding: 26,
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
@@ -1068,7 +1068,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             setInputValue={setFocusInput}
             tone="focus"
           />
-          <div style={{ height: 1, background: '#E8E3DA' }} />
+          <div style={{ height: 1, background: 'rgba(122,152,255,0.08)' }} />
           <AppSection
             title="Block List ✗"
             subtitle="Apps and sites that should count as distractions."

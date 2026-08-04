@@ -7,7 +7,7 @@ import { defaultRoleForType } from '../lib/workspaceObjects'
 // Outputs devices in the same {type, col, row} format as before
 // so SessionScreen.jsx can adapt detection thresholds to the workspace.
 
-const navy = '#1a2e4a'
+const navy = 'var(--ultra)'
 
 // Position → col/row coords
 const POSITION_COORDS = {
@@ -86,8 +86,8 @@ function PillOption({ label, selected, onClick, sub, icon }) {
         gap: 10,
         padding: '0 22px',
         background: selected ? navy : '#fff',
-        color: selected ? '#fff' : '#1A1A1A',
-        border: `1.5px solid ${selected ? navy : '#E8E3DA'}`,
+        color: selected ? '#fff' : 'var(--text)',
+        border: `1.5px solid ${selected ? navy : 'var(--line)'}`,
         borderRadius: 100,
         cursor: 'pointer',
         fontFamily: 'inherit',
@@ -103,7 +103,7 @@ function PillOption({ label, selected, onClick, sub, icon }) {
         {sub && (
           <span style={{
             fontSize: 11, fontWeight: 400,
-            color: selected ? 'rgba(255,255,255,0.65)' : '#9ca3af',
+            color: selected ? 'rgba(255,255,255,0.65)' : 'var(--text-muted)',
             marginTop: 1,
           }}>
             {sub}
@@ -125,7 +125,7 @@ function PositionPicker({ label, value, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <p style={{
-        fontSize: 13, fontWeight: 600, color: '#6b7280',
+        fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
         margin: 0, letterSpacing: '0.01em',
       }}>
         {label}
@@ -138,8 +138,8 @@ function PositionPicker({ label, value, onChange }) {
             style={{
               height: 44,
               background: value === o.id ? navy : '#fff',
-              color: value === o.id ? '#fff' : '#374151',
-              border: `1.5px solid ${value === o.id ? navy : '#E8E3DA'}`,
+              color: value === o.id ? '#fff' : 'var(--text-secondary)',
+              border: `1.5px solid ${value === o.id ? navy : 'var(--line)'}`,
               borderRadius: 100,
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -224,11 +224,11 @@ function AdvancedModeWrapper({ devices, setDevices, onReturnToPreview, onSimple 
         onClick={onSimple}
         style={{
           position: 'fixed', top: 22, left: 24, zIndex: 999,
-          background: 'rgba(255,255,255,0.9)',
+          background: 'rgba(122,152,255,0.06)',
           backdropFilter: 'blur(8px)',
-          border: '1px solid #E8E3DA',
+          border: '1px solid var(--line)',
           borderRadius: 100, padding: '6px 16px',
-          fontSize: 12, fontWeight: 500, color: '#6B7280',
+          fontSize: 12, fontWeight: 500, color: 'var(--text-muted)',
           cursor: 'pointer',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
           transition: 'color 0.15s',
@@ -241,7 +241,7 @@ function AdvancedModeWrapper({ devices, setDevices, onReturnToPreview, onSimple 
           position: 'fixed', top: 22, left: '50%', transform: 'translateX(-50%)',
           zIndex: 1000, background: 'rgba(30,30,30,0.92)',
           backdropFilter: 'blur(10px)',
-          color: '#fff', borderRadius: 12, padding: '10px 18px',
+          color: 'var(--text)', borderRadius: 12, padding: '10px 18px',
           fontSize: 13, fontWeight: 500, maxWidth: 380, textAlign: 'center',
           boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
@@ -330,7 +330,7 @@ function Wizard({ setDevices, onContinue, onPreview }) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#F5F4F0',
+      background: 'var(--bg)',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       padding: '40px 24px',
@@ -346,7 +346,7 @@ function Wizard({ setDevices, onContinue, onPreview }) {
           onClick={handleBack}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 13, color: '#9CA3AF', fontFamily: 'inherit',
+            fontSize: 13, color: 'var(--text-muted)', fontFamily: 'inherit',
             padding: 0,
           }}
         >
@@ -357,7 +357,7 @@ function Wizard({ setDevices, onContinue, onPreview }) {
       {/* Card */}
       <div style={{
         width: '100%', maxWidth: 460,
-        background: '#fff',
+        background: 'var(--surface)',
         borderRadius: 20,
         padding: '40px 36px',
         boxShadow: '0 2px 24px rgba(0,0,0,0.07)',
@@ -367,7 +367,7 @@ function Wizard({ setDevices, onContinue, onPreview }) {
         {/* Step indicator */}
         <p style={{
           fontSize: 11, fontWeight: 700,
-          color: '#9CA3AF', letterSpacing: '0.09em',
+          color: 'var(--text-muted)', letterSpacing: '0.09em',
           textTransform: 'uppercase', margin: 0,
         }}>
           {stepLabel}
@@ -407,8 +407,8 @@ function Wizard({ setDevices, onContinue, onPreview }) {
           style={{
             width: '100%', height: 56,
             fontSize: 16, fontWeight: 700,
-            background: canAdvance() ? navy : '#e2e8f0',
-            color: canAdvance() ? '#fff' : '#9ca3af',
+            background: canAdvance() ? navy : 'var(--text)',
+            color: canAdvance() ? '#fff' : 'var(--text-muted)',
             border: 'none', borderRadius: 14,
             cursor: canAdvance() ? 'pointer' : 'not-allowed',
             fontFamily: 'inherit',
@@ -439,10 +439,10 @@ function StepCamera({ cameraPosition, setCameraPosition }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a', margin: '0 0 8px' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: '0 0 8px' }}>
           Where is your webcam?
         </h2>
-        <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
           This helps avoid false focus penalties from camera angle
         </p>
       </div>
@@ -472,10 +472,10 @@ function StepOne({ mainScreen, setMainScreen }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a', margin: '0 0 8px' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: '0 0 8px' }}>
           What's your main screen?
         </h2>
-        <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
           The screen directly in front of you
         </p>
       </div>
@@ -501,7 +501,7 @@ function StepOne({ mainScreen, setMainScreen }) {
         />
       </div>
       {mainScreen && (
-        <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
           {SETUP_IMPACT[mainScreen]}
         </p>
       )}
@@ -513,10 +513,10 @@ function StepTwo({ extraCount, setExtraCount }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a', margin: '0 0 8px' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: '0 0 8px' }}>
           Any extra screens?
         </h2>
-        <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
           Additional monitors besides your main one
         </p>
       </div>
@@ -545,10 +545,10 @@ function StepThree({ extraCount, extraPositions, setExtraPosition }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a', margin: '0 0 8px' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: '0 0 8px' }}>
           Where are they?
         </h2>
-        <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
           Position relative to where you're sitting
         </p>
       </div>

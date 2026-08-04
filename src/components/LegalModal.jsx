@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const navy = '#1a2e4a'
+const navy = 'var(--ultra)'
 
 const IMPRESSUM = [
   {
@@ -48,12 +48,12 @@ function Section({ heading, body }) {
       <p style={{
         fontSize: 13, fontWeight: 600,
         textTransform: 'uppercase', letterSpacing: '0.07em',
-        color: '#9CA3AF', marginTop: 28, marginBottom: 8,
+        color: 'var(--text-muted)', marginTop: 28, marginBottom: 8,
       }}>
         {heading}
       </p>
       <p style={{
-        fontSize: 15, lineHeight: 1.7, color: '#1A1A1A',
+        fontSize: 15, lineHeight: 1.7, color: 'var(--text)',
         whiteSpace: 'pre-line',
       }}>
         {body}
@@ -78,7 +78,7 @@ export default function LegalModal({ open, onClose, initialTab }) {
       className="legal-modal-enter"
       style={{
         position: 'fixed', inset: 0,
-        background: '#F5F4F0',
+        background: 'var(--bg)',
         overflowY: 'auto',
         zIndex: 400,
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif',
@@ -88,14 +88,14 @@ export default function LegalModal({ open, onClose, initialTab }) {
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: '#0f172a', margin: 0 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: 'var(--text)', margin: 0 }}>
             {tab === 'impressum' ? 'Impressum' : 'Datenschutz'}
           </h1>
           <button
             onClick={onClose}
             style={{
               padding: '9px 22px', fontSize: 14, fontWeight: 600,
-              background: navy, color: '#fff',
+              background: navy, color: 'var(--text)',
               border: 'none', borderRadius: 12,
               cursor: 'pointer', fontFamily: 'inherit',
             }}
@@ -118,7 +118,7 @@ export default function LegalModal({ open, onClose, initialTab }) {
                 borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                 background: tab === t.id ? navy : 'transparent',
                 color:      tab === t.id ? '#fff' : '#6B7280',
-                border:     tab === t.id ? 'none' : '1px solid #E8E3DA',
+                border:     tab === t.id ? 'none' : '1px solid var(--line)',
                 transition: 'all 0.15s',
               }}
             >

@@ -54,21 +54,21 @@ const ACTIVITY_KIND_LABELS = {
 }
 
 const ACTIVITY_KIND_COLORS = {
-  blocked: '#ef4444',
-  aligned: '#22c55e',
+  blocked: 'var(--bad)',
+  aligned: 'var(--good)',
   supportive: '#14b8a6',
-  unclear: '#9ca3af',
-  off_goal: '#f59e0b',
-  distraction: '#f97316',
+  unclear: 'var(--text-muted)',
+  off_goal: 'var(--warn)',
+  distraction: 'var(--warn)',
 }
 
 const PHASE_COLORS = {
-  arrival: '#38bdf8',
-  ramp: '#22c55e',
-  lock_in: '#a78bfa',
-  fade: '#f59e0b',
+  arrival: '#5BC8FF',
+  ramp: 'var(--good)',
+  lock_in: '#B79CFF',
+  fade: 'var(--warn)',
   recovery: '#fb7185',
-  drift: '#ef4444',
+  drift: 'var(--bad)',
 }
 
 function countBy(items, getKey) {
@@ -303,21 +303,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {/* Headline */}
         <div style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', margin: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', margin: 0 }}>
               {completed ? 'Session complete' : 'Session ended'}
             </p>
             {focusPct >= 85 && (
-              <span style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Elite</span>
+              <span style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Elite</span>
             )}
             {focusPct >= 70 && focusPct < 85 && (
-              <span style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#22c55e', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Strong</span>
+              <span style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: 'var(--good)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Strong</span>
             )}
             {focusPct >= 50 && focusPct < 70 && (
               <span style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 100, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#3b82f6', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Good</span>
             )}
           </div>
           {actualSeconds > 0 && (
-            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
               Started at {new Date(Date.now() - actualSeconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
             </p>
           )}
@@ -327,13 +327,13 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {/* Timeline bar */}
         {timeline.length > 0 && (
           <div style={{ width: '100%' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
               Focus timeline
             </p>
             <div style={{
               width: '100%', height: 12,
               borderRadius: 6, overflow: 'hidden',
-              display: 'flex', background: '#E8E3DA',
+              display: 'flex', background: 'rgba(122,152,255,0.08)',
             }}>
               {timeline.map((pt, i) => {
                 const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
@@ -341,7 +341,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                 const g = Math.round(68 + (197 - 68) * (s / 100))
                 const b = Math.round(68 - (68 - 94) * (s / 100))
                 const color = `rgb(${r},${g},${b})`
-                const phaseColor = PHASE_COLORS[pt.phase] || '#9ca3af'
+                const phaseColor = PHASE_COLORS[pt.phase] || 'var(--text-muted)'
                 const activityKind = pt.activity?.kind
                 const titleParts = [
                   `${fmtSecond(pt.second || 0)}: ${s}% focus`,
@@ -360,8 +360,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               })}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>Start</span>
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>End</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Start</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>End</span>
             </div>
           </div>
         )}
@@ -374,12 +374,12 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct >= 60 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444' }}>
+            <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct >= 60 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)' }}>
               {focusPct}%
             </span>
             <span className="stat-label">focused</span>
             {isPersonalBest && (
-              <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600, marginTop: 4, display: 'block' }}>
+              <span style={{ fontSize: 12, color: 'var(--good)', fontWeight: 600, marginTop: 4, display: 'block' }}>
                 New best 🏆
               </span>
             )}
@@ -391,12 +391,12 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value" style={{ color: preDriftEvents > 0 ? '#f59e0b' : undefined }}>
+            <span className="stat-value" style={{ color: preDriftEvents > 0 ? 'var(--warn)' : undefined }}>
               {preDriftEvents}
             </span>
             <span className="stat-label">drift risks</span>
             {preDriftSeconds > 0 && (
-              <span style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, display: 'block' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
                 {fmt(preDriftSeconds)}
               </span>
             )}
@@ -408,7 +408,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value" style={{ color: '#ef4444' }}>
+            <span className="stat-value" style={{ color: 'var(--bad)' }}>
               {Math.round(Math.max(0, actualSeconds - focusedSeconds) / 60)}m
             </span>
             <span className="stat-label">distracted time</span>
@@ -419,39 +419,39 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {actualSeconds > 0 && (
           <div style={{
             width: '100%', boxSizing: 'border-box',
-            background: '#FFFFFF',
-            border: '1px solid #E8E3DA',
+            background: 'var(--surface)',
+            border: '1px solid var(--line)',
             borderRadius: 14,
             padding: '16px 18px',
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>
                 Session debrief
               </p>
               {debrief.dominantPhase && (
-                <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
                   Dominant phase: {PHASE_LABELS[debrief.dominantPhase] || debrief.dominantPhase}
                 </span>
               )}
             </div>
-            <p style={{ fontSize: 15, color: '#111827', fontWeight: 600, lineHeight: 1.45, margin: '0 0 12px' }}>
+            <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, lineHeight: 1.45, margin: '0 0 12px' }}>
               {debrief.headline}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {debrief.notes.map((note, i) => (
-                <p key={i} style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.45, margin: 0 }}>
+                <p key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
                   {note}
                 </p>
               ))}
             </div>
             {debrief.recommendations.length > 0 && (
               <div style={{ marginTop: 14, borderTop: '1px solid #f3f4f6', paddingTop: 14 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#4b5563', margin: '0 0 8px' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
                   Next session
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {debrief.recommendations.map((recommendation, i) => (
-                    <p key={i} style={{ fontSize: 13, color: '#374151', lineHeight: 1.45, margin: 0 }}>
+                    <p key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
                       {recommendation}
                     </p>
                   ))}
@@ -460,7 +460,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             )}
             {Object.values(debrief.phaseSeconds).some(seconds => seconds > 0) && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.06)' }}>
                   {Object.entries(debrief.phaseSeconds)
                     .filter(([, seconds]) => seconds > 0)
                     .map(([phase, seconds]) => {
@@ -468,7 +468,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                         <div
                           key={phase}
                           title={`${PHASE_LABELS[phase] || phase}: ${fmt(seconds)}`}
-                          style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || '#9ca3af' }}
+                          style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || 'var(--text-muted)' }}
                         />
                       )
                     })}
@@ -477,7 +477,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                   {Object.entries(debrief.phaseSeconds)
                     .filter(([, seconds]) => seconds > 0)
                     .map(([phase, seconds]) => (
-                      <span key={phase} style={{ fontSize: 11, color: '#6b7280' }}>
+                      <span key={phase} style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         {PHASE_LABELS[phase] || phase}: {fmt(seconds)}
                       </span>
                     ))}
@@ -487,21 +487,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             {debrief.alignment.observedSeconds > 0 && (
               <div style={{ marginTop: 16, borderTop: '1px solid #f3f4f6', paddingTop: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: '#4b5563', margin: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>
                     Goal alignment
                   </p>
-                  <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
                     {sessionIntent?.primaryLabel || 'General work'} · {sessionIntent?.confidence || 'partial'} confidence
                   </span>
                 </div>
-                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+                <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.06)' }}>
                   {Object.entries(debrief.alignment.secondsByKind)
                     .filter(([, seconds]) => seconds > 0)
                     .map(([kind, seconds]) => (
                       <div
                         key={kind}
                         title={`${ACTIVITY_KIND_LABELS[kind] || kind}: ${fmt(seconds)}`}
-                        style={{ flex: seconds, minWidth: 2, background: ACTIVITY_KIND_COLORS[kind] || '#9ca3af' }}
+                        style={{ flex: seconds, minWidth: 2, background: ACTIVITY_KIND_COLORS[kind] || 'var(--text-muted)' }}
                       />
                     ))}
                 </div>
@@ -509,7 +509,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                   {Object.entries(debrief.alignment.secondsByKind)
                     .filter(([, seconds]) => seconds > 0)
                     .map(([kind, seconds]) => (
-                      <span key={kind} style={{ fontSize: 11, color: '#6b7280' }}>
+                      <span key={kind} style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         {ACTIVITY_KIND_LABELS[kind] || kind}: {fmt(seconds)}
                       </span>
                     ))}
@@ -522,12 +522,12 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                         justifyContent: 'space-between',
                         gap: 12,
                         fontSize: 12,
-                        color: '#4b5563',
+                        color: 'var(--text-secondary)',
                       }}>
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.label}
                         </span>
-                        <span style={{ color: ACTIVITY_KIND_COLORS[item.kind] || '#9ca3af', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ color: ACTIVITY_KIND_COLORS[item.kind] || 'var(--text-muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>
                           {ACTIVITY_KIND_LABELS[item.kind] || item.kind} · {fmt(item.seconds)}
                         </span>
                       </div>
@@ -543,15 +543,15 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {goal && (
           <div style={{
             width: '100%', boxSizing: 'border-box',
-            background: '#FFFFFF',
-            border: '1px solid #E8E3DA',
+            background: 'var(--surface)',
+            border: '1px solid var(--line)',
             borderRadius: 14,
             padding: '16px 18px',
           }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
               Session goal
             </p>
-            <p style={{ fontSize: 15, color: '#111827', fontWeight: 500, marginBottom: 12 }}>
+            <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 500, marginBottom: 12 }}>
               {goal}
             </p>
             {goalAchieved === null ? (
@@ -560,7 +560,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                   onClick={() => { setGoalAchieved(true); if (id) updateSession(id, { goalAchieved: true }) }}
                   style={{
                     padding: '8px 18px', fontSize: 13, fontWeight: 600,
-                    background: '#22c55e', color: '#fff',
+                    background: 'var(--good)', color: 'var(--text)',
                     border: 'none', borderRadius: 100,
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
@@ -571,8 +571,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                   onClick={() => { setGoalAchieved(false); if (id) updateSession(id, { goalAchieved: false }) }}
                   style={{
                     padding: '8px 18px', fontSize: 13, fontWeight: 600,
-                    background: 'none', color: '#6b7280',
-                    border: '1px solid #e5e7eb', borderRadius: 100,
+                    background: 'none', color: 'var(--text-muted)',
+                    border: '1px solid var(--line)', borderRadius: 100,
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >
@@ -580,7 +580,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                 </button>
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: goalAchieved ? '#22c55e' : '#f97316', fontWeight: 600 }}>
+              <p style={{ fontSize: 13, color: goalAchieved ? 'var(--good)' : 'var(--warn)', fontWeight: 600 }}>
                 {goalAchieved ? '✓ Goal achieved!' : 'Keep working toward it 💪'}
               </p>
             )}
@@ -603,21 +603,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         {/* Distraction log */}
         {distractionLog.length > 0 && (
           <div style={{ width: '100%', boxSizing: 'border-box' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
               What distracted you
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {distractionLog.map((ev, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  background: '#FFFFFF', border: '1px solid #E8E3DA',
+                  background: 'var(--surface)', border: '1px solid var(--line)',
                   borderRadius: 10, padding: '8px 14px',
-                  fontSize: 13, color: '#374151',
+                  fontSize: 13, color: 'var(--text-secondary)',
                 }}>
-                  <span style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af', fontSize: 12 }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontSize: 12 }}>
                     {fmtSecond(ev.second)}
                   </span>
-                  <span style={{ color: '#d1d5db' }}>·</span>
+                  <span style={{ color: 'var(--line-strong)' }}>·</span>
                   <span style={{ fontWeight: 500 }}>
                     {DISTRACTION_LABELS[ev.reason] ?? DISTRACTION_LABELS.default}
                   </span>
@@ -638,7 +638,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             suggestion = `You're on a roll. Next time, try ${mins} minutes.`
           }
           return suggestion ? (
-            <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
               {suggestion}
             </p>
           ) : null
@@ -655,8 +655,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               padding: '14px 28px',
               fontSize: 15, fontWeight: 600,
               background: 'transparent',
-              color: '#1a2e4a',
-              border: '1.5px solid #1a2e4a',
+              color: 'var(--ultra-bright)',
+              border: '1.5px solid var(--ultra)',
               borderRadius: 14,
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -671,8 +671,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               padding: '14px 28px',
               fontSize: 15, fontWeight: 600,
               background: 'transparent',
-              color: '#1a2e4a',
-              border: '1.5px solid #1a2e4a',
+              color: 'var(--ultra-bright)',
+              border: '1.5px solid var(--ultra)',
               borderRadius: 14,
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -687,7 +687,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           style={{
             marginTop: 12,
             background: 'none', border: 'none',
-            color: copied ? '#22c55e' : '#9ca3af',
+            color: copied ? 'var(--good)' : 'var(--text-muted)',
             fontSize: 13, fontWeight: 500,
             cursor: 'pointer', fontFamily: 'inherit',
             textDecoration: 'underline', textDecorationColor: 'transparent',
@@ -701,7 +701,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           style={{
             marginTop: 4,
             background: 'none', border: 'none',
-            color: shared ? '#22c55e' : '#9ca3af',
+            color: shared ? 'var(--good)' : 'var(--text-muted)',
             fontSize: 13, fontWeight: 500,
             cursor: 'pointer', fontFamily: 'inherit',
             textDecoration: 'underline', textDecorationColor: 'transparent',

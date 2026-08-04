@@ -29,16 +29,16 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
   }, [sessions, year, month])
 
   function dayColor(avg) {
-    if (avg === undefined) return '#f3f4f6'
-    if (avg >= 70) return '#bbf7d0'
-    if (avg >= 45) return '#fde68a'
-    return '#fecaca'
+    if (avg === undefined) return 'rgba(122,152,255,0.06)'
+    if (avg >= 70) return 'rgba(47,227,168,0.20)'
+    if (avg >= 45) return 'rgba(255,179,64,0.20)'
+    return 'rgba(255,77,106,0.20)'
   }
   function dayTextColor(avg) {
-    if (avg === undefined) return '#9ca3af'
-    if (avg >= 70) return '#166534'
-    if (avg >= 45) return '#92400e'
-    return '#991b1b'
+    if (avg === undefined) return 'var(--text-muted)'
+    if (avg >= 70) return 'var(--good)'
+    if (avg >= 45) return 'var(--warn)'
+    return 'var(--bad)'
   }
 
   const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -55,12 +55,12 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <p style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         {monthName}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
         {dayLabels.map(l => (
-          <div key={l} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#9ca3af', paddingBottom: 4 }}>{l}</div>
+          <div key={l} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', paddingBottom: 4 }}>{l}</div>
         ))}
         {cells.map((day, i) => {
           if (!day) return <div key={`blank-${i}`} />
@@ -79,7 +79,7 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
                 fontSize: 11, fontWeight: 600,
                 color: dayTextColor(avg),
                 cursor: avg !== undefined ? 'pointer' : 'default',
-                border: isSelected ? '2px solid #1a2e4a' : '2px solid transparent',
+                border: isSelected ? '2px solid var(--ultra)' : '2px solid transparent',
                 boxSizing: 'border-box',
               }}
             >
@@ -88,11 +88,11 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
           )
         })}
       </div>
-      <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#9ca3af', flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#bbf7d0', display: 'inline-block' }}/> ≥70% focus</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#fde68a', display: 'inline-block' }}/> 45–70%</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#fecaca', display: 'inline-block' }}/> &lt;45%</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#f3f4f6', display: 'inline-block' }}/> none</span>
+      <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(47,227,168,0.18)', display: 'inline-block' }}/> ≥70% focus</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(255,179,64,0.18)', display: 'inline-block' }}/> 45–70%</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(255,77,106,0.18)', display: 'inline-block' }}/> &lt;45%</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(122,152,255,0.06)', display: 'inline-block' }}/> none</span>
       </div>
     </div>
   )
@@ -132,9 +132,9 @@ function fmtTime(ts) {
 }
 
 function focusColor(pct) {
-  if (pct >= 70) return '#22c55e'
-  if (pct >= 40) return '#f97316'
-  return '#ef4444'
+  if (pct >= 70) return 'var(--good)'
+  if (pct >= 40) return 'var(--warn)'
+  return 'var(--bad)'
 }
 
 function motivational(pct) {
@@ -154,12 +154,12 @@ const PHASE_LABELS = {
 }
 
 const PHASE_COLORS = {
-  arrival: '#38bdf8',
-  ramp: '#22c55e',
-  lock_in: '#a78bfa',
-  fade: '#f59e0b',
+  arrival: '#5BC8FF',
+  ramp: 'var(--good)',
+  lock_in: '#B79CFF',
+  fade: 'var(--warn)',
   recovery: '#fb7185',
-  drift: '#ef4444',
+  drift: 'var(--bad)',
 }
 
 function dominantEntry(counts = {}) {
@@ -188,7 +188,7 @@ function MiniTimeline({ timeline }) {
   return (
     <div style={{
       width: '100%', height: 5, borderRadius: 3, overflow: 'hidden',
-      display: 'flex', background: '#E8E3DA', marginTop: 8,
+      display: 'flex', background: 'rgba(122,152,255,0.08)', marginTop: 8,
     }}>
       {timeline.map((pt, i) => {
         const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
@@ -197,7 +197,7 @@ function MiniTimeline({ timeline }) {
           <div key={i} style={{
             flex: 1, minWidth: 1,
             background: color,
-            borderBottom: pt.phase ? `2px solid ${PHASE_COLORS[pt.phase] || '#9ca3af'}` : 'none',
+            borderBottom: pt.phase ? `2px solid ${PHASE_COLORS[pt.phase] || 'var(--text-muted)'}` : 'none',
             opacity: pt.preDrift ? 0.6 : 1,
           }} />
         )
@@ -223,7 +223,7 @@ function SessionNote({ session, onNoteUpdate }) {
         onClick={(e) => { e.stopPropagation(); setEditing(true) }}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 12, color: '#9ca3af', padding: 0, fontFamily: 'inherit',
+          fontSize: 12, color: 'var(--text-muted)', padding: 0, fontFamily: 'inherit',
           textDecoration: 'underline', marginTop: 12, display: 'block',
         }}
       >
@@ -238,8 +238,8 @@ function SessionNote({ session, onNoteUpdate }) {
         onClick={(e) => { e.stopPropagation(); setEditing(true) }}
         style={{
           marginTop: 12, padding: '8px 12px',
-          background: '#f9fafb', border: '1px solid #e5e7eb',
-          borderRadius: 8, fontSize: 13, color: '#374151',
+          background: 'rgba(122,152,255,0.05)', border: '1px solid var(--line)',
+          borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)',
           cursor: 'pointer', lineHeight: 1.5,
         }}
         title="Click to edit note"
@@ -259,8 +259,8 @@ function SessionNote({ session, onNoteUpdate }) {
         style={{
           width: '100%', boxSizing: 'border-box',
           padding: '8px 12px', fontSize: 13, fontFamily: 'inherit',
-          border: '1px solid #e5e7eb', borderRadius: 8,
-          background: '#fff', color: '#374151', resize: 'vertical',
+          border: '1px solid var(--line)', borderRadius: 8,
+          background: 'var(--surface)', color: 'var(--text-secondary)', resize: 'vertical',
           outline: 'none', lineHeight: 1.5,
         }}
         autoFocus
@@ -270,7 +270,7 @@ function SessionNote({ session, onNoteUpdate }) {
           onClick={save}
           style={{
             padding: '5px 14px', fontSize: 12, fontWeight: 600,
-            background: '#1a2e4a', color: '#fff', border: 'none',
+            background: 'var(--ultra)', color: 'var(--text)', border: 'none',
             borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
           }}
         >Save</button>
@@ -278,8 +278,8 @@ function SessionNote({ session, onNoteUpdate }) {
           onClick={() => { setDraft(session.note || ''); setEditing(false) }}
           style={{
             padding: '5px 14px', fontSize: 12, fontWeight: 600,
-            background: 'none', color: '#6b7280',
-            border: '1px solid #e5e7eb', borderRadius: 8,
+            background: 'none', color: 'var(--text-muted)',
+            border: '1px solid var(--line)', borderRadius: 8,
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >Cancel</button>
@@ -301,9 +301,9 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
   return (
     <div
       style={{
-        background: '#FFFFFF',
-        border: `1.5px solid ${expanded ? '#1a2e4a' : '#E8E3DA'}`,
-        borderLeft: `4px solid ${focusPct >= 70 ? '#22c55e' : focusPct >= 40 ? '#f97316' : '#ef4444'}`,
+        background: 'var(--surface)',
+        border: `1.5px solid ${expanded ? 'var(--ultra)' : 'var(--line)'}`,
+        borderLeft: `4px solid ${focusPct >= 70 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)'}`,
         borderRadius: 16,
         padding: '20px 22px',
         cursor: 'pointer',
@@ -315,10 +315,10 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
       {/* Top row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 3 }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
             {session.task || 'Untitled session'}
           </p>
-          <p style={{ fontSize: 12, color: '#9ca3af' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {relativeTime(session.timestamp) || `${fmtDate(session.timestamp)} · ${fmtTime(session.timestamp)}`}
           </p>
         </div>
@@ -338,7 +338,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
             onClick={(e) => { e.stopPropagation(); onDelete(session.id) }}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              color: '#d1d5db', fontSize: 16, lineHeight: 1, padding: '2px 4px',
+              color: 'var(--line-strong)', fontSize: 16, lineHeight: 1, padding: '2px 4px',
               borderRadius: 6, transition: 'color 0.15s',
             }}
             title="Delete"
@@ -351,16 +351,16 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
       {/* Quick stats row */}
       <div style={{
         display: 'flex', gap: 20, marginTop: 14,
-        fontSize: 12, color: '#6b7280', flexWrap: 'wrap', rowGap: 6,
+        fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap', rowGap: 6,
       }}>
         <span>{fmt(session.actualSeconds)}</span>
         <span>{motivational(focusPct)}</span>
         <span>{session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
         <span>{fmt(session.longestFocusedStreak)} streak</span>
-        {session.completed && <span style={{ color: '#22c55e' }}>Completed</span>}
+        {session.completed && <span style={{ color: 'var(--good)' }}>Completed</span>}
       </div>
 
-      <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0', lineHeight: 1.4 }}>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.4 }}>
         {phaseInsight(session, focusPct)}
       </p>
 
@@ -383,8 +383,8 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
       {!expanded && session.note && (
         <div style={{
           marginTop: 10, padding: '7px 10px',
-          background: '#f9fafb', border: '1px solid #e5e7eb',
-          borderRadius: 8, fontSize: 12, color: '#6b7280',
+          background: 'rgba(122,152,255,0.05)', border: '1px solid var(--line)',
+          borderRadius: 8, fontSize: 12, color: 'var(--text-muted)',
           lineHeight: 1.5,
         }}>
           {session.note}
@@ -408,17 +408,17 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
               { label: 'Best streak', value: fmt(session.longestFocusedStreak) },
             ].map((s) => (
               <div key={s.label} style={{
-                background: '#F5F4F0', borderRadius: 12, padding: '14px 8px',
+                background: 'var(--bg)', borderRadius: 12, padding: '14px 8px',
               }}>
                 <p style={{
                   fontSize: 22, fontWeight: 300,
-                  color: s.color ?? '#111827',
+                  color: s.color ?? 'var(--text)',
                   letterSpacing: '-0.02em',
                   marginBottom: 4,
                 }}>
                   {s.value}
                 </p>
-                <p style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>
                   {s.label}
                 </p>
               </div>
@@ -430,19 +430,19 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
             <div style={{
               marginTop: 14,
               padding: '10px 14px',
-              background: '#F5F4F0',
+              background: 'var(--bg)',
               borderRadius: 10,
               display: 'flex',
               gap: 16,
               flexWrap: 'wrap',
             }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: 4 }}>vs last</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: 4 }}>vs last</span>
               {(() => {
                 const focusDiff = focusPct - prevFocusPct
                 const durDiff = (session.actualSeconds ?? 0) - (prevSession.actualSeconds ?? 0)
                 const alertsDiff = (session.distractionEvents ?? 0) - (prevSession.distractionEvents ?? 0)
                 const sign = (n) => n > 0 ? '+' : ''
-                const color = (n, invert = false) => n === 0 ? '#9ca3af' : (n > 0) !== invert ? '#22c55e' : '#ef4444'
+                const color = (n, invert = false) => n === 0 ? 'var(--text-muted)' : (n > 0) !== invert ? 'var(--good)' : 'var(--bad)'
                 const fmtDur = (s) => {
                   const abs = Math.abs(s)
                   const m = Math.floor(abs / 60), sec = abs % 60
@@ -470,17 +470,17 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
 
           {session.focusPhases?.seconds && Object.values(session.focusPhases.seconds).some(seconds => seconds > 0) && (
             <div style={{ marginTop: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
                 Phase shape
               </p>
-              <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: '#f3f4f6' }}>
+              <div style={{ display: 'flex', height: 8, width: '100%', borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.06)' }}>
                 {Object.entries(session.focusPhases.seconds)
                   .filter(([, seconds]) => seconds > 0)
                   .map(([phase, seconds]) => (
                     <div
                       key={phase}
                       title={`${PHASE_LABELS[phase] || phase}: ${fmt(seconds)}`}
-                      style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || '#9ca3af' }}
+                      style={{ flex: seconds, minWidth: 2, background: PHASE_COLORS[phase] || 'var(--text-muted)' }}
                     />
                   ))}
               </div>
@@ -488,7 +488,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
                 {Object.entries(session.focusPhases.seconds)
                   .filter(([, seconds]) => seconds > 0)
                   .map(([phase, seconds]) => (
-                    <span key={phase} style={{ fontSize: 11, color: '#6b7280' }}>
+                    <span key={phase} style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {PHASE_LABELS[phase] || phase}: {fmt(seconds)}
                     </span>
                   ))}
@@ -499,12 +499,12 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
           {/* Full timeline */}
           {session.timeline?.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
                 Focus timeline
               </p>
               <div style={{
                 width: '100%', height: 10, borderRadius: 5, overflow: 'hidden',
-                display: 'flex', background: '#E8E3DA',
+                display: 'flex', background: 'rgba(122,152,255,0.08)',
               }}>
                 {session.timeline.map((pt, i) => {
                   const s = pt.score != null ? pt.score : (pt.focused ? 80 : 20)
@@ -513,7 +513,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
                     <div key={i} style={{
                       flex: 1, minWidth: 2,
                       background: color,
-                      borderBottom: pt.phase ? `3px solid ${PHASE_COLORS[pt.phase] || '#9ca3af'}` : 'none',
+                      borderBottom: pt.phase ? `3px solid ${PHASE_COLORS[pt.phase] || 'var(--text-muted)'}` : 'none',
                       opacity: pt.preDrift ? 0.6 : 1,
                     }} title={[
                       `${fmt(pt.second || 0)}: ${s}% focus`,
@@ -525,8 +525,8 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>Start</span>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>End</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Start</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>End</span>
               </div>
             </div>
           )}
@@ -588,7 +588,7 @@ function OverallStats({ sessions }) {
         { label: 'Best session',      value: `${stats.bestPct}%`,    color: focusColor(stats.bestPct) },
       ].map((s) => (
         <div key={s.label} style={{
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           border: 'none',
           borderRadius: 16,
           padding: '18px 16px',
@@ -597,11 +597,11 @@ function OverallStats({ sessions }) {
         }}>
           <p style={{
             fontSize: 28, fontWeight: 300, letterSpacing: '-0.025em',
-            color: s.color ?? '#1A1A1A', marginBottom: 6,
+            color: s.color ?? 'var(--text)', marginBottom: 6,
           }}>
             {s.value}
           </p>
-          <p style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
             {s.label}
           </p>
         </div>
@@ -659,13 +659,13 @@ function WeeklyTrends({ sessions }) {
 
   return (
     <div style={{
-      background: '#FFFFFF',
+      background: 'var(--surface)',
       borderRadius: 16,
       padding: '20px 20px 16px',
       boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
       marginBottom: 24,
     }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16, margin: '0 0 16px' }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16, margin: '0 0 16px' }}>
         Last 7 days
       </p>
       <div style={{ position: 'relative' }}>
@@ -678,20 +678,20 @@ function WeeklyTrends({ sessions }) {
           zIndex: 1,
           pointerEvents: 'none',
         }}>
-          <span style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>70%</span>
+          <span style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: 'var(--text-secondary)', fontWeight: 600 }}>70%</span>
         </div>
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {days.map((day, i) => {
               const filled = day.avgFocus !== null
               const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
-              const color = filled ? focusColor(day.avgFocus) : '#E8E3DA'
+              const color = filled ? focusColor(day.avgFocus) : 'var(--line)'
               const tooltip = filled
                 ? `${day.label} — ${day.avgFocus}% avg, ${day.count} session${day.count !== 1 ? 's' : ''}`
                 : `${day.label} — no sessions`
               return (
                 <div key={i} title={tooltip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: filled ? '#6b7280' : 'transparent' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: filled ? 'var(--text-muted)' : 'transparent' }}>
                     {filled ? `${day.avgFocus}%` : '0'}
                   </span>
                   <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
@@ -703,8 +703,8 @@ function WeeklyTrends({ sessions }) {
                       transition: 'height 0.3s ease',
                     }} />
                   </div>
-                  <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>{day.label}</span>
-                  <span style={{ fontSize: 9, color: filled ? '#cbd5e1' : 'transparent', fontWeight: 500 }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>{day.label}</span>
+                  <span style={{ fontSize: 9, color: filled ? 'var(--line-strong)' : 'transparent', fontWeight: 500 }}>
                     {filled ? day.count : '0'}
                   </span>
                 </div>
@@ -846,7 +846,7 @@ export default function HistoryDashboard({ onClose }) {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: '#F5F4F0',
+      background: 'var(--bg)',
       overflowY: 'auto',
       zIndex: 200,
     }}>
@@ -858,10 +858,10 @@ export default function HistoryDashboard({ onClose }) {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
           <div>
-            <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.025em', color: '#111827' }}>
+            <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text)' }}>
               Session History
             </h1>
-            <p style={{ fontSize: 14, color: '#9ca3af', marginTop: 4 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
               {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} total focused
             </p>
           </div>
@@ -870,7 +870,7 @@ export default function HistoryDashboard({ onClose }) {
             style={{
               padding: '9px 22px',
               fontSize: 14, fontWeight: 600,
-              background: '#1a2e4a', color: '#fff',
+              background: 'var(--ultra)', color: 'var(--text)',
               border: 'none', borderRadius: 12,
               cursor: 'pointer', fontFamily: 'inherit',
             }}
@@ -881,20 +881,20 @@ export default function HistoryDashboard({ onClose }) {
 
         {sessions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <p style={{ fontSize: 32, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>
+            <p style={{ fontSize: 32, fontWeight: 300, color: 'var(--text)', margin: 0 }}>
               No sessions yet
             </p>
-            <p style={{ fontSize: 14, color: '#9ca3af', marginTop: 8 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 8 }}>
               Complete your first focus session to see your stats here.
             </p>
             <button
               onClick={onClose}
               style={{
                 marginTop: 24,
-                border: '1.5px solid #E8E3DA',
+                border: '1.5px solid var(--line)',
                 borderRadius: 100,
                 padding: '10px 24px',
-                fontSize: 14, color: '#6B7280',
+                fontSize: 14, color: 'var(--text-muted)',
                 background: 'transparent',
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
@@ -914,10 +914,10 @@ export default function HistoryDashboard({ onClose }) {
                   key={val}
                   onClick={() => { setDateFilter(val); setPage(0); setSelectedDay(null) }}
                   style={{
-                    border: dateFilter === val ? '1.5px solid #1a2e4a' : '1.5px solid #E8E3DA',
+                    border: dateFilter === val ? '1.5px solid var(--ultra)' : '1.5px solid var(--line)',
                     borderRadius: 100, padding: '6px 16px',
                     fontSize: 12, fontWeight: 600,
-                    background: dateFilter === val ? '#1a2e4a' : 'transparent',
+                    background: dateFilter === val ? 'var(--ultra)' : 'transparent',
                     color: dateFilter === val ? '#fff' : '#6B7280',
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
@@ -944,8 +944,8 @@ export default function HistoryDashboard({ onClose }) {
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   padding: '8px 32px 8px 12px',
-                  background: '#f9fafb', border: '1.5px solid #E8E3DA',
-                  borderRadius: 10, fontSize: 13, color: '#1a2e4a',
+                  background: 'rgba(122,152,255,0.05)', border: '1.5px solid var(--line)',
+                  borderRadius: 10, fontSize: 13, color: 'var(--ultra-bright)',
                   fontFamily: 'inherit', outline: 'none',
                 }}
               />
@@ -956,7 +956,7 @@ export default function HistoryDashboard({ onClose }) {
                     position: 'absolute', right: 10, top: '50%',
                     transform: 'translateY(-50%)',
                     background: 'none', border: 'none',
-                    color: '#9ca3af', fontSize: 14, cursor: 'pointer',
+                    color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer',
                     lineHeight: 1, padding: 0,
                   }}
                 >×</button>
@@ -968,7 +968,7 @@ export default function HistoryDashboard({ onClose }) {
               {groupedSessions.map(group => (
                 <div key={group.label}>
                   <p style={{
-                    fontSize: 11, fontWeight: 700, color: '#9ca3af',
+                    fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                     textTransform: 'uppercase', letterSpacing: '0.08em',
                     margin: '0 0 8px',
                   }}>
@@ -1003,12 +1003,12 @@ export default function HistoryDashboard({ onClose }) {
                   disabled={page === 0}
                   style={{
                     padding: '7px 16px', fontSize: 13, fontWeight: 600,
-                    border: '1.5px solid #E8E3DA', borderRadius: 100,
-                    background: 'transparent', color: page === 0 ? '#d1d5db' : '#1a2e4a',
+                    border: '1.5px solid var(--line)', borderRadius: 100,
+                    background: 'transparent', color: page === 0 ? 'var(--line-strong)' : 'var(--ultra)',
                     cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'inherit',
                   }}
                 >← Previous</button>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredSessions.length)} of {filteredSessions.length} sessions
                 </span>
                 <button
@@ -1016,8 +1016,8 @@ export default function HistoryDashboard({ onClose }) {
                   disabled={page >= totalPages - 1}
                   style={{
                     padding: '7px 16px', fontSize: 13, fontWeight: 600,
-                    border: '1.5px solid #E8E3DA', borderRadius: 100,
-                    background: 'transparent', color: page >= totalPages - 1 ? '#d1d5db' : '#1a2e4a',
+                    border: '1.5px solid var(--line)', borderRadius: 100,
+                    background: 'transparent', color: page >= totalPages - 1 ? 'var(--line-strong)' : 'var(--ultra)',
                     cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'inherit',
                   }}
                 >Next →</button>
@@ -1030,8 +1030,8 @@ export default function HistoryDashboard({ onClose }) {
                   <button
                     onClick={handleExportCSV}
                     style={{
-                      background: 'none', border: '1px solid #e5e7eb',
-                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      background: 'none', border: '1px solid var(--line)',
+                      color: 'var(--text-muted)', fontSize: 13, padding: '8px 20px',
                       borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                       transition: 'color 0.15s, border-color 0.15s',
                     }}
@@ -1042,8 +1042,8 @@ export default function HistoryDashboard({ onClose }) {
                     onClick={() => window.print()}
                     className="no-print"
                     style={{
-                      background: 'none', border: '1px solid #e5e7eb',
-                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      background: 'none', border: '1px solid var(--line)',
+                      color: 'var(--text-muted)', fontSize: 13, padding: '8px 20px',
                       borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                       transition: 'color 0.15s, border-color 0.15s',
                     }}
@@ -1053,8 +1053,8 @@ export default function HistoryDashboard({ onClose }) {
                   <button
                     onClick={() => setConfirmClear(true)}
                     style={{
-                      background: 'none', border: '1px solid #e5e7eb',
-                      color: '#9ca3af', fontSize: 13, padding: '8px 20px',
+                      background: 'none', border: '1px solid var(--line)',
+                      color: 'var(--text-muted)', fontSize: 13, padding: '8px 20px',
                       borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                       transition: 'color 0.15s, border-color 0.15s',
                     }}
@@ -1064,11 +1064,11 @@ export default function HistoryDashboard({ onClose }) {
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: '#6b7280' }}>Are you sure?</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Are you sure?</span>
                   <button
                     onClick={handleClearAll}
                     style={{
-                      background: '#ef4444', color: '#fff', border: 'none',
+                      background: 'var(--bad)', color: 'var(--text)', border: 'none',
                       fontSize: 13, padding: '8px 18px', borderRadius: 100,
                       cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
                     }}
@@ -1078,8 +1078,8 @@ export default function HistoryDashboard({ onClose }) {
                   <button
                     onClick={() => setConfirmClear(false)}
                     style={{
-                      background: 'none', border: '1px solid #e5e7eb',
-                      color: '#6b7280', fontSize: 13, padding: '8px 18px',
+                      background: 'none', border: '1px solid var(--line)',
+                      color: 'var(--text-muted)', fontSize: 13, padding: '8px 18px',
                       borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                     }}
                   >

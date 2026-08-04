@@ -29,7 +29,7 @@ export const POSITION_LABELS = {
   'below-right': 'Below-Right',
 }
 
-const navy = '#1a2e4a'
+const navy = 'var(--ultra)'
 
 // ── Device Picker ──────────────────────────────────────────────────────────────
 function DevicePicker({ position, devices, onAdd, onRemove, onClose }) {
@@ -43,25 +43,25 @@ function DevicePicker({ position, devices, onAdd, onRemove, onClose }) {
       backdropFilter: 'blur(6px)',
     }} onClick={onClose}>
       <div style={{
-        background: '#fff',
+        background: 'var(--surface)',
         borderRadius: 24,
         padding: '32px 28px 24px',
         minWidth: 320,
         boxShadow: '0 24px 64px rgba(0,0,0,0.2)',
-        border: '1px solid #e5e7eb',
+        border: '1px solid var(--line)',
       }} onClick={e => e.stopPropagation()}>
 
         <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 4 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 4 }}>
             {POSITION_LABELS[position]}
           </p>
-          <p style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.015em' }}>Add a device</p>
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.015em' }}>Add a device</p>
         </div>
 
         {/* Placed devices */}
         {placed.length > 0 && (
           <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Placed here</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Placed here</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {placed.map((d, i) => {
                 const dt = DEVICE_TYPES.find(t => t.id === d.type)
@@ -77,7 +77,7 @@ function DevicePicker({ position, devices, onAdd, onRemove, onClose }) {
                     <span>{dt?.label}</span>
                     <button onClick={() => onRemove(position, d.type, i)} style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: '0 0 0 2px',
+                      color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: '0 0 0 2px',
                     }}>×</button>
                   </div>
                 )
@@ -97,18 +97,18 @@ function DevicePicker({ position, devices, onAdd, onRemove, onClose }) {
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                   padding: '16px 12px',
-                  background: '#f8fafc',
-                  border: '1.5px solid #e5e7eb',
+                  background: 'var(--surface)',
+                  border: '1.5px solid var(--line)',
                   borderRadius: 16,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   transition: 'border-color 0.15s, background 0.15s, transform 0.1s',
                   fontSize: 13,
                   fontWeight: 600,
-                  color: '#374151',
+                  color: 'var(--text-secondary)',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = navy; e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.transform = 'scale(1.03)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'scale(1)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.transform = 'scale(1)' }}
               >
                 {Icon && <Icon size={40} />}
                 <span>{dt.label}</span>
@@ -120,7 +120,7 @@ function DevicePicker({ position, devices, onAdd, onRemove, onClose }) {
         <button onClick={onClose} style={{
           marginTop: 16, width: '100%', padding: '11px',
           fontSize: 14, fontWeight: 600,
-          background: navy, color: '#fff',
+          background: navy, color: 'var(--text)',
           border: 'none', borderRadius: 12,
           cursor: 'pointer', fontFamily: 'inherit',
         }}>Done</button>
@@ -168,10 +168,10 @@ function GridCell({ cell, devices, onClick }) {
         aspectRatio: '1',
         borderRadius: 20,
         border: isEmpty
-          ? `2px dashed ${hovered ? '#94a3b8' : '#e2e8f0'}`
+          ? `2px dashed ${hovered ? 'var(--text-secondary)' : 'var(--text)'}`
           : `2px solid ${hovered ? navy : navy + '40'}`,
         background: isEmpty
-          ? (hovered ? '#f8fafc' : '#fafafa')
+          ? (hovered ? 'var(--surface)' : '#fafafa')
           : (hovered ? navy + '12' : navy + '07'),
         cursor: 'pointer',
         transition: 'all 0.18s ease',
@@ -185,13 +185,13 @@ function GridCell({ cell, devices, onClick }) {
       {isEmpty ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           {cell.label && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: hovered ? '#94a3b8' : '#cbd5e1', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: hovered ? 'var(--text-secondary)' : 'var(--line-strong)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {cell.label}
             </span>
           )}
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <line x1="9" y1="3" x2="9" y2="15" stroke={hovered ? '#94a3b8' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
-            <line x1="3" y1="9" x2="15" y2="9" stroke={hovered ? '#94a3b8' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="9" y1="3" x2="9" y2="15" stroke={hovered ? 'var(--text-secondary)' : 'var(--line-strong)'} strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3" y1="9" x2="15" y2="9" stroke={hovered ? 'var(--text-secondary)' : 'var(--line-strong)'} strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </div>
       ) : hasMultiple ? (
@@ -231,12 +231,12 @@ function DeviceSummary({ devices }) {
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: '#f1f5f9', borderRadius: 100,
-            padding: '5px 12px', fontSize: 12, fontWeight: 600, color: '#374151',
+            padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)',
           }}>
             {Icon && <Icon size={18} />}
             <span>{dt?.label}</span>
-            <span style={{ color: '#94a3b8', fontWeight: 400 }}>·</span>
-            <span style={{ color: '#6b7280', fontWeight: 500 }}>{POSITION_LABELS[d.position]}</span>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>·</span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{POSITION_LABELS[d.position]}</span>
           </div>
         )
       })}
@@ -271,16 +271,16 @@ export default function SetupScreen({ devices, setDevices, onContinue }) {
       minHeight: '100vh',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '48px 24px',
-      background: '#fff',
+      background: 'var(--surface)',
     }}>
       <div style={{ width: '100%', maxWidth: 500, display: 'flex', flexDirection: 'column', gap: 36 }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.028em', color: '#111827', marginBottom: 10 }}>
+          <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.028em', color: 'var(--text)', marginBottom: 10 }}>
             Your Setup
           </h1>
-          <p style={{ fontSize: 15, color: '#9ca3af', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 15, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             Place your devices so we know where everything is.<br />
             Better setup = more accurate focus tracking.
           </p>
@@ -311,8 +311,8 @@ export default function SetupScreen({ devices, setDevices, onContinue }) {
 
         {/* Direction labels */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: -20, padding: '0 4px' }}>
-          <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Left</span>
-          <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Right</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Left</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Right</span>
         </div>
 
         {/* Device summary */}
@@ -321,7 +321,7 @@ export default function SetupScreen({ devices, setDevices, onContinue }) {
             <DeviceSummary devices={devices} />
             <button
               onClick={() => setDevices([])}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#94a3b8', fontFamily: 'inherit' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'inherit' }}
             >
               Clear all
             </button>
@@ -335,7 +335,7 @@ export default function SetupScreen({ devices, setDevices, onContinue }) {
             style={{
               width: '100%', padding: '15px',
               fontSize: 16, fontWeight: 600,
-              background: navy, color: '#fff',
+              background: navy, color: 'var(--text)',
               border: 'none', borderRadius: 14,
               cursor: 'pointer', fontFamily: 'inherit',
               transition: 'opacity 0.15s',

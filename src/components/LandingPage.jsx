@@ -73,7 +73,7 @@ export default function LandingPage() {
             width: '80vw', height: '80vw',
             maxWidth: 900, maxHeight: 900,
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(26,46,74,0.9) 0%, rgba(14,22,44,0.4) 40%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(122,152,255,0.9) 0%, rgba(14,22,44,0.4) 40%, transparent 70%)',
             top: '50%', left: '50%',
             transform: 'translate(-50%, -55%)',
             animation: 'heroGlow 8s ease-in-out infinite',
@@ -118,7 +118,7 @@ export default function LandingPage() {
             }}>
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
-                background: '#6496ed',
+                background: 'var(--ultra-bright)',
                 boxShadow: '0 0 6px #6496ed',
                 display: 'inline-block',
               }} />
@@ -156,14 +156,14 @@ export default function LandingPage() {
             className="hero-cta"
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, #1a2e4a 0%, #243d61 100%)',
-              color: '#ffffff',
+              background: 'linear-gradient(135deg, var(--ultra) 0%, #243d61 100%)',
+              color: 'var(--text)',
               border: '1px solid rgba(100,149,237,0.3)',
               height: 56, padding: '0 40px',
               borderRadius: 14, fontSize: 16, fontWeight: 600,
               cursor: 'pointer', fontFamily: font,
               transition: 'all 0.2s ease',
-              boxShadow: '0 0 0 1px rgba(100,149,237,0.1), 0 4px 20px rgba(26,46,74,0.5)',
+              boxShadow: '0 0 0 1px rgba(100,149,237,0.1), 0 4px 20px rgba(122,152,255,0.5)',
               letterSpacing: '0.01em', textDecoration: 'none',
             }}
           >
@@ -183,7 +183,7 @@ export default function LandingPage() {
               <span key={label} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '5px 13px', borderRadius: 100,
-                background: 'rgba(255,255,255,0.04)',
+                background: 'rgba(122,152,255,0.06)',
                 border: '1px solid rgba(255,255,255,0.07)',
                 fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 500,
               }}>
@@ -246,7 +246,7 @@ export default function LandingPage() {
             </span>
             <h2 style={{
               fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700,
-              letterSpacing: '-0.03em', color: '#ffffff', margin: 0,
+              letterSpacing: '-0.03em', color: 'var(--text)', margin: 0,
             }}>
               Website to app,<br />then focus
             </h2>
@@ -260,7 +260,7 @@ export default function LandingPage() {
                 style={{
                   display: 'flex', gap: 28, alignItems: 'flex-start',
                   padding: '28px 32px',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(122,152,255,0.06)',
                   border: '1px solid rgba(255,255,255,0.05)',
                   borderRadius: 16,
                   transition: 'all 0.2s ease',
@@ -276,7 +276,7 @@ export default function LandingPage() {
                 </span>
                 <div>
                   <p style={{
-                    fontSize: 17, fontWeight: 600, color: '#ffffff',
+                    fontSize: 17, fontWeight: 600, color: 'var(--text)',
                     margin: '0 0 7px', letterSpacing: '-0.015em',
                   }}>
                     {s.title}
@@ -293,7 +293,7 @@ export default function LandingPage() {
 
       {/* ── PRIVACY CALLOUT ───────────────────────────────────────────────── */}
       <section style={{
-        background: 'linear-gradient(135deg, #0f1e35 0%, #1a2e4a 50%, #0f1e35 100%)',
+        background: 'linear-gradient(135deg, #0f1e35 0%, var(--ultra) 50%, #0f1e35 100%)',
         padding: '88px 24px',
         textAlign: 'center',
         position: 'relative', overflow: 'hidden',
@@ -305,7 +305,7 @@ export default function LandingPage() {
         <div style={{ maxWidth: 560, margin: '0 auto', position: 'relative', zIndex: 1 }}>
           <h2 style={{
             fontSize: 'clamp(26px, 4vw, 40px)', fontWeight: 700,
-            color: '#ffffff', margin: '0 0 18px', letterSpacing: '-0.025em',
+            color: 'var(--text)', margin: '0 0 18px', letterSpacing: '-0.025em',
           }}>
             Built for privacy, by design
           </h2>
@@ -322,7 +322,7 @@ export default function LandingPage() {
             className="hero-cta"
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              background: '#ffffff', color: '#1a2e4a',
+              background: 'var(--surface)', color: 'var(--ultra-bright)',
               border: 'none', height: 52, padding: '0 32px',
               borderRadius: 12, fontSize: 15, fontWeight: 700,
               cursor: 'pointer', fontFamily: font,
