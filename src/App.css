@@ -49,6 +49,109 @@ button:focus-visible {
 
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* ── Motion ──────────────────────────────────────────────────────────────
+     One decelerating curve for anything entering or settling, one softer one
+     for state changes. Sharing them is what makes separate animations read as
+     a single system instead of a pile of effects. Durations stay short: this
+     is a tool you use for hours, and motion you notice twice is motion you
+     resent by the tenth time.                                              */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);   /* fast start, long settle */
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 140ms;
+  --t-base: 260ms;
+  --t-slow: 520ms;
+}
+
+/* ── Scrolling ─────────────────────────────────────────────────────────────
+   The platform scrollbar is a light grey slab that punches a hole in a dark
+   design. A thin ultramarine one that only asserts itself on hover keeps the
+   edge of the screen quiet.                                                */
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: rgba(122, 152, 255, 0.28) transparent;  /* Firefox */
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(122, 152, 255, 0.22);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  transition: background var(--t-fast) var(--ease-soft);
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(122, 152, 255, 0.45); background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Stops a scroll that reaches the end of a panel from grabbing the page. */
+body { overscroll-behavior-y: none; }
+
+/* ── Screen transitions ────────────────────────────────────────────────────
+   Each screen is keyed on its name, so React remounts the wrapper on every
+   change and the enter animation replays — a transition with no library and
+   no exit-animation bookkeeping.
+
+   The session is deliberately the odd one out. Everywhere else the screen
+   rises into place; entering a session the view settles INWARD from slightly
+   larger, as the room closing in around the work. The motion says what the
+   screen is for.
+
+   The wrapper fades ONLY. transform or filter on it would turn it into the
+   containing block for every position:fixed child — the pause overlay, the
+   camera-fault panel, the webcam corner would all jump for the length of the
+   animation. The movement therefore lives on the inner content instead.    */
+.screen-enter { animation: screenFade var(--t-base) var(--ease-out) both; }
+
+@keyframes screenFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Ordinary screens rise into place. */
+.screen-enter .home-content,
+.screen-enter .end-content {
+  animation: contentRise var(--t-slow) var(--ease-out) both;
+}
+
+@keyframes contentRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The session settles inward from slightly larger — the room closing in
+   around the work, rather than another panel sliding in. */
+.screen-enter .session-main {
+  animation: sessionSettle 620ms var(--ease-out) both;
+}
+
+@keyframes sessionSettle {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Anything that can be pressed should acknowledge the press. */
+button { transition: transform var(--t-fast) var(--ease-soft); }
+button:not(:disabled):active { transform: translateY(1px) scale(0.995); }
+
+/* ── Reduced motion ────────────────────────────────────────────────────────
+   Honour the system setting: no transforms, no blur, no pulsing. Opacity-only
+   fades are kept — they carry the state change without any movement.       */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .screen-enter,
+  .screen-enter .home-content,
+  .screen-enter .end-content,
+  .screen-enter .session-main {
+    animation: screenFade 120ms linear both;
+  }
 }
 
 body {

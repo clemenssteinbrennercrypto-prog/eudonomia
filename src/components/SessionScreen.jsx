@@ -474,7 +474,22 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
 
   return (
     <div className={isCalibrating ? 'ring--calibrating' : ''} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: isCalibrating ? 'none' : score >= 65 ? 'drop-shadow(0 0 12px rgba(34,197,94,0.25))' : score >= 38 ? 'drop-shadow(0 0 12px rgba(249,115,22,0.2))' : 'drop-shadow(0 0 12px rgba(239,68,68,0.2))' }}>
+      {/* The glow follows the same semantic colours as the arc, and fades
+          between states rather than snapping when the score crosses a
+          threshold. */}
+      <svg
+        width={size}
+        height={size}
+        style={{
+          position: 'absolute', top: 0, left: 0,
+          filter: isCalibrating
+            ? 'drop-shadow(0 0 10px rgba(122,152,255,0.20))'
+            : score >= 65 ? 'drop-shadow(0 0 16px rgba(47,227,168,0.32))'
+            : score >= 38 ? 'drop-shadow(0 0 16px rgba(255,179,64,0.28))'
+            : 'drop-shadow(0 0 16px rgba(255,77,106,0.30))',
+          transition: 'filter 0.5s var(--ease-soft)',
+        }}
+      >
         <circle
           cx={size / 2} cy={size / 2} r={radius}
           fill="none" stroke="#0D1330" strokeWidth={stroke}
@@ -488,7 +503,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
           strokeDasharray={circ}
           strokeDashoffset={offset}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.4s ease' }}
+          style={{ transition: 'stroke-dashoffset 0.7s var(--ease-out), stroke 0.45s var(--ease-soft)' }}
         />
       </svg>
       <div style={{

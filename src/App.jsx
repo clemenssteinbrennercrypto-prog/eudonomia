@@ -247,6 +247,9 @@ export default function App() {
           and an update can always wait until the session ends. */}
       {screen !== 'session' && <AppRefreshControl updateStatus={updateStatus} />}
       <BuildIdentity />
+      {/* key={screen} remounts this on every change, replaying the enter
+          animation — a screen transition with no library. */}
+      <div key={screen} className="screen-enter">
       {screen === 'home' && (
         <HomeScreen
           task={task}
@@ -301,6 +304,7 @@ export default function App() {
       {screen === 'history' && (
         <HistoryDashboard onClose={() => setScreen('home')} />
       )}
+      </div>
     </>
   )
 }
