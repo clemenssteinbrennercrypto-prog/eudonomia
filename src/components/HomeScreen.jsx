@@ -197,11 +197,6 @@ export default function HomeScreen({
             </div>
           )}
           <p className="app-tagline">Stay present. Stay focused.</p>
-          {sessionCount === 0 && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-              Welcome to Eudaimonia. Set up your workspace and start your first focus session.
-            </p>
-          )}
           {lastSessionPill && (
             <div
               onClick={onShowHistory}
@@ -228,9 +223,9 @@ export default function HomeScreen({
               onClick={onShowSetup}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '12px 16px',
-                background: 'rgba(122,152,255,0.05)',
-                border: '1.5px solid var(--line)',
+                padding: '11px 14px',
+                background: 'transparent',
+                border: '1px solid var(--line)',
                 borderRadius: 12,
                 cursor: 'pointer',
               }}
@@ -247,7 +242,7 @@ export default function HomeScreen({
               style={{
                 width: '100%', padding: '16px',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: 'var(--surface)', border: '1.5px solid var(--line)',
+                background: 'transparent', border: '1px solid var(--line)',
                 borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
                 textAlign: 'left',
               }}
@@ -273,8 +268,8 @@ export default function HomeScreen({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'var(--surface)',
-              border: '1.5px solid var(--line)',
+              background: 'transparent',
+              border: '1px solid var(--line)',
               borderRadius: 14,
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -295,27 +290,27 @@ export default function HomeScreen({
             aria-pressed={focusModeEnabled}
             style={{
               width: '100%',
-              padding: '12px 16px',
+              padding: '11px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 14,
-              background: focusModeEnabled ? 'rgba(47,227,168,0.08)' : 'var(--surface)',
-              border: `1.5px solid ${focusModeEnabled ? 'rgba(47,227,168,0.35)' : 'var(--line)'}`,
-              borderRadius: 14,
+              background: 'transparent',
+              border: '1px solid var(--line)',
+              borderRadius: 12,
               cursor: 'pointer',
               fontFamily: 'inherit',
               textAlign: 'left',
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
               Focus mode: {focusModeEnabled ? 'ON' : 'OFF'}
             </span>
             <span style={{
               width: 42,
               height: 24,
               borderRadius: 100,
-              background: focusModeEnabled ? 'var(--good)' : 'var(--line-strong)',
+              background: focusModeEnabled ? 'rgba(47,227,168,0.55)' : 'var(--line-strong)',
               padding: 3,
               display: 'inline-flex',
               justifyContent: focusModeEnabled ? 'flex-end' : 'flex-start',
@@ -404,7 +399,7 @@ export default function HomeScreen({
                     style={{
                       padding: '4px 12px',
                       borderRadius: 100,
-                      border: `1.5px solid ${active ? c.border : 'var(--line)'}`,
+                      border: `1px solid ${active ? c.border : 'var(--line)'}`,
                       background: active ? c.bg : 'transparent',
                       color: active ? c.text : 'var(--text-muted)',
                       fontSize: 12, fontWeight: active ? 600 : 400,
