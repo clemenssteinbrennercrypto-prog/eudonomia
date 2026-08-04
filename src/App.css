@@ -9,29 +9,66 @@ button, input, textarea, select {
 }
 
 button:focus-visible {
-  outline: 2px solid #1a2e4a;
+  outline: 2px solid var(--ultra-bright);
   outline-offset: 2px;
 }
 
+/* ── Ultramarine ───────────────────────────────────────────────────────────
+   One dark, blue-biased world across the whole app. Reasons, not decoration:
+   a deep ground keeps the screen from competing with the work being tracked,
+   and a single luminous accent means the one thing that glows is the thing
+   that matters — your focus. Neutrals carry a blue bias so nothing reads as
+   grey-by-default. The legacy token names are kept so everything already
+   styled through them moves with the system.                                */
 :root {
-  --navy: #1a2e4a;
-  --navy-hover: rgba(26, 46, 74, 0.87);
-  --text: #1A1A1A;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --border: #E8E3DA;
-  --bg: #F5F4F0;
-  --surface: #FFFFFF;
+  --void:        #04060F;   /* deepest ground, behind everything            */
+  --bg:          #070B1A;   /* page ground                                  */
+  --surface:     #0D1330;   /* raised panel                                 */
+  --surface-2:   #141C42;   /* hover / higher elevation                     */
+  --line:        rgba(122, 152, 255, 0.15);
+  --line-strong: rgba(122, 152, 255, 0.30);
+
+  --ultra:        #2C46FF;  /* ultramarine core — primary action            */
+  --ultra-bright: #6B8CFF;  /* luminous edge, hover, focus glow             */
+  --ultra-deep:   #16207A;  /* pressed / inset                              */
+  --ultra-glow:   rgba(72, 108, 255, 0.45);
+  --ultra-wash:   rgba(44, 70, 255, 0.10);
+
+  --text:           #E7ECFF;
+  --text-secondary: #9EAAD9;
+  --text-muted:     #5F6C9C;
+
+  --good: #2FE3A8;          /* semantic, tuned to read on a blue ground     */
+  --warn: #FFB340;
+  --bad:  #FF4D6A;
+
+  /* legacy names, remapped so class-based styling follows the system */
+  --navy: var(--ultra);
+  --navy-hover: var(--ultra-bright);
+  --border: var(--line);
+
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 }
 
 body {
   font-family: var(--font);
-  background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  /* Two faint ultramarine light sources rather than a flat fill — gives the
+     ground depth without any texture or image. */
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(44, 70, 255, 0.18), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(44, 70, 255, 0.10), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Numbers that sit in columns or tick every second must not jitter. */
+.timer, .stat-value, .end-headline {
+  font-variant-numeric: tabular-nums;
 }
 
 #root {
@@ -51,9 +88,9 @@ body {
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  background: rgba(26, 46, 74, 0.94);
+  background: rgba(13, 19, 48, 0.92);
   color: #ffffff;
-  box-shadow: 0 10px 28px rgba(26, 46, 74, 0.22);
+  box-shadow: 0 10px 28px var(--ultra-glow);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -62,7 +99,7 @@ body {
 
 .app-refresh-control:hover {
   background: var(--navy-hover);
-  box-shadow: 0 12px 32px rgba(26, 46, 74, 0.28);
+  box-shadow: 0 12px 32px var(--ultra-glow);
 }
 
 .app-refresh-button,
@@ -146,7 +183,7 @@ body {
   padding: 3px 7px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 7px;
-  background: rgba(13, 15, 20, 0.42);
+  background: rgba(4, 6, 15, 0.55);
   color: rgba(255, 255, 255, 0.58);
   font-size: 10px;
   font-weight: 600;
@@ -166,7 +203,7 @@ body {
   padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 10px;
-  background: rgba(22, 27, 36, 0.9);
+  background: rgba(13, 19, 48, 0.94);
   color: rgba(255, 255, 255, 0.92);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   font-size: 12px;
@@ -190,6 +227,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 40px;
+  /* the legal footer is position:fixed — reserve room so it can never sit on
+     top of the duration buttons */
+  padding-bottom: 56px;
 }
 
 .home-header {
@@ -209,22 +249,22 @@ body {
 }
 
 .home-header-action {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid #e5e7eb;
+  background: rgba(122, 152, 255, 0.06);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .home-header-action:hover {
-  background: #ffffff;
-  border-color: #d1d5db;
-  color: #4b5563;
+  background: rgba(122, 152, 255, 0.12);
+  border-color: var(--line-strong);
+  color: var(--text);
 }
 
 .app-title {
@@ -241,14 +281,17 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* Panels read as lit glass over the ground: a hairline that catches the light
+   at the top edge, depth from shadow rather than from a heavier fill. */
 .home-form {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background: var(--surface);
+  background: linear-gradient(180deg, rgba(122, 152, 255, 0.05), transparent 40%), var(--surface);
+  border: 1px solid var(--line);
   border-radius: 20px;
   padding: 40px 36px;
-  box-shadow: 0 2px 24px rgba(0,0,0,0.07);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(150, 175, 255, 0.10);
 }
 
 .field {
@@ -269,12 +312,12 @@ body {
   width: 100%;
   padding: 13px 16px;
   font-size: 17px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--line);
   border-radius: 14px;
   outline: none;
   font-family: inherit;
   color: var(--text);
-  background: var(--surface);
+  background: rgba(4, 6, 15, 0.55);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -283,8 +326,8 @@ body {
 }
 
 .text-input:focus {
-  border-color: var(--navy);
-  box-shadow: 0 0 0 3px rgba(26, 46, 74, 0.08);
+  border-color: var(--ultra-bright);
+  box-shadow: 0 0 0 3px var(--ultra-wash), 0 0 22px -6px var(--ultra-glow);
 }
 
 .duration-grid {
@@ -297,9 +340,9 @@ body {
   padding: 10px 8px;
   font-size: 14px;
   font-weight: 500;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--line);
   border-radius: 100px;
-  background: var(--surface);
+  background: rgba(122, 152, 255, 0.05);
   color: var(--text-secondary);
   cursor: pointer;
   font-family: inherit;
@@ -309,14 +352,15 @@ body {
 }
 
 .dur-btn:hover {
-  border-color: #c5cedb;
+  border-color: var(--line-strong);
   color: var(--text);
 }
 
 .dur-btn.active {
-  background: var(--navy);
-  border-color: var(--navy);
-  color: #ffffff;
+  background: var(--ultra);
+  border-color: var(--ultra-bright);
+  color: #fff;
+  box-shadow: 0 0 20px -4px var(--ultra-glow);
 }
 
 .start-btn {
@@ -324,18 +368,20 @@ body {
   height: 56px;
   font-size: 16px;
   font-weight: 600;
-  background: var(--navy);
-  color: #ffffff;
+  background: linear-gradient(180deg, var(--ultra-bright), var(--ultra));
+  color: #fff;
   border: none;
   border-radius: 16px;
   cursor: pointer;
   font-family: inherit;
   letter-spacing: 0.01em;
-  transition: opacity 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 10px 32px -8px var(--ultra-glow), inset 0 1px 0 rgba(255,255,255,0.22);
+  transition: box-shadow 0.18s ease, transform 0.1s ease, filter 0.15s ease;
 }
 
 .start-btn:not(:disabled):hover {
-  opacity: 0.88;
+  filter: brightness(1.08);
+  box-shadow: 0 14px 40px -8px var(--ultra-glow), inset 0 1px 0 rgba(255,255,255,0.28);
 }
 
 .start-btn:not(:disabled):active {
@@ -349,9 +395,13 @@ body {
 
 /* ── SESSION ── */
 
+/* Deeper than the rest of the app, with a single ultramarine light centred on
+   the ring — the session should feel like the room dimmed around the work. */
 .session-root {
   min-height: 100vh;
-  background: #0D0F14;
+  background:
+    radial-gradient(ellipse 55% 45% at 50% 38%, rgba(44, 70, 255, 0.16), transparent 72%),
+    var(--void);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -363,7 +413,7 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: #1C1F28;
+  background: var(--surface);
   z-index: 20;
 }
 
@@ -386,7 +436,7 @@ body {
 
 .session-task {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-weight: 500;
   text-align: center;
   max-width: 360px;
@@ -405,13 +455,21 @@ body {
   margin: 10px 0;
 }
 
+/* The timer is the one thing on this screen worth looking at, so it gets the
+   light: a faint ultramarine bloom behind the glyphs rather than a heavier
+   weight, which would fight the calm the screen is meant to create. */
 .session-root .timer {
-  color: #ffffff;
+  color: #fff;
   font-weight: 200;
+  text-shadow: 0 0 34px rgba(120, 150, 255, 0.30);
 }
 
 .session-root .session-task {
-  color: #94a3b8;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .end-session-btn {
@@ -419,9 +477,9 @@ body {
   padding: 9px 22px;
   font-size: 13px;
   font-weight: 500;
-  color: #6B7280;
+  color: var(--text-muted);
   background: transparent;
-  border: 1px solid #2A2E3A;
+  border: 1px solid var(--line-strong);
   border-radius: 100px;
   cursor: pointer;
   font-family: inherit;
@@ -430,8 +488,8 @@ body {
 }
 
 .end-session-btn:hover {
-  color: #94a3b8;
-  border-color: #94a3b8;
+  color: var(--text-secondary);
+  border-color: var(--text-secondary);
 }
 
 /* Webcam */
@@ -452,9 +510,9 @@ body {
   height: 120px;
   object-fit: cover;
   border-radius: 18px;
-  background: #1a1a1a;
+  background: var(--void);
   display: block;
-  box-shadow: 0 0 0 1.5px #2A2E3A;
+  box-shadow: 0 0 0 1.5px var(--line-strong);
   transition: opacity 0.25s ease;
 }
 
@@ -462,9 +520,9 @@ body {
   padding: 5px 14px;
   font-size: 12px;
   font-weight: 500;
-  color: #6B7280;
-  background: #1C1F28;
-  border: 1px solid #2A2E3A;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
   border-radius: 100px;
   cursor: pointer;
   font-family: inherit;
@@ -473,8 +531,8 @@ body {
 }
 
 .cam-toggle:hover {
-  color: #94a3b8;
-  border-color: #94a3b8;
+  color: var(--text-secondary);
+  border-color: var(--text-secondary);
 }
 
 /* Focus overlay */
@@ -482,7 +540,7 @@ body {
 .focus-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(13, 15, 20, 0.96);
+  background: rgba(4, 6, 15, 0.92);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   display: flex;
@@ -539,7 +597,7 @@ body {
 
 .focus-overlay-sub {
   font-size: 18px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 

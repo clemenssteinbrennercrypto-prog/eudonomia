@@ -5,12 +5,12 @@ import { loadFocusAppsConfig, loadSessions } from '../lib/storage'
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
 const TAG_COLORS = {
-  'Deep work': { bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.3)', text: '#6366f1' },
-  'Reading':   { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', text: '#10b981' },
-  'Writing':   { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)', text: '#f59e0b' },
-  'Coding':    { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)', text: '#3b82f6' },
-  'Study':     { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.3)', text: '#a855f7' },
-  'Meeting':   { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)',  text: '#ef4444' },
+  'Deep work': { bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.3)', text: '#A5B4FC' },
+  'Reading':   { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', text: '#5EEAD4' },
+  'Writing':   { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)', text: '#FCD34D' },
+  'Coding':    { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)', text: '#93C5FD' },
+  'Study':     { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.3)', text: '#D8B4FE' },
+  'Meeting':   { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)',  text: '#FCA5A5' },
 }
 
 function computeStreak() {
@@ -189,7 +189,7 @@ export default function HomeScreen({
               <span style={{
                 background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.25)',
                 borderRadius: 100, padding: '2px 10px',
-                fontSize: 12, fontWeight: 600, color: '#f97316',
+                fontSize: 12, fontWeight: 600, color: 'var(--warn)',
                 letterSpacing: '0.02em',
               }}>
                 🔥 {streak} day streak{avgFocus !== null ? ` · avg ${avgFocus}%` : ''}
@@ -198,7 +198,7 @@ export default function HomeScreen({
           )}
           <p className="app-tagline">Stay present. Stay focused.</p>
           {sessionCount === 0 && (
-            <p style={{ fontSize: 12, color: '#9ca3af', margin: '6px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
               Welcome to Eudaimonia. Set up your workspace and start your first focus session.
             </p>
           )}
@@ -211,7 +211,7 @@ export default function HomeScreen({
               <span style={{
                 background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.2)',
                 borderRadius: 100, padding: '2px 10px',
-                fontSize: 11, fontWeight: 500, color: '#64748b',
+                fontSize: 11, fontWeight: 500, color: 'var(--text-muted)',
                 letterSpacing: '0.01em',
               }}>
                 Last session: {lastSessionPill.focusPct}% focus · {lastSessionPill.timeStr}
@@ -229,17 +229,17 @@ export default function HomeScreen({
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '12px 16px',
-                background: '#f9fafb',
-                border: '1.5px solid #e5e7eb',
+                background: 'rgba(122,152,255,0.05)',
+                border: '1.5px solid var(--line)',
                 borderRadius: 12,
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#22c55e', fontSize: 10 }}>●</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'var(--good)', fontSize: 10 }}>●</span>
                 {summariseDevices(devices)}
               </span>
-              <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>Edit →</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>Edit →</span>
             </div>
           ) : (
             <button
@@ -247,20 +247,20 @@ export default function HomeScreen({
               style={{
                 width: '100%', padding: '16px',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: '#fff', border: '1.5px solid #E8E3DA',
+                background: 'var(--surface)', border: '1.5px solid var(--line)',
                 borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
                 textAlign: 'left',
               }}
             >
               <div>
-                <span style={{ fontSize: 14, color: '#374151', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
                   Set up your workspace for better tracking
                 </span>
-                <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 400 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>
                   Tell us where your screens are to improve detection accuracy
                 </span>
               </div>
-              <span style={{ fontSize: 16, color: '#c4c9d4', marginLeft: 12 }}>→</span>
+              <span style={{ fontSize: 16, color: 'var(--text-muted)', marginLeft: 12 }}>→</span>
             </button>
           )}
 
@@ -273,18 +273,18 @@ export default function HomeScreen({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: '#fff',
-              border: '1.5px solid #E8E3DA',
+              background: 'var(--surface)',
+              border: '1.5px solid var(--line)',
               borderRadius: 14,
               cursor: 'pointer',
               fontFamily: 'inherit',
               textAlign: 'left',
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#1a2e4a' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
               Focus Apps
             </span>
-            <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>
               {focusAppsConfig.focusApps.length} focus apps · {focusAppsConfig.distractionApps.length} blocked
             </span>
           </button>
@@ -300,22 +300,22 @@ export default function HomeScreen({
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 14,
-              background: focusModeEnabled ? '#f7fbf8' : '#fff',
-              border: `1.5px solid ${focusModeEnabled ? '#cfe9d7' : '#E8E3DA'}`,
+              background: focusModeEnabled ? 'rgba(47,227,168,0.08)' : 'var(--surface)',
+              border: `1.5px solid ${focusModeEnabled ? 'rgba(47,227,168,0.35)' : 'var(--line)'}`,
               borderRadius: 14,
               cursor: 'pointer',
               fontFamily: 'inherit',
               textAlign: 'left',
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1a2e4a' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
               Focus mode: {focusModeEnabled ? 'ON' : 'OFF'}
             </span>
             <span style={{
               width: 42,
               height: 24,
               borderRadius: 100,
-              background: focusModeEnabled ? '#1a2e4a' : '#d1d5db',
+              background: focusModeEnabled ? 'var(--good)' : 'var(--line-strong)',
               padding: 3,
               display: 'inline-flex',
               justifyContent: focusModeEnabled ? 'flex-end' : 'flex-start',
@@ -326,7 +326,7 @@ export default function HomeScreen({
                 width: 18,
                 height: 18,
                 borderRadius: '50%',
-                background: '#fff',
+                background: 'var(--surface)',
                 boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
               }} />
             </span>
@@ -362,7 +362,7 @@ export default function HomeScreen({
                 onClick={() => setTask(recentTask)}
                 style={{
                   marginTop: 6, background: 'none', border: 'none',
-                  color: '#6b7280', fontSize: 12, cursor: 'pointer',
+                  color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
                   fontFamily: 'inherit', padding: 0, textAlign: 'left',
                 }}
               >
@@ -395,7 +395,7 @@ export default function HomeScreen({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {QUICK_TAGS.map(tag => {
                 const active = tags.includes(tag)
-                const c = TAG_COLORS[tag] || { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280' }
+                const c = TAG_COLORS[tag] || { bg: 'rgba(122,152,255,0.08)', border: 'var(--line)', text: 'var(--text-secondary)' }
                 return (
                   <button
                     key={tag}
@@ -404,9 +404,9 @@ export default function HomeScreen({
                     style={{
                       padding: '4px 12px',
                       borderRadius: 100,
-                      border: `1.5px solid ${active ? c.border : '#e5e7eb'}`,
+                      border: `1.5px solid ${active ? c.border : 'var(--line)'}`,
                       background: active ? c.bg : 'transparent',
-                      color: active ? c.text : '#9ca3af',
+                      color: active ? c.text : 'var(--text-muted)',
                       fontSize: 12, fontWeight: active ? 600 : 400,
                       cursor: 'pointer', fontFamily: 'inherit',
                       transition: 'all 0.15s ease',
@@ -451,11 +451,11 @@ export default function HomeScreen({
                   placeholder="1–180 min"
                   autoFocus
                 />
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>minutes</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>minutes</span>
               </div>
             )}
             {durationSuggestion && (
-              <p style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', margin: '6px 0 0' }}>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', margin: '6px 0 0' }}>
                 {durationSuggestion}
               </p>
             )}
@@ -473,17 +473,17 @@ export default function HomeScreen({
     </div>
 
     {/* Legal footer */}
+    {/* Sits at the end of the page rather than floating over it — a fixed bar
+        was covering the duration row on shorter screens. */}
     <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
       display: 'flex', justifyContent: 'center', gap: 20,
-      padding: '12px 24px',
-      background: 'linear-gradient(to top, #F5F4F0, transparent)',
+      padding: '4px 24px 28px',
     }}>
       <button
         onClick={() => setLegalTab('impressum')}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 11, color: '#9CA3AF', fontFamily: 'inherit',
+          fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit',
           letterSpacing: '0.05em', textTransform: 'uppercase',
         }}
       >Impressum</button>
@@ -491,7 +491,7 @@ export default function HomeScreen({
         onClick={() => setLegalTab('datenschutz')}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 11, color: '#9CA3AF', fontFamily: 'inherit',
+          fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit',
           letterSpacing: '0.05em', textTransform: 'uppercase',
         }}
       >Datenschutz</button>

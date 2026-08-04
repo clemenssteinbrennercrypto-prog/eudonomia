@@ -114,12 +114,12 @@ const PRE_DRIFT_DECAY_MULT          = 2.5
 const PRE_DRIFT_MAX_MS              = 30_000
 
 const FOCUS_PHASES = {
-  arrival:  { label: 'Arrival',  tone: '#38bdf8' },
-  ramp:     { label: 'Ramp',     tone: '#22c55e' },
-  lock_in:  { label: 'Lock-in',  tone: '#a78bfa' },
-  fade:     { label: 'Fade',     tone: '#f59e0b' },
-  recovery: { label: 'Recovery', tone: '#fb7185' },
-  drift:    { label: 'Drift',    tone: '#ef4444' },
+  arrival:  { label: 'Arrival',  tone: '#5BC8FF' },
+  ramp:     { label: 'Ramp',     tone: 'var(--good)' },
+  lock_in:  { label: 'Lock-in',  tone: '#B79CFF' },
+  fade:     { label: 'Fade',     tone: 'var(--warn)' },
+  recovery: { label: 'Recovery', tone: 'var(--bad)' },
+  drift:    { label: 'Drift',    tone: 'var(--bad)' },
 }
 
 const PHASE_INTERVENTION_POLICY = {
@@ -235,23 +235,23 @@ const ALERT_MESSAGES = {
 // ── Overlay icons (inline SVG strings) ────────────────────────────────────────
 function OverlayIcon({ type }) {
   if (type === 'phone') return (
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--bad)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
       <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
       <line x1="12" y1="18" x2="12.01" y2="18"/>
     </svg>
   )
   if (type === 'away') return (
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
       <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
     </svg>
   )
   if (type === 'yawn') return (
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
       <circle cx="12" cy="12" r="10"/><path d="M8 15s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
     </svg>
   )
   if (type === 'lookingup') return (
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
       <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>
     </svg>
   )
@@ -467,17 +467,17 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
   const offset = circ * (1 - fill)
 
   const color = isCalibrating
-    ? '#94a3b8'
-    : score >= 65 ? '#22c55e'
-    : score >= 38 ? '#f97316'
-    : '#ef4444'
+    ? 'var(--text-secondary)'
+    : score >= 65 ? 'var(--good)'
+    : score >= 38 ? 'var(--warn)'
+    : 'var(--bad)'
 
   return (
     <div className={isCalibrating ? 'ring--calibrating' : ''} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
       <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0, filter: isCalibrating ? 'none' : score >= 65 ? 'drop-shadow(0 0 12px rgba(34,197,94,0.25))' : score >= 38 ? 'drop-shadow(0 0 12px rgba(249,115,22,0.2))' : 'drop-shadow(0 0 12px rgba(239,68,68,0.2))' }}>
         <circle
           cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="#1C1F28" strokeWidth={stroke}
+          fill="none" stroke="#0D1330" strokeWidth={stroke}
         />
         <circle
           cx={size / 2} cy={size / 2} r={radius}
@@ -497,7 +497,7 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
         alignItems: 'center', justifyContent: 'center',
         gap: 0,
       }}>
-        <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? '#4b5563' : '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
+        <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? 'var(--text-muted)' : '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
       </div>
     </div>
   )
@@ -505,18 +505,18 @@ function FocusRing({ score, timeLeft, isCalibrating, isPaused, calibProgress = 0
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  focused:    { color: '#22c55e', label: 'Focused'    },
-  distracted: { color: '#f97316', label: 'Distracted' },
-  alert:      { color: '#ef4444', label: 'Alert'      },
-  uncertain:  { color: '#94a3b8', label: 'Signal weak'},
-  calibrating:{ color: '#94a3b8', label: 'Calibrating'},
+  focused:    { color: 'var(--good)', label: 'Focused'    },
+  distracted: { color: 'var(--warn)', label: 'Distracted' },
+  alert:      { color: 'var(--bad)', label: 'Alert'      },
+  uncertain:  { color: 'var(--text-secondary)', label: 'Signal weak'},
+  calibrating:{ color: 'var(--text-secondary)', label: 'Calibrating'},
 }
 
 // ── Signal quality bars ───────────────────────────────────────────────────────
 function SignalBars({ confidence }) {
   // 0..1 → 0, 1, 2, or 3 filled bars
   const filled = confidence >= 0.85 ? 3 : confidence >= 0.5 ? 2 : confidence >= 0.2 ? 1 : 0
-  const barColor = filled === 3 ? '#22c55e' : filled >= 1 ? '#f97316' : '#6b7280'
+  const barColor = filled === 3 ? 'var(--good)' : filled >= 1 ? 'var(--warn)' : 'var(--text-muted)'
   return (
     <div title={`Detection quality: ${Math.round(confidence * 100)}%`} style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
       {[1, 2, 3].map(i => (
@@ -524,7 +524,7 @@ function SignalBars({ confidence }) {
           width: 3,
           height: 4 + i * 3,
           borderRadius: 1.5,
-          background: i <= filled ? barColor : '#2A2E3A',
+          background: i <= filled ? barColor : 'var(--line-strong)',
           transition: 'background 0.4s',
         }} />
       ))}
@@ -579,15 +579,15 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
     }, 10000)
     return () => clearInterval(interval)
   }, []) // stable interval — reads via ref
-  const trendColor = trend === '↑' ? '#22c55e' : trend === '↓' ? '#ef4444' : '#6b7280'
+  const trendColor = trend === '↑' ? 'var(--good)' : trend === '↓' ? 'var(--bad)' : 'var(--text-muted)'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 7,
         padding: '5px 12px',
-        background: '#1C1F28',
-        border: '1px solid #2A2E3A',
+        background: 'var(--surface)',
+        border: '1px solid rgba(122,152,255,0.30)',
         borderRadius: 100,
       }}>
         <div style={{
@@ -598,10 +598,10 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
           animation: status === 'alert' && !isCalibrating ? 'dotPulse 1.1s ease-in-out infinite' : 'none',
           transition: 'background 0.4s',
         }} />
-        <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '0.01em', textTransform: 'capitalize' }}>
           {label}
         </span>
-        <span style={{ fontSize: 11, color: '#2A2E3A' }}>·</span>
+        <span style={{ fontSize: 11, color: 'var(--line-strong)' }}>·</span>
         <span style={{ fontSize: 12, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums', transition: 'color 0.4s' }}>
           {isCalibrating ? '--' : score}
         </span>
@@ -622,7 +622,7 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 100,
           fontSize: 11,
-          color: '#6b7280',
+          color: 'var(--text-muted)',
           fontWeight: 500,
           letterSpacing: '0.01em',
           transition: 'opacity 0.3s',
@@ -639,9 +639,9 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
   const isFocus = connected && (kind === 'aligned' || kind === 'supportive')
   const isDistraction = connected && (kind === 'blocked' || kind === 'distraction')
   const isOffGoal = connected && kind === 'off_goal'
-  const color = isFocus ? '#22c55e' : isDistraction ? '#ef4444' : isOffGoal ? '#f59e0b' : '#6b7280'
-  const bg = isFocus ? '#17251d' : isDistraction ? '#2a1719' : isOffGoal ? '#2b2416' : '#1C1F28'
-  const border = isFocus ? '#22c55e40' : isDistraction ? '#ef444440' : isOffGoal ? '#f59e0b40' : '#2A2E3A'
+  const color = isFocus ? 'var(--good)' : isDistraction ? 'var(--bad)' : isOffGoal ? 'var(--warn)' : 'var(--text-muted)'
+  const bg = isFocus ? 'rgba(47,227,168,0.10)' : isDistraction ? 'rgba(255,77,106,0.12)' : isOffGoal ? 'rgba(255,179,64,0.12)' : 'var(--surface)'
+  const border = isFocus ? 'var(--good)40' : isDistraction ? 'var(--bad)40' : isOffGoal ? 'var(--warn)40' : 'var(--line-strong)'
   const label = connected ? classification.label : 'No activity data'
   const duration = isDistraction && activeSince ? formatShortDuration(Date.now() - activeSince) : null
   const suffix = connected ? ({
@@ -682,7 +682,7 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
           padding: prominent ? '8px 14px 8px 8px' : '6px 10px 6px 7px',
           fontSize: prominent ? 12 : 11,
           fontWeight: 800,
-          color: connected ? '#cbd5e1' : '#6b7280',
+          color: connected ? 'var(--text-secondary)' : 'var(--text-muted)',
           width: prominent ? 'min(320px, calc(100vw - 48px))' : 'auto',
           maxWidth: prominent ? 'min(320px, calc(100vw - 48px))' : 220,
           minWidth: 0,
@@ -698,8 +698,8 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
           width: prominent ? 26 : 22,
           height: prominent ? 26 : 22,
           borderRadius: '50%',
-          background: connected ? color : '#374151',
-          color: '#0D0F14',
+          background: connected ? color : 'var(--text-muted)',
+          color: 'var(--bg)',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -720,7 +720,10 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
           {duration ? `${label} · ${duration}` : label}
         </span>
         {suffix && (
-          <span style={{ color: '#86efac', fontSize: 10, fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          // Follows the pill's own state. It used to be hardcoded green from
+          // when the only label was "✓ focus app", so a blocked or distracting
+          // site was labelled "distraction" in the colour that means good.
+          <span style={{ color, fontSize: 10, fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
             {suffix}
           </span>
         )}
@@ -729,7 +732,7 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
         <div style={{
           fontSize: 11,
           fontWeight: 700,
-          color: '#fca5a5',
+          color: 'var(--bad)',
           letterSpacing: '0.01em',
           textShadow: '0 0 12px rgba(239,68,68,0.25)',
         }}>
@@ -2259,16 +2262,16 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           padding: 32, textAlign: 'center',
           backdropFilter: 'blur(3px)',
         }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: '#f97316', textTransform: 'uppercase' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: 'var(--warn)', textTransform: 'uppercase' }}>
             Tracking paused
           </span>
-          <p style={{ fontSize: 21, fontWeight: 500, color: '#f1f5f9', margin: 0, maxWidth: 460, lineHeight: 1.4 }}>
+          <p style={{ fontSize: 21, fontWeight: 500, color: 'var(--text)', margin: 0, maxWidth: 460, lineHeight: 1.4 }}>
             {CAMERA_FAULT_COPY[cameraFault]?.title || CAMERA_FAULT_COPY.stalled.title}
           </p>
-          <p style={{ fontSize: 14, color: '#94a3b8', margin: 0, maxWidth: 420, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, maxWidth: 420, lineHeight: 1.6 }}>
             {CAMERA_FAULT_COPY[cameraFault]?.hint || CAMERA_FAULT_COPY.stalled.hint}
           </p>
-          <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0', maxWidth: 420, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', maxWidth: 420, lineHeight: 1.6 }}>
             Your focus score is on hold — this time won't be counted as focused.
           </p>
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -2277,7 +2280,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
               style={{
                 background: 'rgba(34,197,94,0.14)', border: '1px solid rgba(34,197,94,0.45)',
                 borderRadius: 100, padding: '10px 28px',
-                fontSize: 14, fontWeight: 600, color: '#86efac', cursor: 'pointer',
+                fontSize: 14, fontWeight: 600, color: 'var(--good)', cursor: 'pointer',
               }}
             >
               Try again
@@ -2287,7 +2290,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
               style={{
                 background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 100, padding: '10px 28px',
-                fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
+                fontSize: 14, fontWeight: 600, color: 'var(--text)', cursor: 'pointer',
               }}
             >
               End session
@@ -2304,7 +2307,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           alignItems: 'center', justifyContent: 'center', gap: 20,
           backdropFilter: 'blur(2px)',
         }}>
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', color: '#6b7280', textTransform: 'uppercase' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Paused
           </span>
           <button
@@ -2312,18 +2315,18 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
             style={{
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
               borderRadius: 100, padding: '10px 28px',
-              fontSize: 14, fontWeight: 600, color: '#e2e8f0', cursor: 'pointer',
+              fontSize: 14, fontWeight: 600, color: 'var(--text)', cursor: 'pointer',
               letterSpacing: '0.03em',
             }}
           >
             Resume
           </button>
-          <span style={{ fontSize: 12, color: '#4b5563' }}>space to resume</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>space to resume</span>
         </div>
       )}
       {window.innerWidth < 600 && (
         <div style={{
-          position: 'fixed', inset: 0, background: '#0D0F14',
+          position: 'fixed', inset: 0, background: 'var(--bg)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           padding: 32, textAlign: 'center', zIndex: 999,
@@ -2331,7 +2334,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           <p style={{ fontSize: 24, fontWeight: 300, color: '#ffffff', marginBottom: 12 }}>
             Desktop only
           </p>
-          <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             Focus tracking requires a webcam and a fixed screen setup.
             Please open Eudaimonia on your laptop or desktop.
           </p>
@@ -2346,13 +2349,13 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         <div style={{
           position: 'fixed', top: 40, left: '50%', transform: 'translateX(-50%)',
           zIndex: 25,
-          background: 'linear-gradient(135deg, #1a3a2a 0%, #1e3a1e 100%)',
-          border: '1px solid #2d6a4f',
+          background: 'linear-gradient(135deg, rgba(47,227,168,0.12) 0%, rgba(47,227,168,0.14) 100%)',
+          border: '1px solid rgba(47,227,168,0.45)',
           borderRadius: 100,
           padding: '8px 20px',
           display: 'flex', alignItems: 'center', gap: 8,
           boxShadow: '0 2px 16px rgba(45,106,79,0.4)',
-          fontSize: 13, fontWeight: 600, color: '#6ee7b7',
+          fontSize: 13, fontWeight: 600, color: 'var(--good)',
           animation: 'milestoneSlide 0.4s ease',
           pointerEvents: 'none',
         }}>
@@ -2365,20 +2368,20 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         <div style={{
           position: 'fixed', top: 40, left: '50%', transform: 'translateX(-50%)',
           zIndex: 20,
-          background: '#1C1F28',
-          border: '1px solid #2A2E3A',
+          background: 'var(--surface)',
+          border: '1px solid rgba(122,152,255,0.30)',
           borderRadius: 100,
           padding: '7px 18px 7px 16px',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-          fontSize: 13, fontWeight: 500, color: '#94a3b8',
+          fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)',
         }}>
           <span>{breakBanner.msg}</span>
           <button
             onClick={dismissBreak}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              color: '#6b7280', fontSize: 16, lineHeight: 1, padding: 0,
+              color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: 0,
             }}
           >×</button>
         </div>
@@ -2391,14 +2394,14 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 21,
-          background: '#1C1F28',
-          border: `1px solid ${(FOCUS_PHASES[phaseCue.phase]?.tone || '#fbbf24')}66`,
+          background: 'var(--surface)',
+          border: `1px solid ${(FOCUS_PHASES[phaseCue.phase]?.tone || 'var(--warn)')}66`,
           borderRadius: 100,
           padding: '8px 18px',
           boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
           fontSize: 13,
           fontWeight: 700,
-          color: FOCUS_PHASES[phaseCue.phase]?.tone || '#fbbf24',
+          color: FOCUS_PHASES[phaseCue.phase]?.tone || 'var(--warn)',
           pointerEvents: 'none',
           animation: 'milestoneSlide 0.4s ease',
         }}>
@@ -2447,10 +2450,10 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: FOCUS_PHASES[focusPhase]?.tone || '#94a3b8',
-              boxShadow: `0 0 0 3px ${(FOCUS_PHASES[focusPhase]?.tone || '#94a3b8')}22`,
+              background: FOCUS_PHASES[focusPhase]?.tone || 'var(--text-secondary)',
+              boxShadow: `0 0 0 3px ${(FOCUS_PHASES[focusPhase]?.tone || 'var(--text-secondary)')}22`,
             }} />
-            <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 700, letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
               Phase: {FOCUS_PHASES[focusPhase]?.label || 'Arrival'}
             </span>
           </div>
@@ -2464,11 +2467,11 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
             animation: 'none',
           }}>
             <div style={{
-              width: 6, height: 6, borderRadius: '50%', background: '#a78bfa',
-              boxShadow: '0 0 0 3px #a78bfa28',
+              width: 6, height: 6, borderRadius: '50%', background: '#B79CFF',
+              boxShadow: '0 0 0 3px #B79CFF28',
               animation: 'flowPulse 2s ease-in-out infinite',
             }} />
-            <span style={{ fontSize: 12, color: '#a78bfa', fontWeight: 600, letterSpacing: '0.05em' }}>
+            <span style={{ fontSize: 12, color: '#B79CFF', fontWeight: 600, letterSpacing: '0.05em' }}>
               Flow state
             </span>
           </div>
@@ -2480,10 +2483,10 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
             marginTop: 8,
           }}>
             <div style={{
-              width: 6, height: 6, borderRadius: '50%', background: '#f59e0b',
+              width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)',
               boxShadow: '0 0 0 3px rgba(245,158,11,0.18)',
             }} />
-            <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 700, letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 700, letterSpacing: '0.04em' }}>
               Drift risk: {preDriftRisk.reason}
             </span>
           </div>
@@ -2492,7 +2495,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         {/* Streak counter */}
         {showStreak && !inFlowState && !preDriftRisk.active && (
           <p style={{
-            fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, fontWeight: 500,
+            fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>
             {formatTime(currentStreak)} streak
           </p>
@@ -2501,7 +2504,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         {/* Distraction event counter */}
         {!isCalibrating && distractionCount > 0 && (
           <p style={{
-            fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 4,
+            fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 4,
           }}>
             {distractionCount} {distractionCount === 1 ? 'alert' : 'alerts'}
           </p>
@@ -2509,26 +2512,26 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
 
         {isCalibrating && (
           <div style={{ textAlign: 'center', marginTop: 6 }}>
-            <p style={{ fontSize: 12, color: '#94a3b8', letterSpacing: '0.05em', margin: 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', letterSpacing: '0.05em', margin: 0 }}>
               Calibrating…
             </p>
-            <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0', fontStyle: 'italic' }}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0', fontStyle: 'italic' }}>
               Getting to know your eyes…
             </p>
           </div>
         )}
         {showReady && !isCalibrating && (
-          <p style={{ fontSize: 13, color: '#22c55e', textAlign: 'center', marginTop: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
+          <p style={{ fontSize: 13, color: 'var(--good)', textAlign: 'center', marginTop: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
             Ready ✓
           </p>
         )}
 
         {endConfirm ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
-            <span style={{ fontSize: 13, color: '#94a3b8' }}>End session?</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>End session?</span>
             <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13 }}
               onClick={() => { setEndConfirm(false); endSession(false) }}>Yes</button>
-            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid #334155' }}
+            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid rgba(122,152,255,0.30)' }}
               onClick={() => setEndConfirm(false)}>Cancel</button>
           </div>
         ) : (
@@ -2558,17 +2561,18 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       </div>
 
       {/* Audio controls */}
-      <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+      {/* clears the fixed build-identity badge in the bottom-left corner */}
+      <div style={{ position: 'fixed', bottom: 46, left: 20, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
         <button
           onClick={cycleAmbient}
           aria-label={`Ambient sound: ${AMBIENT_LABELS[ambientMode]}`}
           style={{
-            background: ambientMode === 'off' ? '#1C1F28' : '#1C2818',
-            border: `1px solid ${ambientMode === 'off' ? '#2A2E3A' : '#22c55e40'}`,
+            background: ambientMode === 'off' ? 'var(--surface)' : 'rgba(47,227,168,0.10)',
+            border: `1px solid ${ambientMode === 'off' ? 'var(--line-strong)' : 'var(--good)40'}`,
             borderRadius: 100,
             padding: '6px 16px',
             fontSize: 12, fontWeight: 600,
-            color: ambientMode === 'off' ? '#6b7280' : '#22c55e',
+            color: ambientMode === 'off' ? 'var(--text-muted)' : 'var(--good)',
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
@@ -2579,12 +2583,12 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
           aria-pressed={gentleReminderEnabled}
           aria-label={`Gentle reminder ${gentleReminderEnabled ? 'on' : 'off'}`}
           style={{
-            background: gentleReminderEnabled ? '#1C2818' : '#1C1F28',
-            border: `1px solid ${gentleReminderEnabled ? '#22c55e40' : '#2A2E3A'}`,
+            background: gentleReminderEnabled ? 'rgba(47,227,168,0.10)' : 'var(--surface)',
+            border: `1px solid ${gentleReminderEnabled ? 'var(--good)40' : 'var(--line-strong)'}`,
             borderRadius: 100,
             padding: '6px 16px',
             fontSize: 12, fontWeight: 600,
-            color: gentleReminderEnabled ? '#22c55e' : '#6b7280',
+            color: gentleReminderEnabled ? 'var(--good)' : 'var(--text-muted)',
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
@@ -2595,7 +2599,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       <div className="webcam-corner">
         {faceAbsentPrompt && !isPaused && !isCalibrating && (
           <div style={{
-            fontSize: 11, color: '#9ca3af', textAlign: 'center',
+            fontSize: 11, color: 'var(--text-muted)', textAlign: 'center',
             marginBottom: 4, letterSpacing: '0.04em', fontWeight: 500,
             opacity: 0.8,
           }}>
@@ -2666,7 +2670,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
                 padding: '8px 24px',
                 fontSize: 13,
                 fontWeight: 600,
-                color: '#94a3b8',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 letterSpacing: '0.03em',
