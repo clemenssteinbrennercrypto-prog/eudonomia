@@ -1181,6 +1181,23 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     return () => clearInterval(interval)
   }, [applyCompanionSession, endSession, pushBlockingState])
 
+  // ── Guard against losing the session to a reload or a closed window ───────
+  // Every bit of session state — score, streaks, phase, timers, calibration —
+  // lives in refs in memory, so a reload silently destroys the run. The in-app
+  // reload control is hidden during a session (App.jsx); this covers the paths
+  // that cannot be hidden: Cmd-R, Cmd-W, closing the tab or window. The prompt
+  // text is chosen by the browser — a custom message is ignored by design.
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (sessionEndedRef.current) return   // ending the session navigates on purpose
+      e.preventDefault()
+      e.returnValue = ''                    // required for Chrome/Safari to prompt
+      return ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handleKey = (e) => {
