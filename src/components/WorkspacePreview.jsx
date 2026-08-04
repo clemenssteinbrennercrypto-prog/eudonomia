@@ -5,7 +5,7 @@ import {
   normalizeWorkspaceObjects,
 } from '../lib/workspaceObjects'
 
-const navy = '#1a2e4a'
+const navy = '#2C46FF'
 const green = '#2f855a'
 const amber = '#c47f1a'
 const red = '#c2413b'
@@ -65,7 +65,7 @@ function DeviceIcon({ type, x, y }) {
     return (
       <g transform={`translate(${x - 20} ${y - 12})`}>
         <rect x="5" y="0" width="30" height="20" rx="3" fill={fill} stroke={stroke} strokeWidth="2" />
-        <path d="M2 24 L38 24 L34 20 L6 20 Z" fill="#e8ecef" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+        <path d="M2 24 L38 24 L34 20 L6 20 Z" fill="#1B2450" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
       </g>
     )
   }
@@ -73,7 +73,7 @@ function DeviceIcon({ type, x, y }) {
   if (type === 'camera') {
     return (
       <g transform={`translate(${x} ${y})`}>
-        <circle cx="0" cy="0" r="13" fill="#edf2f7" stroke={stroke} strokeWidth="2" />
+        <circle cx="0" cy="0" r="13" fill="#141C42" stroke={stroke} strokeWidth="2" />
         <circle cx="0" cy="0" r="5" fill="none" stroke={stroke} strokeWidth="2" />
         <circle cx="4" cy="-4" r="2" fill={stroke} />
       </g>
@@ -93,8 +93,8 @@ function DeviceIcon({ type, x, y }) {
     return (
       <g transform={`translate(${x - 15} ${y - 17})`}>
         <rect x="0" y="0" width="30" height="34" rx="2" fill={fill} stroke={stroke} strokeWidth="2" />
-        <line x1="6" y1="10" x2="24" y2="10" stroke="#9aa7b5" strokeWidth="1.5" />
-        <line x1="6" y1="17" x2="22" y2="17" stroke="#9aa7b5" strokeWidth="1.5" />
+        <line x1="6" y1="10" x2="24" y2="10" stroke="#9EAAD9" strokeWidth="1.5" />
+        <line x1="6" y1="17" x2="22" y2="17" stroke="#9EAAD9" strokeWidth="1.5" />
       </g>
     )
   }
@@ -276,7 +276,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#F5F4F0',
+      background: '#070B1A',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -287,8 +287,8 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
       <section style={{
         width: '100%',
         maxWidth: 560,
-        background: '#fff',
-        border: '1px solid #E8E3DA',
+        background: 'var(--surface)',
+        border: '1px solid rgba(122,152,255,0.15)',
         borderRadius: 20,
         padding: '30px 28px',
         boxShadow: '0 2px 24px rgba(0,0,0,0.07)',
@@ -312,7 +312,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
             lineHeight: 1.15,
             fontWeight: 750,
             letterSpacing: 0,
-            color: '#0f172a',
+            color: 'var(--text)',
             margin: 0,
           }}>
             How Eudaimonia reads your desk
@@ -336,7 +336,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
             </clipPath>
           </defs>
 
-          <rect x={desk.x} y={desk.y} width={desk.width} height={desk.height} rx="20" fill="#f8fafc" stroke="#d8d0c4" strokeWidth="2" />
+          <rect x={desk.x} y={desk.y} width={desk.width} height={desk.height} rx="20" fill="#0D1330" stroke="#d8d0c4" strokeWidth="2" />
 
           <g clipPath="url(#deskClip)">
             <path d={fanPath(-160, -116, 225)} fill={amber} opacity="0.18" />
@@ -379,9 +379,9 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
           gap: '10px 16px',
           fontSize: 12,
           fontWeight: 650,
-          color: '#475569',
+          color: 'var(--text-secondary)',
           padding: '12px 14px',
-          background: '#F5F4F0',
+          background: '#070B1A',
           borderRadius: 12,
         }}>
           <LegendItem color={green}>Productive gaze</LegendItem>
@@ -389,7 +389,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
           <LegendItem color={red}>Distraction zone</LegendItem>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
             <svg width="15" height="15" viewBox="-15 -15 30 30" aria-hidden="true">
-              <circle cx="0" cy="0" r="12" fill="#edf2f7" stroke={navy} strokeWidth="3" />
+              <circle cx="0" cy="0" r="12" fill="#141C42" stroke={navy} strokeWidth="3" />
               <circle cx="0" cy="0" r="5" fill="none" stroke={navy} strokeWidth="3" />
             </svg>
             Camera position
@@ -402,7 +402,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
-          color: '#334155',
+          color: 'var(--text-secondary)',
           fontSize: 14,
           lineHeight: 1.45,
         }}>
@@ -410,20 +410,20 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
         </ul>
 
         <div style={{
-          border: '1px solid #E8E3DA',
+          border: '1px solid rgba(122,152,255,0.15)',
           borderRadius: 16,
           padding: '16px 16px 14px',
-          background: '#FAFAF8',
+          background: '#0A1028',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
             <div>
-              <h3 style={{ margin: '0 0 4px', fontSize: 16, color: '#0f172a', letterSpacing: 0 }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)', letterSpacing: 0 }}>
                 Setup accuracy
               </h3>
-              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.35 }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#5F6C9C', lineHeight: 1.35 }}>
                 {accuracyMessage}
               </p>
             </div>
@@ -446,15 +446,15 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
                 gridTemplateColumns: '22px 1fr',
                 gap: 8,
                 alignItems: 'flex-start',
-                color: '#334155',
+                color: 'var(--text-secondary)',
               }}>
                 <StatusIcon status={check.status} />
                 <div>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1f2937' }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
                     {check.label}
                   </p>
                   {check.status !== 'green' && (
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#5F6C9C', lineHeight: 1.35 }}>
                       {check.detail}
                     </p>
                   )}
@@ -489,9 +489,9 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
             style={{
               flex: '1 1 150px',
               minHeight: 54,
-              border: '1.5px solid #E8E3DA',
+              border: '1.5px solid rgba(122,152,255,0.15)',
               borderRadius: 14,
-              background: '#fff',
+              background: 'var(--surface)',
               color: navy,
               fontFamily: 'inherit',
               fontSize: 15,
@@ -509,7 +509,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
               minHeight: 46,
               border: 'none',
               background: 'transparent',
-              color: '#64748b',
+              color: '#5F6C9C',
               fontFamily: 'inherit',
               fontSize: 14,
               fontWeight: 700,

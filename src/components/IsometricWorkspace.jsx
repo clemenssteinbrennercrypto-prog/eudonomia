@@ -193,18 +193,18 @@ function KeyboardSVG({ w, h, uid }) {
   return (
     <g>
       <ellipse cx={0} cy={h/2 + 4} rx={w * 0.52} ry={5} fill="black" opacity={0.12}/>
-      <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#1e293b"/>
+      <rect x={-w/2} y={-h/2} width={w} height={h} rx={r} fill="#28325F"/>
       <rect x={-w/2 + 3} y={-h/2 + 3} width={w - 6} height={h - 6} rx={r - 1} fill="#243044"/>
       {rows.flatMap((cols, ri) =>
         cols.map((cx, ci) => (
           <rect key={`${ri}-${ci}`}
             x={-w/2 + w * cx - kw/2} y={-h/2 + h * (0.14 + ri * 0.22) - kh/2}
             width={kw} height={kh} rx={1.5}
-            fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.6}/>
+            fill="#334066" stroke="#1B2450" strokeWidth={0.6}/>
         ))
       )}
       {/* Space bar */}
-      <rect x={-w * 0.22} y={h * 0.28} width={w * 0.44} height={kh} rx={1.5} fill="#2d3f58" stroke="#1a2a3e" strokeWidth={0.6}/>
+      <rect x={-w * 0.22} y={h * 0.28} width={w * 0.44} height={kh} rx={1.5} fill="#334066" stroke="#1B2450" strokeWidth={0.6}/>
       <rect x={-w/2 + 3} y={-h/2 + 3} width={w - 6} height={4} rx={2} fill="white" opacity={0.04}/>
     </g>
   )
@@ -217,14 +217,14 @@ function MouseSVG({ w, h, uid }) {
       <ellipse cx={0} cy={h * 0.38} rx={bw * 0.48} ry={6} fill="black" opacity={0.14}/>
       {/* Body shape */}
       <path d={`M${-bw/2} ${-h * 0.05} C${-bw/2} ${-h * 0.48} ${bw/2} ${-h * 0.48} ${bw/2} ${-h * 0.05} L${bw/2} ${h * 0.32} C${bw/2} ${h * 0.48} ${-bw/2} ${h * 0.48} ${-bw/2} ${h * 0.32} Z`}
-        fill="#1e293b"/>
+        fill="#28325F"/>
       <path d={`M${-bw/2 + 2} ${-h * 0.04} C${-bw/2 + 2} ${-h * 0.46} ${bw/2 - 2} ${-h * 0.46} ${bw/2 - 2} ${-h * 0.04} L${bw/2 - 2} ${h * 0.31} C${bw/2 - 2} ${h * 0.46} ${-bw/2 + 2} ${h * 0.46} ${-bw/2 + 2} ${h * 0.31} Z`}
         fill="#243044"/>
       {/* Center split */}
-      <line x1={0} y1={-h * 0.46} x2={0} y2={h * 0.02} stroke="#1a2a3e" strokeWidth={1.5}/>
+      <line x1={0} y1={-h * 0.46} x2={0} y2={h * 0.02} stroke="#1B2450" strokeWidth={1.5}/>
       {/* Left button */}
       <path d={`M${-bw/2 + 2} ${-h * 0.04} C${-bw/2 + 2} ${-h * 0.46} 0 ${-h * 0.46} 0 ${-h * 0.46} L0 ${h * 0.02} C${-bw/2 + 2} ${h * 0.02} ${-bw/2 + 2} ${-h * 0.04} Z`}
-        fill="#2d3f58" opacity={0.7}/>
+        fill="#334066" opacity={0.7}/>
       {/* Scroll wheel */}
       <rect x={-w * 0.08} y={-h * 0.28} width={w * 0.16} height={h * 0.25} rx={w * 0.08} fill="#364a66"/>
       <rect x={-w * 0.05} y={-h * 0.22} width={w * 0.10} height={h * 0.14} rx={w * 0.05} fill="#4a6080" opacity={0.8}/>
@@ -316,12 +316,12 @@ function PaletteBtn({ id, selected, onClick }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '8px 10px', width: '100%',
-        background: selected ? '#1a2e4a' : 'transparent',
-        border: `1.5px solid ${selected ? '#1a2e4a' : 'transparent'}`,
+        background: selected ? '#2C46FF' : 'transparent',
+        border: `1.5px solid ${selected ? '#2C46FF' : 'transparent'}`,
         borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
         transition: 'all 0.14s', textAlign: 'left',
       }}
-      onMouseEnter={e => { if (!selected) { e.currentTarget.style.background = '#F0EDE8'; e.currentTarget.style.borderColor = '#EDEBE6' }}}
+      onMouseEnter={e => { if (!selected) { e.currentTarget.style.background = '#141C42'; e.currentTarget.style.borderColor = '#0D1330' }}}
       onMouseLeave={e => { if (!selected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}}
     >
       <svg width={vw} height={vh} viewBox={`${-vw/2} ${-vh/2} ${vw} ${vh}`} overflow="visible" style={{ flexShrink: 0 }}>
@@ -329,7 +329,7 @@ function PaletteBtn({ id, selected, onClick }) {
           <R w={d.w} h={d.h} uid={`pal_${id}`}/>
         </g>
       </svg>
-      <span style={{ fontSize: 12, fontWeight: 600, color: selected ? '#fff' : '#374151', letterSpacing: '0.01em' }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: selected ? '#fff' : '#9EAAD9', letterSpacing: '0.01em' }}>
         {meta?.label}
       </span>
     </button>
@@ -351,7 +351,7 @@ function ResizeHandle({ x, y, onPointerDown }) {
     <g style={{ cursor: 'nwse-resize' }} onPointerDown={onPointerDown}>
       <rect x={x - 8} y={y - 8} width={16} height={16} fill="transparent"/>
       <rect x={x - 5} y={y - 5} width={10} height={10} rx={2}
-        fill="white" stroke="#1a2e4a" strokeWidth={1.5} opacity={0.9}/>
+        fill="white" stroke="#2C46FF" strokeWidth={1.5} opacity={0.9}/>
     </g>
   )
 }
@@ -460,20 +460,20 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      background: '#F5F4F0', fontFamily: 'inherit', userSelect: 'none',
+      background: '#070B1A', fontFamily: 'inherit', userSelect: 'none',
     }}>
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '18px 28px 16px',
-        background: '#FAFAF8',
-        borderBottom: '1px solid #EDEBE6',
+        background: '#0A1028',
+        borderBottom: '1px solid #0D1330',
       }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#5F6C9C', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
             Advanced Setup
           </p>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+          <p style={{ fontSize: 13, color: '#9EAAD9', margin: 0, lineHeight: 1.4 }}>
             {selectedDevice
               ? `Click the desk to place · drag to move · corner to resize`
               : activeId
@@ -493,10 +493,10 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
           )}
           <button onClick={onContinue} style={{
             padding: '9px 24px', fontSize: 13, fontWeight: 700,
-            background: '#1a2e4a', color: '#fff',
+            background: '#2C46FF', color: '#fff',
             border: 'none', borderRadius: 100, cursor: 'pointer',
             fontFamily: 'inherit', letterSpacing: '0.01em',
-            boxShadow: '0 2px 10px rgba(26,46,74,0.25)',
+            boxShadow: '0 2px 10px rgba(122,152,255,0.25)',
             transition: 'opacity 0.15s',
           }}>
             {hasDevices ? 'Save' : 'Skip'}
@@ -617,7 +617,7 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                       x={-dw/2 - 5} y={-dh/2 - 5}
                       width={dw + 10} height={dh + 10}
                       rx={8} fill="none"
-                      stroke="#1a2e4a" strokeWidth={1.5}
+                      stroke="#2C46FF" strokeWidth={1.5}
                       strokeDasharray="5,3" opacity={0.7}
                     />
                   )}
@@ -634,9 +634,9 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
 
             {/* "You" indicator */}
             <g transform={`translate(${SVG_W / 2}, ${SVG_H - 14})`}>
-              <rect x={-44} y={-11} width={88} height={22} rx={11} fill="#1a2e4a18"/>
+              <rect x={-44} y={-11} width={88} height={22} rx={11} fill="#2C46FF18"/>
               <text textAnchor="middle" dominantBaseline="middle"
-                fontSize={9.5} fontWeight="800" fill="#1a2e4a70"
+                fontSize={9.5} fontWeight="800" fill="#2C46FF70"
                 letterSpacing="0.1em">
                 ↑ YOU ARE HERE
               </text>
@@ -648,12 +648,12 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
         <div style={{
           width: 172, display: 'flex', flexDirection: 'column',
           padding: '20px 12px 20px',
-          background: '#FAFAF8', borderLeft: '1px solid #EDEBE6',
+          background: '#0A1028', borderLeft: '1px solid #0D1330',
           overflowY: 'auto',
           gap: 4,
         }}>
           <p style={{
-            fontSize: 10, fontWeight: 700, color: '#9ca3af',
+            fontSize: 10, fontWeight: 700, color: '#5F6C9C',
             textTransform: 'uppercase', letterSpacing: '0.1em',
             margin: '0 4px 10px',
           }}>
@@ -677,7 +677,7 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
           </div>
 
           {CAMERA_META && (
-            <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #EDEBE6' }}>
+            <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #0D1330' }}>
               <PaletteBtn
                 id={CAMERA_META.id}
                 selected={selectedDevice === CAMERA_META.id}
@@ -695,9 +695,9 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
           ))}
 
           {hasDevices && (
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #EDEBE6' }}>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #0D1330' }}>
               <p style={{
-                fontSize: 10, fontWeight: 700, color: '#9ca3af',
+                fontSize: 10, fontWeight: 700, color: '#5F6C9C',
                 textTransform: 'uppercase', letterSpacing: '0.1em',
                 margin: '0 4px 8px',
               }}>On desk</p>
@@ -711,14 +711,14 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                     style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
-                      background: isActive ? '#1a2e4a' : 'transparent',
+                      background: isActive ? '#2C46FF' : 'transparent',
                       transition: 'background 0.15s',
                       marginBottom: 2,
                     }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#fff' : '#374151' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#fff' : '#9EAAD9' }}>
                       {meta?.label}
                     </span>
-                    <span style={{ fontSize: 10, color: isActive ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
+                    <span style={{ fontSize: 10, color: isActive ? 'rgba(255,255,255,0.5)' : '#5F6C9C' }}>
                       {WORKSPACE_ROLE_LABELS[d.role || defaultRoleForType(d.type)] || 'Neutral'}
                     </span>
                   </div>
@@ -728,15 +728,15 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                 <div style={{
                   marginTop: 10,
                   padding: 8,
-                  border: '1px solid #EDEBE6',
+                  border: '1px solid #0D1330',
                   borderRadius: 10,
-                  background: '#fff',
+                  background: 'var(--surface)',
                 }}>
                   <label style={{
                     display: 'block',
                     fontSize: 10,
                     fontWeight: 700,
-                    color: '#9ca3af',
+                    color: '#5F6C9C',
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
                     marginBottom: 6,
@@ -751,9 +751,9 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                       padding: '7px 8px',
                       border: '1px solid #E5E7EB',
                       borderRadius: 8,
-                      background: '#FAFAF8',
+                      background: '#0A1028',
                       fontSize: 12,
-                      color: '#374151',
+                      color: '#9EAAD9',
                       fontFamily: 'inherit',
                     }}
                   >
@@ -767,8 +767,8 @@ export default function IsometricWorkspace({ devices, setDevices, onContinue }) 
                 onClick={() => { setDevices([]); setActiveId(null) }}
                 style={{
                   marginTop: 8, width: '100%', padding: '7px',
-                  fontSize: 11, fontWeight: 500, color: '#9ca3af',
-                  background: 'none', border: '1px solid #EDEBE6',
+                  fontSize: 11, fontWeight: 500, color: '#5F6C9C',
+                  background: 'none', border: '1px solid #0D1330',
                   borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
                   transition: 'color 0.15s, border-color 0.15s',
                 }}>
