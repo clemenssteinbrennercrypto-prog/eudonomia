@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
-import { loadFocusAppsConfig, loadSessions } from '../lib/storage'
+import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadSessions } from '../lib/storage'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
@@ -88,6 +88,8 @@ export default function HomeScreen({
   onShowFocusApps,
 }) {
   const [legalTab, setLegalTab] = useState(null)
+  const [outputFolder, setOutputFolder] = useState(loadOutputFolder)
+  const canPickFolder = Boolean(window.__TAURI__?.core?.invoke)
   const [taskFocused, setTaskFocused] = useState(false)
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customVal, setCustomVal] = useState('')
@@ -297,6 +299,46 @@ export default function HomeScreen({
               {focusAppsConfig.focusApps.length} focus apps · {focusAppsConfig.distractionApps.length} blocked
             </span>
           </button>
+
+          {/* Output evidence: which folder this session's work lives in. The
+              companion compares it before and after to answer "did anything
+              actually get made", reading metadata only. Native app only —
+              a browser has no folder picker. */}
+          {canPickFolder && (
+            <button
+              type="button"
+              onClick={async () => {
+                const picked = await pickOutputFolder()
+                if (picked) setOutputFolder(saveOutputFolder(picked))
+              }}
+              style={{
+                width: '100%',
+                padding: '11px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                background: 'transparent',
+                border: '1px solid var(--line)',
+                borderRadius: 12,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                Work folder
+              </span>
+              <span style={{
+                fontSize: 12, color: outputFolder ? 'var(--text-secondary)' : 'var(--text-muted)',
+                flexShrink: 1, minWidth: 0, marginLeft: 8,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                direction: 'rtl',
+              }}>
+                {outputFolder || 'Optional — measures what got made'}
+              </span>
+            </button>
+          )}
 
           <button
             type="button"

@@ -161,6 +161,27 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+
+/// Native folder picker for output evidence. Returns the chosen path, or None
+/// if the user cancelled. Only the path is returned — the companion reads
+/// nothing from the folder until a session starts, and even then only metadata.
+#[tauri::command]
+async fn pick_output_folder(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose the folder this session's work lives in")
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
+    rx.await
+        .ok()
+        .flatten()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
     // Failsafe #3: never leave the machine blocked after the app closes.
@@ -193,8 +214,10 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             check_native_update,
+            pick_output_folder,
             install_native_update,
             quit_app
         ])

@@ -185,3 +185,30 @@ export function saveStrictMode(enabled) {
   } catch {}
   return next
 }
+
+// ── Output evidence folder ──────────────────────────────────────────────────
+// The project folder a session's work lives in. Only the path is stored; the
+// companion reads metadata from it during a session and never its contents.
+const OUTPUT_FOLDER_KEY = 'eudaimonia_output_folder'
+
+export function loadOutputFolder() {
+  try { return localStorage.getItem(OUTPUT_FOLDER_KEY) || '' } catch { return '' }
+}
+
+export function saveOutputFolder(path) {
+  const next = String(path || '')
+  try { localStorage.setItem(OUTPUT_FOLDER_KEY, next) } catch {}
+  return next
+}
+
+/// Opens the native folder picker. Returns '' outside the native app, where no
+/// such dialog exists — the feature is simply unavailable in a browser.
+export async function pickOutputFolder() {
+  const invoke = window.__TAURI__?.core?.invoke
+  if (!invoke) return ''
+  try {
+    return (await invoke('pick_output_folder')) || ''
+  } catch {
+    return ''
+  }
+}

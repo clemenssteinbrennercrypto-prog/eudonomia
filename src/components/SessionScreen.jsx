@@ -5,12 +5,13 @@ import {
   isActivityConnected,
   pushCompanionSession,
   fetchOutputDelta,
+  setOutputWatchFolder,
   setExtensionFallbackSession,
   startActivityPolling,
   stopActivityPolling,
 } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { loadFocusAppsConfig, loadStrictMode } from '../lib/storage'
+import { loadFocusAppsConfig, loadOutputFolder, loadStrictMode } from '../lib/storage'
 import {
   classifyGoalAwareActivity,
   deriveSessionIntent,
@@ -1258,7 +1259,14 @@ export default function SessionScreen({
       const delta = await fetchOutputDelta()
       if (!cancelled && delta) outputEvidenceRef.current = delta
     }
-    poll()
+    // Baseline the nominated folder first — a delta measured against no
+    // baseline would report the whole folder as this session's work.
+    const folder = loadOutputFolder()
+    if (folder) {
+      setOutputWatchFolder(folder).then(() => { if (!cancelled) poll() })
+    } else {
+      poll()
+    }
     const id = setInterval(poll, 15_000)
     return () => { cancelled = true; clearInterval(id) }
   }, [])
