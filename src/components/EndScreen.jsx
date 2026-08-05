@@ -726,6 +726,35 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                     ))}
                   </div>
                 )}
+
+                {/* What was actually worked on, not just which tool was open.
+                    Window titles name the artifact; two documents in the same
+                    app are two different pieces of work. */}
+                {debrief.alignment.topArtifacts?.length > 0 && (
+                  <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      What you worked on
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {debrief.alignment.topArtifacts.map(item => (
+                        <div key={item.artifact} style={{
+                          display: 'flex', justifyContent: 'space-between', gap: 12,
+                          fontSize: 12, color: 'var(--text-secondary)',
+                        }}>
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.artifact}
+                            {item.app && item.app !== item.artifact && (
+                              <span style={{ color: 'var(--text-muted)' }}> · {item.app}</span>
+                            )}
+                          </span>
+                          <span style={{ color: 'var(--text)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {fmt(item.seconds)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

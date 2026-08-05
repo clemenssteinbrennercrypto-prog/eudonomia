@@ -231,6 +231,30 @@ export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '',
   }
 }
 
+// Window titles name the thing being worked on, not just the tool holding it.
+// "thesis_intro_v3.docx — Word" is the difference between "you were in Word for
+// 40 minutes" and "you were in thesis_intro_v3 for 40 minutes". The companion
+// already reports this field; until now it was only used as a fallback label.
+//
+// Titles are `<artifact><sep><app>` on macOS, with the app name trailing. We
+// take the leading segment and drop a trailing app name when it matches.
+const TITLE_SEPARATORS = /\s+[—–|]\s+|\s+-\s+/
+
+export function artifactFromTitle(title, app = '') {
+  const raw = String(title || '').trim()
+  if (!raw) return ''
+  const parts = raw.split(TITLE_SEPARATORS).map(p => p.trim()).filter(Boolean)
+  if (parts.length === 0) return ''
+  const appKey = String(app || '').trim().toLowerCase()
+  // Drop trailing segments that are just the app itself ("… — Word").
+  while (parts.length > 1 && appKey && parts[parts.length - 1].toLowerCase() === appKey) {
+    parts.pop()
+  }
+  const first = parts[0]
+  // Browser tabs often read "Inbox (12)" — the unread count is noise, not identity.
+  return first.replace(/\s*\(\d+\)\s*$/, '').trim()
+}
+
 export function classifyGoalAwareActivity(activity, config, daemonConnected, sessionIntent) {
   if (!daemonConnected) {
     return { kind: 'unclear', app: '', domain: '', label: 'No activity data', basis: 'no_activity_data' }
@@ -241,7 +265,10 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
   const domain = normalizeDomain(activity?.domain || activity?.full_url || activity?.url)
   const domainKey = domain.toLowerCase()
   const activityText = [app, domain, activity?.title, activity?.window].filter(Boolean).join(' ')
-  const label = domain || activity?.title || app || 'Unknown'
+  const title = String(activity?.title || activity?.window || '').trim()
+  // For a browser the domain IS the artifact; for a native app it's the document.
+  const artifact = domain || artifactFromTitle(title, app) || app
+  const label = domain || title || app || 'Unknown'
 
   if (!appKey && !domainKey) {
     return { kind: 'unclear', app, domain, label: 'No activity data', basis: 'no_activity_data' }
@@ -258,7 +285,7 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     Boolean(domainKey && distractionAppKeys.has(domainKey)) ||
     domainMatches(domain, distractionDomains)
   if (blockedByUser) {
-    return { kind: 'blocked', app, domain, label, basis: 'personal_blocker' }
+    return { kind: 'blocked', app, domain, title, artifact, label, basis: 'personal_blocker' }
   }
 
   const intent = sessionIntent || deriveSessionIntent()
@@ -270,26 +297,26 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     domainMatches(domain, focusDomains)
 
   if (matchesIntentKeyword) {
-    return { kind: 'aligned', app, domain, label, basis: 'session_keyword' }
+    return { kind: 'aligned', app, domain, title, artifact, label, basis: 'session_keyword' }
   }
   if (matchesIntentTool || matchesIntentDomain) {
-    return { kind: 'supportive', app, domain, label, basis: 'session_tool' }
+    return { kind: 'supportive', app, domain, title, artifact, label, basis: 'session_tool' }
   }
   if (allowedByUser) {
-    return { kind: intent.confidence === 'none' ? 'aligned' : 'supportive', app, domain, label, basis: 'personal_focus_rule' }
+    return { kind: intent.confidence === 'none' ? 'aligned' : 'supportive', app, domain, title, artifact, label, basis: 'personal_focus_rule' }
   }
 
   const commonlyDistracting = appMatchesAny(appKey, COMMON_DISTRACTIONS.apps) ||
     domainMatches(domain, COMMON_DISTRACTIONS.domains)
   if (commonlyDistracting) {
-    return { kind: 'distraction', app, domain, label, basis: 'common_distraction' }
+    return { kind: 'distraction', app, domain, title, artifact, label, basis: 'common_distraction' }
   }
 
   if (intent.confidence === 'medium' && intent.intentStrictness !== 'gentle') {
-    return { kind: 'off_goal', app, domain, label, basis: 'unmatched_session_context' }
+    return { kind: 'off_goal', app, domain, title, artifact, label, basis: 'unmatched_session_context' }
   }
 
-  return { kind: 'unclear', app, domain, label, basis: 'insufficient_context' }
+  return { kind: 'unclear', app, domain, title, artifact, label, basis: 'insufficient_context' }
 }
 
 export function emptyActivityAlignmentSummary() {
@@ -303,6 +330,7 @@ export function emptyActivityAlignmentSummary() {
       distraction: 0,
     },
     byActivity: {},
+    byArtifact: {},
     events: [],
   }
 }
@@ -325,6 +353,17 @@ export function recordActivityAlignment(summary, classification, second) {
     }
   }
   next.byActivity[key].seconds += 1
+
+  // Time spent on the actual thing being worked on. This is what turns
+  // "40 minutes in Word" into "40 minutes on thesis_intro_v3".
+  const artifact = classification?.artifact || classification?.app
+  if (artifact) {
+    if (!next.byArtifact) next.byArtifact = {}
+    if (!next.byArtifact[artifact]) {
+      next.byArtifact[artifact] = { artifact, app: classification?.app || '', kind, seconds: 0 }
+    }
+    next.byArtifact[artifact].seconds += 1
+  }
   if (next.byActivity[key].seconds === 1 && kind !== 'aligned' && kind !== 'supportive' && kind !== 'unclear') {
     next.events.push({ second, kind, label: classification?.label || key, basis: classification?.basis || 'unknown' })
   }
@@ -343,6 +382,9 @@ export function summarizeSessionAlignment(activitySummary, actualSeconds = 0) {
   const topActivities = Object.values(summary.byActivity || {})
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 5)
+  const topArtifacts = Object.values(summary.byArtifact || {})
+    .sort((a, b) => b.seconds - a.seconds)
+    .slice(0, 5)
 
   return {
     secondsByKind,
@@ -352,6 +394,7 @@ export function summarizeSessionAlignment(activitySummary, actualSeconds = 0) {
     alignedPct,
     driftPct,
     topActivities,
+    topArtifacts,
     driftEvents: summary.events || [],
   }
 }
