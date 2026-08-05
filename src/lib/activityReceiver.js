@@ -214,3 +214,33 @@ export async function installCompanionHelper() {
     return { ok: false, error: String(err?.message || err) }
   }
 }
+
+// ── Output evidence ─────────────────────────────────────────────────────────
+// The companion watches a project folder and reports metadata only — file
+// sizes, names, git counts. Nothing here reads file contents.
+
+/** Nominate the folder for this session. Empty string stops watching. */
+export async function setOutputWatchFolder(path) {
+  try {
+    const res = await fetchDaemon('/output/watch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path || '' }),
+      signal: AbortSignal.timeout(8000),   // a big folder takes a moment to scan
+    })
+    return await res.json()
+  } catch {
+    return null   // companion absent or older build: output evidence is simply off
+  }
+}
+
+/** What changed in the watched folder since the session began. */
+export async function fetchOutputDelta() {
+  try {
+    const res = await fetchDaemon('/output/delta', { signal: AbortSignal.timeout(8000) })
+    const data = await res.json()
+    return data?.watched ? data : null
+  } catch {
+    return null
+  }
+}

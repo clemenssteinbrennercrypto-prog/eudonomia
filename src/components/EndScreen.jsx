@@ -406,6 +406,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     focusPhases          = null,
     sessionIntent        = null,
     activityAlignment    = null,
+    outputEvidence       = null,
     phaseInterventions   = null,
     avgFocusScore        = null,
     finalScore           = null,
@@ -724,6 +725,51 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Did anything come out of it? Attention and output are
+                    independent: high focus with nothing produced means you were
+                    locked onto something that wasn't moving. Metadata only —
+                    the companion never reads file contents. */}
+                {outputEvidence?.watched && (
+                  <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      What came out of it
+                    </p>
+                    {(() => {
+                      const moved = (outputEvidence.filesChanged || 0) + (outputEvidence.filesCreated || 0)
+                      const kb = Math.round((outputEvidence.bytesAdded || 0) / 1024)
+                      if (moved === 0 && !outputEvidence.commits) {
+                        return (
+                          <p style={{ fontSize: 13, color: 'var(--warn)', margin: 0, lineHeight: 1.5 }}>
+                            Nothing changed in the watched folder. Focused, but the work didn't move —
+                            worth asking whether it was the right task, or whether you were stuck.
+                          </p>
+                        )
+                      }
+                      const bits = []
+                      if (moved) bits.push(`${moved} file${moved === 1 ? '' : 's'} changed`)
+                      if (kb) bits.push(`${kb > 0 ? '+' : ''}${kb} KB`)
+                      if (outputEvidence.commits) {
+                        bits.push(`${outputEvidence.commits} commit${outputEvidence.commits === 1 ? '' : 's'}`)
+                        if (outputEvidence.linesAdded || outputEvidence.linesRemoved) {
+                          bits.push(`+${outputEvidence.linesAdded} \u2212${outputEvidence.linesRemoved} lines`)
+                        }
+                      }
+                      return (
+                        <>
+                          <p style={{ fontSize: 13, color: 'var(--good)', fontWeight: 600, margin: 0 }}>
+                            {bits.join(' \u00b7 ')}
+                          </p>
+                          {outputEvidence.changedNames?.length > 0 && (
+                            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+                              {outputEvidence.changedNames.slice(0, 5).join(', ')}
+                            </p>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
 

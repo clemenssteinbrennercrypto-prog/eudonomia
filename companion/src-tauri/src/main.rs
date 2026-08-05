@@ -11,6 +11,7 @@
 
 mod activity;
 mod blocking;
+mod output;
 mod server;
 
 use activity::{
@@ -186,6 +187,8 @@ fn main() {
         activity: state.clone(),
         session: session.clone(),
         debug: debug.clone(),
+        // No folder is watched until the UI nominates one for a session.
+        output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
     };
 
     tauri::Builder::default()

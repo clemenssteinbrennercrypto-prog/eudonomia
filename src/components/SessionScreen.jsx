@@ -4,6 +4,7 @@ import {
   getLastActivity,
   isActivityConnected,
   pushCompanionSession,
+  fetchOutputDelta,
   setExtensionFallbackSession,
   startActivityPolling,
   stopActivityPolling,
@@ -922,6 +923,10 @@ export default function SessionScreen({
   const timelineSnapshotsRef = useRef([])
   const distractionLogRef    = useRef([]) // [{second, reason}]
   const activityAlignmentRef = useRef(emptyActivityAlignmentSummary())
+  // Latest output evidence from the companion's watched folder. Polled rather
+  // than fetched at the end, because endSession has to build its payload
+  // synchronously. Worst case it is one poll interval stale.
+  const outputEvidenceRef    = useRef(null)
   const goodStreakSecsRef    = useRef(0)   // unbroken seconds at/above the focused threshold
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
@@ -1192,6 +1197,7 @@ export default function SessionScreen({
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
       sessionIntent:        sessionIntentRef.current,
+      outputEvidence:       outputEvidenceRef.current,
       activityAlignment:    {
         secondsByKind: { ...activityAlignmentRef.current.secondsByKind },
         byActivity: { ...activityAlignmentRef.current.byActivity },
@@ -1239,6 +1245,23 @@ export default function SessionScreen({
     const interval = setInterval(syncCompanionSession, 3000)
     return () => clearInterval(interval)
   }, [applyCompanionSession, endSession, pushBlockingState])
+
+  // ── Output evidence ───────────────────────────────────────────────────────
+  // Did the work actually move? The companion compares the nominated project
+  // folder against its state at session start and reports metadata only:
+  // files changed, bytes added, commits. If no folder was nominated, or the
+  // companion is an older build, this stays null and nothing changes.
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      if (cancelled || sessionEndedRef.current) return
+      const delta = await fetchOutputDelta()
+      if (!cancelled && delta) outputEvidenceRef.current = delta
+    }
+    poll()
+    const id = setInterval(poll, 15_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
 
   // ── Guard against losing the session to a reload or a closed window ───────
   // Every bit of session state — score, streaks, phase, timers, calibration —

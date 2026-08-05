@@ -1,6 +1,9 @@
 // Axum HTTP server on localhost:7331.
 //
 // GET  /status  — current frontmost app/tab (polled by the bundled UI)
+// POST /output/watch  — nominate a project folder; snapshots it as the baseline
+// GET  /output/delta  — what changed in that folder since the baseline
+//                       (metadata only: sizes, names, git counts — never content)
 // POST /session — session + blocking config pushed by the bundled UI on session
 //                 start/end (and re-pushed periodically as a keepalive)
 //
@@ -8,6 +11,7 @@
 // Companion WebView.
 
 use crate::activity::{now_ms, SharedActivity, SharedDebug, SharedSession};
+use crate::output::{self, OutputSnapshot};
 use axum::{
     extract::State,
     http::{header, HeaderValue, Method, StatusCode},
@@ -17,6 +21,8 @@ use axum::{
 };
 use serde::Deserialize;
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 const PORT: u16 = 7331;
 
@@ -25,6 +31,9 @@ pub struct AppState {
     pub activity: SharedActivity,
     pub session: SharedSession,
     pub debug: SharedDebug,
+    /// Opening snapshot of the watched project folder, if the user nominated
+    /// one for this session. None means output evidence is simply off.
+    pub output_baseline: Arc<Mutex<Option<OutputSnapshot>>>,
 }
 
 fn with_cors(mut response: Response) -> Response {
@@ -286,7 +295,93 @@ async fn uninstall_helper() -> Response {
 }
 
 fn router(state: AppState) -> Router {
+#[derive(Deserialize)]
+struct WatchPayload {
+    path: String,
+}
+
+/// Nominate a folder and record its opening state. Scanning happens on a
+/// blocking thread — a large project would otherwise stall the async runtime
+/// that is also serving /status every three seconds.
+async fn output_watch(State(state): State<AppState>, Json(payload): Json<WatchPayload>) -> Response {
+    let raw = payload.path.trim().to_string();
+    if raw.is_empty() {
+        if let Ok(mut guard) = state.output_baseline.lock() {
+            *guard = None; // empty path = stop watching
+        }
+        return with_cors(json_ok("{\"watched\":false}"));
+    }
+
+    let path = PathBuf::from(&raw);
+    if !path.is_dir() {
+        return with_cors(
+            (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"not a readable folder\"}",
+            )
+                .into_response(),
+        );
+    }
+
+    let snap = tokio::task::spawn_blocking(move || output::snapshot(&path))
+        .await
+        .ok();
+
+    let body = match snap {
+        Some(snap) => {
+            let files = snap.files.len();
+            let truncated = snap.truncated;
+            if let Ok(mut guard) = state.output_baseline.lock() {
+                *guard = Some(snap);
+            }
+            format!(
+                "{{\"watched\":true,\"files\":{},\"truncated\":{}}}",
+                files, truncated
+            )
+        }
+        None => "{\"watched\":false,\"error\":\"scan failed\"}".to_string(),
+    };
+    with_cors(json_ok(&body))
+}
+
+async fn output_delta(State(state): State<AppState>, method: Method) -> Response {
+    if method == Method::OPTIONS {
+        return preflight().await;
+    }
+    let base = state
+        .output_baseline
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+
+    let body = match base {
+        None => "{\"watched\":false}".to_string(),
+        Some(base) => {
+            let delta = tokio::task::spawn_blocking(move || output::delta(&base))
+                .await
+                .ok();
+            delta
+                .and_then(|d| serde_json::to_string(&d).ok())
+                .unwrap_or_else(|| "{\"watched\":true,\"error\":\"scan failed\"}".into())
+        }
+    };
+    with_cors(json_ok(&body))
+}
+
+fn json_ok(body: &str) -> Response {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        body.to_string(),
+    )
+        .into_response()
+}
+
+
     Router::new()
+        .route("/output/watch", post(output_watch).options(preflight))
+        .route("/output/delta", get(output_delta).options(output_delta))
         .route("/status", get(status).options(status))
         .route("/debug", get(debug).options(debug))
         .route("/session", post(session).options(preflight))
