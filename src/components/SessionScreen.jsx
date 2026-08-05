@@ -351,20 +351,33 @@ function getAudioCtx() {
   return _sharedAudioCtx
 }
 function playAlertSound() {
+  // Two-pulse alert: a sharp high-low chirp, then a second lower confirmation
+  // pulse after a short gap. Louder than the previous single sine so it
+  // actually cuts through when the user has drifted away from the screen.
   try {
     const ctx = getAudioCtx()
     if (ctx.state === 'suspended') ctx.resume()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(440, ctx.currentTime)
-    osc.frequency.exponentialRampToValueAtTime(330, ctx.currentTime + 1.5)
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-    gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.2)
-    gain.gain.setValueAtTime(0.15, ctx.currentTime + 1.0)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.5)
-    osc.start(); osc.stop(ctx.currentTime + 2.5)
+    const t = ctx.currentTime
+
+    const pulses = [
+      { freq1: 880, freq2: 550, start: 0,   dur: 0.9 },  // first pulse — high
+      { freq1: 660, freq2: 440, start: 1.1, dur: 0.9 },  // second pulse — lower, confirms
+    ]
+
+    pulses.forEach(({ freq1, freq2, start, dur }) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq1, t + start)
+      osc.frequency.exponentialRampToValueAtTime(freq2, t + start + dur * 0.7)
+      gain.gain.setValueAtTime(0.0001, t + start)
+      gain.gain.linearRampToValueAtTime(0.42, t + start + 0.06)   // louder: was 0.15
+      gain.gain.setValueAtTime(0.42, t + start + dur * 0.5)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + start + dur)
+      osc.start(t + start)
+      osc.stop(t + start + dur)
+    })
   } catch {}
 }
 function playGentleReminderSound() {
@@ -2672,6 +2685,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
             {overlayMsg.icon && <OverlayIcon type={overlayMsg.icon} />}
             <p className="focus-overlay-text">{overlayMsg.text}</p>
             <p className="focus-overlay-sub">{overlayMsg.sub}</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.04em' }}>
+              Returns automatically when focus is detected
+            </p>
             <button
               onClick={() => {
                 overlayActiveRef.current = false
@@ -2679,21 +2695,20 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
                 setShowOverlay(false)
               }}
               style={{
-                marginTop: 8,
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.15)',
+                marginTop: 12,
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.10)',
                 borderRadius: 100,
-                padding: '8px 24px',
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
+                padding: '6px 20px',
+                fontSize: 12,
+                fontWeight: 500,
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 letterSpacing: '0.03em',
-                transition: 'background 0.15s',
               }}
             >
-              Dismiss
+              Dismiss anyway
             </button>
           </div>
         </div>
