@@ -72,6 +72,32 @@ const PHASE_COLORS = {
   drift: 'var(--bad)',
 }
 
+const GOAL_OUTCOMES = [
+  { value: 'yes', label: 'Yes', color: 'var(--good)' },
+  { value: 'partly', label: 'Partly', color: 'var(--warn)' },
+  { value: 'no', label: 'No', color: 'var(--bad)' },
+]
+
+const ENERGY_LABELS = {
+  fresh: 'Fresh',
+  medium: 'Medium',
+  tired: 'Tired',
+}
+
+function outcomeFromLegacy(goalAchieved) {
+  if (goalAchieved === true) return 'yes'
+  if (goalAchieved === false) return 'no'
+  return null
+}
+
+function energyInterpretation(energyLevel, focusPct) {
+  if (!energyLevel || focusPct == null) return null
+  if (energyLevel === 'tired' && focusPct >= 60) return 'Tired start: this score carries more weight than it would on a fresh run.'
+  if (energyLevel === 'fresh' && focusPct < 60) return 'Fresh start: the score suggests friction came from the work or environment, not just energy.'
+  if (energyLevel === 'medium') return 'Medium energy: use this as the baseline for comparing similar sessions.'
+  return null
+}
+
 function countBy(items, getKey) {
   return items.reduce((acc, item) => {
     const key = getKey(item)
@@ -237,6 +263,13 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     timeline             = [],
     completed            = false,
     goal                 = '',
+    intendedOutput       = '',
+    successCriteria      = '',
+    energyLevel          = 'medium',
+    goalOutcome          = null,
+    goalAchieved         = null,
+    completedText        = '',
+    blockerText          = '',
     task                 = '',
     tags                 = [],
     distractionLog       = [],
@@ -267,7 +300,21 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     activityAlignment,
     phaseInterventions,
   }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions])
-  const [goalAchieved, setGoalAchieved] = useState(null)
+  const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
+  const [actualCompleted, setActualCompleted] = useState(completedText || '')
+  const [blocker, setBlocker] = useState(blockerText || '')
+
+  const saveOutcome = (patch) => {
+    if (id) updateSession(id, patch)
+  }
+
+  const selectOutcome = (nextOutcome) => {
+    setSelectedOutcome(nextOutcome)
+    saveOutcome({
+      goalOutcome: nextOutcome,
+      goalAchieved: nextOutcome === 'yes' ? true : nextOutcome === 'no' ? false : null,
+    })
+  }
 
   // Personal best detection
   const isPersonalBest = useMemo(() => {
@@ -551,8 +598,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
         )}
 
-        {/* Goal section */}
-        {goal && (
+        {/* Intention summary */}
+        {(goal || intendedOutput || successCriteria) && (
           <div style={{
             width: '100%', boxSizing: 'border-box',
             background: 'var(--surface)',
@@ -561,43 +608,114 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             padding: '16px 18px',
           }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
-              Session goal
+              Session intention
             </p>
-            <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 500, marginBottom: 12 }}>
-              {goal}
-            </p>
-            {goalAchieved === null ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => { setGoalAchieved(true); if (id) updateSession(id, { goalAchieved: true }) }}
-                  style={{
-                    padding: '8px 18px', fontSize: 13, fontWeight: 600,
-                    background: 'var(--good)', color: 'var(--text)',
-                    border: 'none', borderRadius: 100,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  ✓ Achieved
-                </button>
-                <button
-                  onClick={() => { setGoalAchieved(false); if (id) updateSession(id, { goalAchieved: false }) }}
-                  style={{
-                    padding: '8px 18px', fontSize: 13, fontWeight: 600,
-                    background: 'none', color: 'var(--text-muted)',
-                    border: '1px solid var(--line)', borderRadius: 100,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  Not quite
-                </button>
-              </div>
-            ) : (
-              <p style={{ fontSize: 13, color: goalAchieved ? 'var(--good)' : 'var(--warn)', fontWeight: 600 }}>
-                {goalAchieved ? '✓ Goal achieved!' : 'Keep working toward it 💪'}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
+              {intendedOutput && (
+                <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: 0 }}>
+                  {intendedOutput}
+                </p>
+              )}
+              {successCriteria && (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                  Success: {successCriteria}
+                </p>
+              )}
+              {goal && (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                  Goal: {goal}
+                </p>
+              )}
+              {energyLevel && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                  Energy: {ENERGY_LABELS[energyLevel] || energyLevel}
+                </p>
+              )}
+            </div>
+            {energyInterpretation(energyLevel, focusPct) && (
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+                {energyInterpretation(energyLevel, focusPct)}
               </p>
             )}
           </div>
         )}
+
+        {/* Outcome capture */}
+        <div style={{
+          width: '100%', boxSizing: 'border-box',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 14,
+          padding: '16px 18px',
+        }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+            Output
+          </p>
+          <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: '0 0 12px' }}>
+            Did you reach your goal?
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+            {GOAL_OUTCOMES.map(({ value, label, color }) => {
+              const active = selectedOutcome === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => selectOutcome(value)}
+                  aria-pressed={active}
+                  style={{
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    background: active ? `${color}22` : 'transparent',
+                    color: active ? color : 'var(--text-muted)',
+                    border: `1px solid ${active ? color : 'var(--line)'}`,
+                    borderRadius: 100,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+                What did you complete? <span style={{ fontWeight: 400 }}>(optional)</span>
+              </span>
+              <input
+                type="text"
+                className="text-input"
+                value={actualCompleted}
+                onChange={(e) => setActualCompleted(e.target.value.slice(0, 160))}
+                onBlur={() => saveOutcome({ completedText: actualCompleted.trim() })}
+                placeholder="Short note"
+                maxLength={160}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+                What blocked you? <span style={{ fontWeight: 400 }}>(optional)</span>
+              </span>
+              <input
+                type="text"
+                className="text-input"
+                value={blocker}
+                onChange={(e) => setBlocker(e.target.value.slice(0, 160))}
+                onBlur={() => saveOutcome({ blockerText: blocker.trim() })}
+                placeholder="Short note"
+                maxLength={160}
+              />
+            </label>
+          </div>
+          {selectedOutcome && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0' }}>
+              Saved for this session.
+            </p>
+          )}
+        </div>
 
         {/* Tags */}
         {tags && tags.length > 0 && (
@@ -678,7 +796,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             View History
           </button>
           <button
-            onClick={() => onRestart({ task, goal, duration: plannedDuration || 30 })}
+            onClick={() => onRestart({ task, goal, intendedOutput, successCriteria, energyLevel, duration: plannedDuration || 30, tags })}
             style={{
               padding: '14px 28px',
               fontSize: 15, fontWeight: 600,

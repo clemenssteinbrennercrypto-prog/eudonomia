@@ -772,9 +772,23 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function SessionScreen({ task, goal = '', tags = [], duration, devices = [], focusModeEnabled = true, onEnd }) {
+export default function SessionScreen({
+  task,
+  goal = '',
+  intendedOutput = '',
+  successCriteria = '',
+  energyLevel = 'medium',
+  tags = [],
+  duration,
+  devices = [],
+  focusModeEnabled = true,
+  onEnd,
+}) {
   const totalSeconds = duration * 60
-  const sessionIntent = useMemo(() => deriveSessionIntent({ task, goal, tags }), [task, goal, tags])
+  const sessionIntent = useMemo(
+    () => deriveSessionIntent({ task, goal, intendedOutput, successCriteria, tags }),
+    [task, goal, intendedOutput, successCriteria, tags]
+  )
   const {
     yawLeft: yawLT,
     yawRight: yawRT,
@@ -1149,6 +1163,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
     onEnd({
       plannedDuration:      duration,
+      intendedOutput,
+      successCriteria,
+      energyLevel,
       actualSeconds,
       completed,
       focusLostCount:       distractionEventsRef.current,
@@ -1183,7 +1200,7 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
         transitions: [...focusPhaseTransitionsRef.current],
       },
     })
-  }, [duration, onEnd, pushBlockingState, stopAmbient])
+  }, [duration, intendedOutput, successCriteria, energyLevel, onEnd, pushBlockingState, stopAmbient])
 
   useEffect(() => {
     const syncCompanionSession = async () => {

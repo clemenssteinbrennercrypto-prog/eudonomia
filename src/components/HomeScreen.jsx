@@ -65,11 +65,19 @@ function summariseDevices(devices) {
 }
 
 const DURATIONS = [15, 30, 60, 90]
+const ENERGY_LEVELS = [
+  { value: 'fresh', label: 'Fresh' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'tired', label: 'Tired' },
+]
 
 export default function HomeScreen({
   task, setTask,
   duration, setDuration,
   goal, setGoal,
+  intendedOutput, setIntendedOutput,
+  successCriteria, setSuccessCriteria,
+  energyLevel, setEnergyLevel,
   tags, setTags,
   devices,
   focusModeEnabled,
@@ -388,6 +396,48 @@ export default function HomeScreen({
                 {recentGoals.map(g => <option key={g} value={g} />)}
               </datalist>
             )}
+          </div>
+
+          <div className="field">
+            <label className="field-label">Concrete output</label>
+            <input
+              type="text"
+              className="text-input"
+              value={intendedOutput}
+              onChange={(e) => setIntendedOutput(e.target.value.slice(0, 120))}
+              placeholder="e.g. Review PR #42 and leave comments"
+              maxLength={120}
+            />
+          </div>
+
+          <div className="field">
+            <label className="field-label">Success looks like (optional)</label>
+            <input
+              type="text"
+              className="text-input"
+              value={successCriteria}
+              onChange={(e) => setSuccessCriteria(e.target.value.slice(0, 120))}
+              placeholder="e.g. PR reviewed, intro written, 10 pages read"
+              maxLength={120}
+            />
+          </div>
+
+          <div className="field">
+            <label className="field-label">Energy</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {ENERGY_LEVELS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setEnergyLevel(value)}
+                  aria-pressed={energyLevel === value}
+                  className={`dur-btn${energyLevel === value ? ' active' : ''}`}
+                  style={{ padding: '9px 10px' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Tag chips */}

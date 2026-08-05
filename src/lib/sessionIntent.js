@@ -144,9 +144,9 @@ function matchProfileScores(tokens) {
     .sort((a, b) => b.score - a.score)
 }
 
-export function deriveSessionIntent({ task = '', goal = '', tags = [] } = {}) {
+export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '', successCriteria = '', tags = [] } = {}) {
   const tagText = Array.isArray(tags) ? tags.join(' ') : ''
-  const text = [task, goal, tagText].filter(Boolean).join(' ')
+  const text = [task, goal, intendedOutput, successCriteria, tagText].filter(Boolean).join(' ')
   const tokens = unique(tokenize(text))
   const profileScores = matchProfileScores(tokens)
   const primaryProfile = profileScores[0]?.profile || null
@@ -166,6 +166,8 @@ export function deriveSessionIntent({ task = '', goal = '', tags = [] } = {}) {
     sourceText: text.trim(),
     task: String(task || '').trim(),
     goal: String(goal || '').trim(),
+    intendedOutput: String(intendedOutput || '').trim(),
+    successCriteria: String(successCriteria || '').trim(),
     tags: Array.isArray(tags) ? tags.filter(Boolean) : [],
     keywords: tokens,
     primaryKind: primaryProfile?.id || 'general',

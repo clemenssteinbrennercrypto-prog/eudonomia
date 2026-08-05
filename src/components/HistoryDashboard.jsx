@@ -309,6 +309,13 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
   const focusPct = sessionFocusPct(session)
   const prevFocusPct = sessionFocusPct(prevSession)
   const color = focusColor(focusPct)
+  const outcomeLabel = session.goalOutcome === 'yes'
+    ? 'Goal reached'
+    : session.goalOutcome === 'partly'
+      ? 'Partly reached'
+      : session.goalOutcome === 'no'
+        ? 'Goal missed'
+        : null
 
   return (
     <div
@@ -369,6 +376,8 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
         <span>{motivational(focusPct)}</span>
         <span>{session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
         <span>{fmt(session.longestFocusedStreak)} streak</span>
+        {session.energyLevel && <span>{session.energyLevel} energy</span>}
+        {outcomeLabel && <span>{outcomeLabel}</span>}
         {session.completed && <span style={{ color: 'var(--good)' }}>Completed</span>}
       </div>
 
@@ -486,6 +495,20 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
 
           {/* Session note */}
           <SessionNote session={session} onNoteUpdate={onNoteUpdate} />
+
+          {(session.intendedOutput || session.successCriteria || session.completedText || session.blockerText) && (
+            <div style={{ marginTop: 20 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Intention and output
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                {session.intendedOutput && <p style={{ margin: 0 }}><strong>Output:</strong> {session.intendedOutput}</p>}
+                {session.successCriteria && <p style={{ margin: 0 }}><strong>Success:</strong> {session.successCriteria}</p>}
+                {session.completedText && <p style={{ margin: 0 }}><strong>Completed:</strong> {session.completedText}</p>}
+                {session.blockerText && <p style={{ margin: 0 }}><strong>Blocked by:</strong> {session.blockerText}</p>}
+              </div>
+            </div>
+          )}
 
           {session.focusPhases?.seconds && Object.values(session.focusPhases.seconds).some(seconds => seconds > 0) && (
             <div style={{ marginTop: 20 }}>
@@ -836,12 +859,19 @@ export default function HistoryDashboard({ onClose }) {
   }
 
   const handleExportCSV = () => {
-    const header = ['timestamp', 'task', 'durationSeconds', 'focusPct', 'distractionEvents', 'longestStreakSeconds']
+    const header = ['timestamp', 'task', 'goal', 'intendedOutput', 'successCriteria', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'focusPct', 'distractionEvents', 'longestStreakSeconds']
     const rows = sessions.map(s => {
       const focusPct = sessionFocusPct(s)
       return [
         new Date(s.timestamp).toISOString(),
         `"${(s.task || '').replace(/"/g, '""')}"`,
+        `"${(s.goal || '').replace(/"/g, '""')}"`,
+        `"${(s.intendedOutput || '').replace(/"/g, '""')}"`,
+        `"${(s.successCriteria || '').replace(/"/g, '""')}"`,
+        s.energyLevel || '',
+        s.goalOutcome || '',
+        `"${(s.completedText || '').replace(/"/g, '""')}"`,
+        `"${(s.blockerText || '').replace(/"/g, '""')}"`,
         s.actualSeconds ?? 0,
         focusPct ?? '',
         s.distractionEvents ?? 0,
