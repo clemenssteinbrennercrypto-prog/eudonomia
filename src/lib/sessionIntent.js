@@ -80,6 +80,55 @@ const COMMON_DISTRACTIONS = {
   ],
 }
 
+const ENERGY_SCORING_PROFILES = {
+  fresh: {
+    value: 'fresh',
+    label: 'Fresh',
+    expectationLabel: 'standard expectation',
+    focusThreshold: 40,
+    statusFocusedThreshold: 65,
+    statusAlertThreshold: 38,
+    goodStreakThreshold: 65,
+    flowThreshold: 72,
+    alertDelayMult: 1,
+    gentleDelayMult: 1,
+    activityDistractionPenaltyMult: 1,
+    intentStrictness: 'standard',
+  },
+  medium: {
+    value: 'medium',
+    label: 'Medium',
+    expectationLabel: 'normal expectation',
+    focusThreshold: 40,
+    statusFocusedThreshold: 65,
+    statusAlertThreshold: 38,
+    goodStreakThreshold: 65,
+    flowThreshold: 72,
+    alertDelayMult: 1,
+    gentleDelayMult: 1,
+    activityDistractionPenaltyMult: 1,
+    intentStrictness: 'normal',
+  },
+  tired: {
+    value: 'tired',
+    label: 'Tired',
+    expectationLabel: 'lower expectation',
+    focusThreshold: 35,
+    statusFocusedThreshold: 60,
+    statusAlertThreshold: 34,
+    goodStreakThreshold: 60,
+    flowThreshold: 68,
+    alertDelayMult: 1.25,
+    gentleDelayMult: 1.35,
+    activityDistractionPenaltyMult: 0.8,
+    intentStrictness: 'gentle',
+  },
+}
+
+export function getEnergyScoringProfile(energyLevel = 'medium') {
+  return ENERGY_SCORING_PROFILES[energyLevel] || ENERGY_SCORING_PROFILES.medium
+}
+
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase()
 }
@@ -144,7 +193,8 @@ function matchProfileScores(tokens) {
     .sort((a, b) => b.score - a.score)
 }
 
-export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '', successCriteria = '', tags = [] } = {}) {
+export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '', successCriteria = '', energyLevel = 'medium', tags = [] } = {}) {
+  const energyProfile = getEnergyScoringProfile(energyLevel)
   const tagText = Array.isArray(tags) ? tags.join(' ') : ''
   const text = [task, goal, intendedOutput, successCriteria, tagText].filter(Boolean).join(' ')
   const tokens = unique(tokenize(text))
@@ -173,6 +223,9 @@ export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '',
     primaryKind: primaryProfile?.id || 'general',
     primaryLabel: primaryProfile?.label || 'General work',
     confidence,
+    energyLevel: energyProfile.value,
+    energyLabel: energyProfile.label,
+    intentStrictness: energyProfile.intentStrictness,
     toolHints,
     domainHints,
   }
@@ -232,7 +285,7 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     return { kind: 'distraction', app, domain, label, basis: 'common_distraction' }
   }
 
-  if (intent.confidence === 'medium') {
+  if (intent.confidence === 'medium' && intent.intentStrictness !== 'gentle') {
     return { kind: 'off_goal', app, domain, label, basis: 'unmatched_session_context' }
   }
 

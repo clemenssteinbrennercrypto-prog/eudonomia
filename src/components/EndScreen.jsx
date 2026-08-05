@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { updateSession, loadSessions } from '../lib/storage'
-import { summarizeSessionAlignment } from '../lib/sessionIntent'
+import { getEnergyScoringProfile, summarizeSessionAlignment } from '../lib/sessionIntent'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -92,10 +92,96 @@ function outcomeFromLegacy(goalAchieved) {
 
 function energyInterpretation(energyLevel, focusPct) {
   if (!energyLevel || focusPct == null) return null
-  if (energyLevel === 'tired' && focusPct >= 60) return 'Tired start: this score carries more weight than it would on a fresh run.'
+  const energyProfile = getEnergyScoringProfile(energyLevel)
+  if (energyLevel === 'tired' && focusPct >= 60) return 'Tired start: 60%+ focused time here is stronger than the same number would be with fresh energy.'
   if (energyLevel === 'fresh' && focusPct < 60) return 'Fresh start: the score suggests friction came from the work or environment, not just energy.'
-  if (energyLevel === 'medium') return 'Medium energy: use this as the baseline for comparing similar sessions.'
+  if (energyLevel === 'medium') return `Medium energy: this used the ${energyProfile.expectationLabel} for focus time and drift interpretation.`
   return null
+}
+
+function classifyFocusBand(focusPct, energyLevel) {
+  if (focusPct == null) return 'unknown'
+  const energyProfile = getEnergyScoringProfile(energyLevel)
+  const strong = energyLevel === 'tired' ? 60 : 70
+  const low = energyProfile.focusThreshold + 10
+  if (focusPct >= strong) return 'high'
+  if (focusPct < low) return 'low'
+  return 'mixed'
+}
+
+function makeOutcomeInsight({ outcome, focusPct, successCriteria, intendedOutput, energyLevel }) {
+  if (!outcome) return null
+  const focusBand = classifyFocusBand(focusPct, energyLevel)
+  const criteria = String(successCriteria || intendedOutput || '').trim()
+  const targetText = criteria ? `the stated target (${criteria})` : 'the stated target'
+
+  if (focusBand === 'high' && outcome === 'no') {
+    return {
+      headline: `High focus, goal missed: ${targetText} may have been too large or mismatched for this block.`,
+      note: 'Your attention was available; the constraint was probably task size, dependencies, or choosing the wrong work for the available session.',
+      recommendation: 'Next time, split the output into a smaller deliverable before starting.',
+    }
+  }
+  if (focusBand === 'high' && outcome === 'partly') {
+    return {
+      headline: `Strong focus, partial output: you made real progress, but ${targetText} needed more scope control.`,
+      note: 'This usually points to an ambitious target rather than a failed session.',
+      recommendation: 'Keep the same setup and define a thinner finish line for the next block.',
+    }
+  }
+  if (focusBand === 'low' && outcome === 'yes') {
+    return {
+      headline: `Low focus, goal reached: ${targetText} may not require deep focus.`,
+      note: 'The output landed even though attention was uneven, so this task type may belong in lighter-energy blocks.',
+      recommendation: 'Reserve fresh sessions for work that truly needs sustained attention.',
+    }
+  }
+  if (focusBand === 'low' && outcome === 'no') {
+    return {
+      headline: `Low focus, goal missed: energy, environment, or task clarity likely blocked ${targetText}.`,
+      note: energyLevel === 'tired'
+        ? 'Because you started tired, this is a signal to reduce scope before judging the session harshly.'
+        : 'The focus pattern and outcome point in the same direction: the session never got enough traction.',
+      recommendation: 'Use a shorter duration and one concrete first action next time.',
+    }
+  }
+  if (focusBand === 'low' && outcome === 'partly') {
+    return {
+      headline: `Uneven focus, partial output: the task moved, but the session carried friction.`,
+      note: energyLevel === 'tired'
+        ? 'For tired energy, partial output with uneven focus still counts as useful progress.'
+        : 'The outcome was not a clean miss, but the focus pattern was costly.',
+      recommendation: 'Try a smaller target or a lower-interruption environment for the next attempt.',
+    }
+  }
+  if (focusBand === 'high' && outcome === 'yes') {
+    return {
+      headline: `Focus and output matched: you achieved ${targetText} with a strong attention pattern.`,
+      note: energyLevel === 'tired'
+        ? 'That is especially useful data: tired energy still supported meaningful output under this setup.'
+        : 'This is the cleanest signal that the task, duration, and workspace matched well.',
+      recommendation: 'Reuse this duration and setup for similar work.',
+    }
+  }
+  if (outcome === 'yes') {
+    return {
+      headline: `Goal reached with moderate focus: ${targetText} fit the session well enough.`,
+      note: 'The result matters; the focus pattern suggests there is still room to make similar work feel cleaner.',
+      recommendation: 'Keep the output size, then remove the largest drift source next time.',
+    }
+  }
+  if (outcome === 'partly') {
+    return {
+      headline: `Partly reached: ${targetText} moved forward, but not cleanly enough to call complete.`,
+      note: 'This is useful calibration between intention and actual output.',
+      recommendation: 'Make the next success criterion observable and smaller.',
+    }
+  }
+  return {
+    headline: `Goal not reached: ${targetText} did not match this session's conditions.`,
+    note: 'Use the gap between intention and output to adjust scope, not just effort.',
+    recommendation: 'Restart with a smaller output or change the environment before trying again.',
+  }
 }
 
 function countBy(items, getKey) {
@@ -136,6 +222,7 @@ function makeRecommendations({
   topDistraction,
   lowestStretch,
   phaseInterventions,
+  energyLevel,
 }) {
   const recommendations = []
   const phaseTotal = Object.values(phaseSeconds || {}).reduce((sum, seconds) => sum + seconds, 0)
@@ -145,6 +232,10 @@ function makeRecommendations({
   const lockInSeconds = phaseSeconds.lock_in || 0
   const rampSeconds = phaseSeconds.ramp || 0
   const interventionCount = (phaseInterventions?.gentleReminders || 0) + (phaseInterventions?.preDriftNudges || 0)
+
+  if (energyLevel === 'tired' && focusPct != null && focusPct >= 55) {
+    recommendations.push('For tired energy, keep the next block short and judge it by output quality, not a fresh-session score.')
+  }
 
   if (actualSeconds < 180) {
     recommendations.push('Run at least 5 minutes next time; the phase read is too short to tune behavior confidently.')
@@ -185,7 +276,21 @@ function makeRecommendations({
   return recommendations.slice(0, 3)
 }
 
-function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions }) {
+function makeDebrief({
+  focusPct,
+  actualSeconds,
+  distractionLog,
+  timeline,
+  preDriftEvents,
+  preDriftSeconds,
+  focusPhases,
+  activityAlignment,
+  phaseInterventions,
+  energyLevel,
+  selectedOutcome,
+  intendedOutput,
+  successCriteria,
+}) {
   const phaseSeconds = focusPhases?.seconds || countBy(timeline, pt => pt.phase)
   const dominantPhase = focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
   const topDistraction = dominantEntry(countBy(distractionLog, ev => ev.reason))
@@ -197,18 +302,38 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
     ? Math.round(((alignment.secondsByKind.unclear || 0) / alignment.observedSeconds) * 100)
     : null
 
-  let headline = 'You built useful focus, but the session had no clear phase data yet.'
-  if (focusPct == null) headline = 'Tracking did not produce enough measured focus data for a score.'
-  else if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
-  else if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) headline = 'Your attention signals were usable, but app/site activity drifted away from the stated aim.'
-  else if (alignment.observedSeconds >= 60 && alignment.alignedPct >= 70) headline = 'Your app/site activity mostly matched or supported the stated aim.'
-  else if (dominantPhase === 'lock_in') headline = 'The session was mostly lock-in: stable, sustained attention.'
-  else if (dominantPhase === 'ramp') headline = 'The session was mostly ramp: you were building attention rather than fully locked in.'
-  else if (dominantPhase === 'recovery') headline = 'The session spent a lot of time recovering after focus breaks.'
-  else if (dominantPhase === 'fade' || dominantPhase === 'drift') headline = 'The session tilted toward fade: attention weakened before it fully stabilized.'
-  else if (focusPct >= 70) headline = 'The session stayed productive, with most time above the focus threshold.'
+  const outcomeInsight = makeOutcomeInsight({
+    outcome: selectedOutcome,
+    focusPct,
+    successCriteria,
+    intendedOutput,
+    energyLevel,
+  })
+
+  let headline = outcomeInsight?.headline || 'You built useful focus, but the session had no clear phase data yet.'
+  if (!outcomeInsight) {
+    if (focusPct == null) headline = 'Tracking did not produce enough measured focus data for a score.'
+    else if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
+    else if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) headline = 'Your attention signals were usable, but app/site activity drifted away from the stated aim.'
+    else if (alignment.observedSeconds >= 60 && alignment.alignedPct >= 70) headline = 'Your app/site activity mostly matched or supported the stated aim.'
+    else if (dominantPhase === 'lock_in') headline = 'The session was mostly lock-in: stable, sustained attention.'
+    else if (dominantPhase === 'ramp') headline = 'The session was mostly ramp: you were building attention rather than fully locked in.'
+    else if (dominantPhase === 'recovery') headline = 'The session spent a lot of time recovering after focus breaks.'
+    else if (dominantPhase === 'fade' || dominantPhase === 'drift') headline = 'The session tilted toward fade: attention weakened before it fully stabilized.'
+    else if (focusPct >= 70) headline = 'The session stayed productive, with most time above the focus threshold.'
+  }
 
   const notes = []
+  if (outcomeInsight?.note) {
+    notes.push(outcomeInsight.note)
+  }
+  if (intendedOutput || successCriteria) {
+    notes.push(`Intended output: ${intendedOutput || 'not specified'}. Success criterion: ${successCriteria || 'not specified'}.`)
+  }
+  const energyNote = energyInterpretation(energyLevel, focusPct)
+  if (energyNote) {
+    notes.push(energyNote)
+  }
   if (lockInSeconds >= 60) {
     notes.push(`Lock-in held for ${fmt(lockInSeconds)}, your strongest sustained block.`)
   }
@@ -246,9 +371,13 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
     topDistraction,
     lowestStretch,
     phaseInterventions,
+    energyLevel,
   })
+  if (outcomeInsight?.recommendation) {
+    recommendations.unshift(outcomeInsight.recommendation)
+  }
 
-  return { headline, notes: notes.slice(0, 5), recommendations, dominantPhase, phaseSeconds, alignment }
+  return { headline, notes: notes.slice(0, 5), recommendations: recommendations.slice(0, 3), dominantPhase, phaseSeconds, alignment }
 }
 
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
@@ -289,6 +418,9 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   const focusPct = hasFocusMeasurement && actualSeconds > 0
     ? Math.round((focusedSeconds / actualSeconds) * 100)
     : null
+  const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
+  const [actualCompleted, setActualCompleted] = useState(completedText || '')
+  const [blocker, setBlocker] = useState(blockerText || '')
   const debrief = useMemo(() => makeDebrief({
     focusPct,
     actualSeconds,
@@ -299,10 +431,11 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     focusPhases,
     activityAlignment,
     phaseInterventions,
-  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions])
-  const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
-  const [actualCompleted, setActualCompleted] = useState(completedText || '')
-  const [blocker, setBlocker] = useState(blockerText || '')
+    energyLevel,
+    selectedOutcome,
+    intendedOutput,
+    successCriteria,
+  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions, energyLevel, selectedOutcome, intendedOutput, successCriteria])
 
   const saveOutcome = (patch) => {
     if (id) updateSession(id, patch)
@@ -652,7 +785,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             Output
           </p>
           <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: '0 0 12px' }}>
-            Did you reach your goal?
+            {successCriteria ? `Did you achieve: ${successCriteria}?` : intendedOutput ? `Did you produce: ${intendedOutput}?` : 'Did you reach your goal?'}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
             {GOAL_OUTCOMES.map(({ value, label, color }) => {

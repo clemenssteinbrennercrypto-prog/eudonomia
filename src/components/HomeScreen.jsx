@@ -66,9 +66,9 @@ function summariseDevices(devices) {
 
 const DURATIONS = [15, 30, 60, 90]
 const ENERGY_LEVELS = [
-  { value: 'fresh', label: 'Fresh' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'tired', label: 'Tired' },
+  { value: 'fresh', label: 'Fresh', hint: 'Full standard' },
+  { value: 'medium', label: 'Medium', hint: 'Normal read' },
+  { value: 'tired', label: 'Tired', hint: 'Gentler bar' },
 ]
 
 export default function HomeScreen({
@@ -405,7 +405,7 @@ export default function HomeScreen({
               className="text-input"
               value={intendedOutput}
               onChange={(e) => setIntendedOutput(e.target.value.slice(0, 120))}
-              placeholder="e.g. Review PR #42 and leave comments"
+              placeholder="What should exist at the end?"
               maxLength={120}
             />
           </div>
@@ -417,24 +417,24 @@ export default function HomeScreen({
               className="text-input"
               value={successCriteria}
               onChange={(e) => setSuccessCriteria(e.target.value.slice(0, 120))}
-              placeholder="e.g. PR reviewed, intro written, 10 pages read"
+              placeholder="e.g. Draft sent, PR reviewed, 10 pages read"
               maxLength={120}
             />
           </div>
 
           <div className="field">
             <label className="field-label">Energy</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {ENERGY_LEVELS.map(({ value, label }) => (
+            <div className="energy-grid">
+              {ENERGY_LEVELS.map(({ value, label, hint }) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setEnergyLevel(value)}
                   aria-pressed={energyLevel === value}
-                  className={`dur-btn${energyLevel === value ? ' active' : ''}`}
-                  style={{ padding: '9px 10px' }}
+                  className={`energy-btn${energyLevel === value ? ' active' : ''}`}
                 >
-                  {label}
+                  <span>{label}</span>
+                  <small>{hint}</small>
                 </button>
               ))}
             </div>

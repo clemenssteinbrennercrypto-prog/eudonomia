@@ -470,6 +470,61 @@ body {
   box-shadow: 0 0 20px -4px var(--ultra-glow);
 }
 
+.energy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.energy-btn {
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: rgba(122, 152, 255, 0.05);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+}
+
+.energy-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.energy-btn.active {
+  background: linear-gradient(180deg, var(--ultra-wash), rgba(122, 152, 255, 0.05));
+  border-color: var(--ultra-bright);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 0 18px -8px var(--ultra-glow);
+}
+
+.energy-btn span {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.energy-btn small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.energy-btn.active small {
+  color: var(--ultra-bright);
+}
+
 .start-btn {
   width: 100%;
   height: 56px;

@@ -159,6 +159,13 @@ function motivational(pct) {
   return 'Keep going'
 }
 
+function normalizedOutcome(session) {
+  if (session.goalOutcome) return session.goalOutcome
+  if (session.goalAchieved === true) return 'yes'
+  if (session.goalAchieved === false) return 'no'
+  return null
+}
+
 const PHASE_LABELS = {
   arrival: 'Arrival',
   ramp: 'Ramp',
@@ -800,6 +807,107 @@ function WeeklyTrends({ sessions }) {
   )
 }
 
+function getThisWeekSessions(sessions) {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - start.getDay())
+  return sessions.filter(session => new Date(session.timestamp) >= start)
+}
+
+function WeeklySummary({ sessions }) {
+  const stats = useMemo(() => {
+    const weekSessions = getThisWeekSessions(sessions)
+    const measured = weekSessions.filter(hasMeasuredFocus)
+    const avgFocus = measured.length
+      ? Math.round(measured.reduce((sum, session) => sum + sessionFocusPct(session), 0) / measured.length)
+      : null
+    const totalFocusedTime = measured.reduce((sum, session) => sum + (session.focusedSeconds || 0), 0)
+    const outcomes = { yes: 0, partly: 0, no: 0, unset: 0 }
+    for (const session of weekSessions) {
+      outcomes[normalizedOutcome(session) || 'unset'] += 1
+    }
+    return {
+      count: weekSessions.length,
+      avgFocus,
+      totalFocusedTime,
+      outcomes,
+    }
+  }, [sessions])
+
+  const outcomeItems = [
+    { key: 'yes', label: 'Yes', color: 'var(--good)' },
+    { key: 'partly', label: 'Partly', color: 'var(--warn)' },
+    { key: 'no', label: 'No', color: 'var(--bad)' },
+  ]
+  const answered = outcomeItems.reduce((sum, item) => sum + stats.outcomes[item.key], 0)
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--line)',
+      borderRadius: 16,
+      padding: '18px 20px',
+      marginBottom: 24,
+      boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+          This week
+        </p>
+        {stats.outcomes.unset > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
+            {stats.outcomes.unset} outcome{stats.outcomes.unset === 1 ? '' : 's'} unset
+          </span>
+        )}
+      </div>
+      <div className="history-stats-grid" style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'Sessions', value: stats.count },
+          { label: 'Avg focus', value: stats.avgFocus == null ? '--' : `${stats.avgFocus}%`, color: focusColor(stats.avgFocus) },
+          { label: 'Focused time', value: fmt(stats.totalFocusedTime) },
+        ].map(item => (
+          <div key={item.label} style={{
+            background: 'var(--bg)',
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            padding: '13px 10px',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 22, fontWeight: 300, color: item.color || 'var(--text)', marginBottom: 4 }}>
+              {item.value}
+            </p>
+            <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+              {item.label}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.06)' }}>
+          {outcomeItems.map(item => {
+            const count = stats.outcomes[item.key]
+            return count > 0 ? (
+              <div
+                key={item.key}
+                title={`${item.label}: ${count}`}
+                style={{ flex: count, minWidth: 4, background: item.color }}
+              />
+            ) : null
+          })}
+          {answered === 0 && <div style={{ flex: 1, background: 'var(--line)' }} />}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: 8 }}>
+          {outcomeItems.map(item => (
+            <span key={item.key} style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <span style={{ color: item.color, fontWeight: 800 }}>{item.label}</span>: {stats.outcomes[item.key]}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function HistoryDashboard({ onClose }) {
   const [sessions, setSessions] = useState(() => loadSessions())
@@ -953,6 +1061,7 @@ export default function HistoryDashboard({ onClose }) {
           </div>
         ) : (
           <>
+            <WeeklySummary sessions={sessions} />
             <WeeklyTrends sessions={sessions} />
             <OverallStats sessions={sessions} />
 
