@@ -80,55 +80,6 @@ const COMMON_DISTRACTIONS = {
   ],
 }
 
-const ENERGY_SCORING_PROFILES = {
-  fresh: {
-    value: 'fresh',
-    label: 'Fresh',
-    expectationLabel: 'standard expectation',
-    focusThreshold: 40,
-    statusFocusedThreshold: 65,
-    statusAlertThreshold: 38,
-    goodStreakThreshold: 65,
-    flowThreshold: 72,
-    alertDelayMult: 1,
-    gentleDelayMult: 1,
-    activityDistractionPenaltyMult: 1,
-    intentStrictness: 'standard',
-  },
-  medium: {
-    value: 'medium',
-    label: 'Medium',
-    expectationLabel: 'normal expectation',
-    focusThreshold: 40,
-    statusFocusedThreshold: 65,
-    statusAlertThreshold: 38,
-    goodStreakThreshold: 65,
-    flowThreshold: 72,
-    alertDelayMult: 1,
-    gentleDelayMult: 1,
-    activityDistractionPenaltyMult: 1,
-    intentStrictness: 'normal',
-  },
-  tired: {
-    value: 'tired',
-    label: 'Tired',
-    expectationLabel: 'lower expectation',
-    focusThreshold: 35,
-    statusFocusedThreshold: 60,
-    statusAlertThreshold: 34,
-    goodStreakThreshold: 60,
-    flowThreshold: 68,
-    alertDelayMult: 1.25,
-    gentleDelayMult: 1.35,
-    activityDistractionPenaltyMult: 0.8,
-    intentStrictness: 'gentle',
-  },
-}
-
-export function getEnergyScoringProfile(energyLevel = 'medium') {
-  return ENERGY_SCORING_PROFILES[energyLevel] || ENERGY_SCORING_PROFILES.medium
-}
-
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase()
 }
@@ -193,10 +144,19 @@ function matchProfileScores(tokens) {
     .sort((a, b) => b.score - a.score)
 }
 
-export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '', successCriteria = '', energyLevel = 'medium', tags = [] } = {}) {
-  const energyProfile = getEnergyScoringProfile(energyLevel)
+// `goal` is one sentence describing what done looks like. It used to be three
+// fields — goal, intended output, success criteria — which asked the same
+// question three ways and charged the user three text boxes for it.
+//
+// `energyLevel` is recorded as CONTEXT and deliberately does not touch scoring.
+// Shifting the thresholds by self-reported mood made the same behaviour score
+// differently day to day, which destroys comparability across sessions — and
+// comparable history is the whole point of measuring at all. Energy belongs in
+// the interpretation ("your tired sessions run 12 points lower"), never in the
+// ruler.
+export function deriveSessionIntent({ task = '', goal = '', energyLevel = 'medium', tags = [] } = {}) {
   const tagText = Array.isArray(tags) ? tags.join(' ') : ''
-  const text = [task, goal, intendedOutput, successCriteria, tagText].filter(Boolean).join(' ')
+  const text = [task, goal, tagText].filter(Boolean).join(' ')
   const tokens = unique(tokenize(text))
   const profileScores = matchProfileScores(tokens)
   const primaryProfile = profileScores[0]?.profile || null
@@ -216,16 +176,12 @@ export function deriveSessionIntent({ task = '', goal = '', intendedOutput = '',
     sourceText: text.trim(),
     task: String(task || '').trim(),
     goal: String(goal || '').trim(),
-    intendedOutput: String(intendedOutput || '').trim(),
-    successCriteria: String(successCriteria || '').trim(),
     tags: Array.isArray(tags) ? tags.filter(Boolean) : [],
     keywords: tokens,
     primaryKind: primaryProfile?.id || 'general',
     primaryLabel: primaryProfile?.label || 'General work',
     confidence,
-    energyLevel: energyProfile.value,
-    energyLabel: energyProfile.label,
-    intentStrictness: energyProfile.intentStrictness,
+    energyLevel: String(energyLevel || 'medium'),
     toolHints,
     domainHints,
   }
@@ -312,7 +268,7 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     return { kind: 'distraction', app, domain, title, artifact, label, basis: 'common_distraction' }
   }
 
-  if (intent.confidence === 'medium' && intent.intentStrictness !== 'gentle') {
+  if (intent.confidence === 'medium') {
     return { kind: 'off_goal', app, domain, title, artifact, label, basis: 'unmatched_session_context' }
   }
 

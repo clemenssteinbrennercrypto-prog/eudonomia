@@ -4,54 +4,33 @@ import {
   classifyGoalAwareActivity,
   deriveSessionIntent,
   emptyActivityAlignmentSummary,
-  getEnergyScoringProfile,
   recordActivityAlignment,
   summarizeSessionAlignment,
 } from './sessionIntent'
 
 // ── Energy-aware intent ──────────────────────────────────────────────────────
-describe('energy-aware session intent', () => {
-  it('uses lower score expectations for tired sessions', () => {
-    const fresh = getEnergyScoringProfile('fresh')
-    const tired = getEnergyScoringProfile('tired')
-
-    expect(tired.focusThreshold).toBeLessThan(fresh.focusThreshold)
-    expect(tired.statusFocusedThreshold).toBeLessThan(fresh.statusFocusedThreshold)
-    expect(tired.alertDelayMult).toBeGreaterThan(fresh.alertDelayMult)
-    expect(tired.activityDistractionPenaltyMult).toBeLessThan(fresh.activityDistractionPenaltyMult)
-  })
-
-  it('stores energy context in the derived intent model', () => {
-    const intent = deriveSessionIntent({
-      task: 'Review React component',
-      successCriteria: 'PR comments submitted',
-      energyLevel: 'tired',
-    })
-
+describe('energy is context, never calibration', () => {
+  it('records the declared energy without exporting a scoring profile', async () => {
+    const intent = deriveSessionIntent({ task: 'Review React component', energyLevel: 'tired' })
     expect(intent.primaryKind).toBe('software')
     expect(intent.energyLevel).toBe('tired')
-    expect(intent.intentStrictness).toBe('gentle')
+
+    // The scoring profile is gone on purpose: shifting thresholds by
+    // self-reported mood made the same behaviour score differently day to day,
+    // which destroys comparability across sessions.
+    const mod = await import('./sessionIntent')
+    expect(mod.getEnergyScoringProfile).toBeUndefined()
+    expect(intent.intentStrictness).toBeUndefined()
   })
 
-  it('is less punitive about unmatched activity when energy is tired', () => {
+  it('classifies activity identically regardless of declared energy', () => {
     const activity = { app: 'Safari', domain: 'example.com', title: 'Reference page' }
     const config = { focusApps: [], distractionApps: [], focusDomains: [], distractionDomains: [] }
-    const baseIntent = {
-      keywords: ['react', 'component'],
-      toolHints: [],
-      domainHints: [],
-      confidence: 'medium',
-    }
+    const base = { keywords: ['react', 'component'], toolHints: [], domainHints: [], confidence: 'medium' }
 
-    expect(classifyGoalAwareActivity(activity, config, true, {
-      ...baseIntent,
-      intentStrictness: 'normal',
-    }).kind).toBe('off_goal')
-
-    expect(classifyGoalAwareActivity(activity, config, true, {
-      ...baseIntent,
-      intentStrictness: 'gentle',
-    }).kind).toBe('unclear')
+    const tired = classifyGoalAwareActivity(activity, config, true, { ...base, energyLevel: 'tired' })
+    const fresh = classifyGoalAwareActivity(activity, config, true, { ...base, energyLevel: 'fresh' })
+    expect(tired.kind).toBe(fresh.kind)
   })
 })
 

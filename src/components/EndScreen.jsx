@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { updateSession, loadSessions } from '../lib/storage'
-import { getEnergyScoringProfile, summarizeSessionAlignment } from '../lib/sessionIntent'
+import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -90,29 +90,29 @@ function outcomeFromLegacy(goalAchieved) {
   return null
 }
 
+// Energy colours the SENTENCE, never the number. The score is measured the same
+// way regardless of how the session started; what changes is what that score
+// means. Adjusting the thresholds instead would make Tuesday's 70 incomparable
+// with Monday's, and comparable history is the only thing here worth having.
 function energyInterpretation(energyLevel, focusPct) {
   if (!energyLevel || focusPct == null) return null
-  const energyProfile = getEnergyScoringProfile(energyLevel)
-  if (energyLevel === 'tired' && focusPct >= 60) return 'Tired start: 60%+ focused time here is stronger than the same number would be with fresh energy.'
-  if (energyLevel === 'fresh' && focusPct < 60) return 'Fresh start: the score suggests friction came from the work or environment, not just energy.'
-  if (energyLevel === 'medium') return `Medium energy: this used the ${energyProfile.expectationLabel} for focus time and drift interpretation.`
+  if (energyLevel === 'tired' && focusPct >= 60) return 'You started tired and still held 60%+ focused time — the same number is worth more from that start.'
+  if (energyLevel === 'fresh' && focusPct < 60) return 'You started fresh, so the friction likely came from the work or the environment rather than from energy.'
   return null
 }
 
-function classifyFocusBand(focusPct, energyLevel) {
+// One ruler for everyone, every day.
+function classifyFocusBand(focusPct) {
   if (focusPct == null) return 'unknown'
-  const energyProfile = getEnergyScoringProfile(energyLevel)
-  const strong = energyLevel === 'tired' ? 60 : 70
-  const low = energyProfile.focusThreshold + 10
-  if (focusPct >= strong) return 'high'
-  if (focusPct < low) return 'low'
+  if (focusPct >= 70) return 'high'
+  if (focusPct < 50) return 'low'
   return 'mixed'
 }
 
-function makeOutcomeInsight({ outcome, focusPct, successCriteria, intendedOutput, energyLevel }) {
+function makeOutcomeInsight({ outcome, focusPct, goal, energyLevel }) {
   if (!outcome) return null
-  const focusBand = classifyFocusBand(focusPct, energyLevel)
-  const criteria = String(successCriteria || intendedOutput || '').trim()
+  const focusBand = classifyFocusBand(focusPct)
+  const criteria = String(goal || '').trim()
   const targetText = criteria ? `the stated target (${criteria})` : 'the stated target'
 
   if (focusBand === 'high' && outcome === 'no') {
@@ -288,8 +288,7 @@ function makeDebrief({
   phaseInterventions,
   energyLevel,
   selectedOutcome,
-  intendedOutput,
-  successCriteria,
+  goal,
 }) {
   const phaseSeconds = focusPhases?.seconds || countBy(timeline, pt => pt.phase)
   const dominantPhase = focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
@@ -305,8 +304,7 @@ function makeDebrief({
   const outcomeInsight = makeOutcomeInsight({
     outcome: selectedOutcome,
     focusPct,
-    successCriteria,
-    intendedOutput,
+    goal,
     energyLevel,
   })
 
@@ -327,8 +325,8 @@ function makeDebrief({
   if (outcomeInsight?.note) {
     notes.push(outcomeInsight.note)
   }
-  if (intendedOutput || successCriteria) {
-    notes.push(`Intended output: ${intendedOutput || 'not specified'}. Success criterion: ${successCriteria || 'not specified'}.`)
+  if (goal) {
+    notes.push(`You set out to: ${goal}.`)
   }
   const energyNote = energyInterpretation(energyLevel, focusPct)
   if (energyNote) {
@@ -392,8 +390,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     timeline             = [],
     completed            = false,
     goal                 = '',
-    intendedOutput       = '',
-    successCriteria      = '',
     energyLevel          = 'medium',
     goalOutcome          = null,
     goalAchieved         = null,
@@ -434,9 +430,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     phaseInterventions,
     energyLevel,
     selectedOutcome,
-    intendedOutput,
-    successCriteria,
-  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions, energyLevel, selectedOutcome, intendedOutput, successCriteria])
+  }), [focusPct, actualSeconds, distractionLog, timeline, preDriftEvents, preDriftSeconds, focusPhases, activityAlignment, phaseInterventions, energyLevel, selectedOutcome, goal])
 
   const saveOutcome = (patch) => {
     if (id) updateSession(id, patch)
@@ -807,7 +801,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         )}
 
         {/* Intention summary */}
-        {(goal || intendedOutput || successCriteria) && (
+        {goal && (
           <div style={{
             width: '100%', boxSizing: 'border-box',
             background: 'var(--surface)',
@@ -819,19 +813,9 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               Session intention
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
-              {intendedOutput && (
-                <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: 0 }}>
-                  {intendedOutput}
-                </p>
-              )}
-              {successCriteria && (
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                  Success: {successCriteria}
-                </p>
-              )}
               {goal && (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                  Goal: {goal}
+                <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: 0 }}>
+                  {goal}
                 </p>
               )}
               {energyLevel && (
@@ -860,7 +844,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             Output
           </p>
           <p style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, margin: '0 0 12px' }}>
-            {successCriteria ? `Did you achieve: ${successCriteria}?` : intendedOutput ? `Did you produce: ${intendedOutput}?` : 'Did you reach your goal?'}
+            {goal ? `Did you get there: ${goal}?` : 'Did you reach your goal?'}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
             {GOAL_OUTCOMES.map(({ value, label, color }) => {
@@ -1004,7 +988,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             View History
           </button>
           <button
-            onClick={() => onRestart({ task, goal, intendedOutput, successCriteria, energyLevel, duration: plannedDuration || 30, tags })}
+            onClick={() => onRestart({ task, goal, energyLevel, duration: plannedDuration || 30, tags })}
             style={{
               padding: '14px 28px',
               fontSize: 15, fontWeight: 600,

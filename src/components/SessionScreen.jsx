@@ -16,7 +16,6 @@ import {
   classifyGoalAwareActivity,
   deriveSessionIntent,
   emptyActivityAlignmentSummary,
-  getEnergyScoringProfile,
   recordActivityAlignment,
 } from '../lib/sessionIntent'
 // Pure attention logic lives in ../lib/attention so it can be unit-tested
@@ -786,8 +785,6 @@ function ActivityPill({ activity, classification, connected, activeSince, promin
 export default function SessionScreen({
   task,
   goal = '',
-  intendedOutput = '',
-  successCriteria = '',
   energyLevel = 'medium',
   tags = [],
   duration,
@@ -796,10 +793,9 @@ export default function SessionScreen({
   onEnd,
 }) {
   const totalSeconds = duration * 60
-  const energyProfile = useMemo(() => getEnergyScoringProfile(energyLevel), [energyLevel])
   const sessionIntent = useMemo(
-    () => deriveSessionIntent({ task, goal, intendedOutput, successCriteria, energyLevel, tags }),
-    [task, goal, intendedOutput, successCriteria, energyLevel, tags]
+    () => deriveSessionIntent({ task, goal, energyLevel, tags }),
+    [task, goal, energyLevel, tags]
   )
   const {
     yawLeft: yawLT,
@@ -1179,8 +1175,6 @@ export default function SessionScreen({
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
     onEnd({
       plannedDuration:      duration,
-      intendedOutput,
-      successCriteria,
       energyLevel,
       actualSeconds,
       completed,
@@ -1217,7 +1211,7 @@ export default function SessionScreen({
         transitions: [...focusPhaseTransitionsRef.current],
       },
     })
-  }, [duration, intendedOutput, successCriteria, energyLevel, onEnd, pushBlockingState, stopAmbient])
+  }, [duration, energyLevel, onEnd, pushBlockingState, stopAmbient])
 
   useEffect(() => {
     const syncCompanionSession = async () => {
@@ -1615,7 +1609,7 @@ export default function SessionScreen({
         )
       }
     }
-    const activityPenalty = activityDistractionPenaltyRef.current * energyProfile.activityDistractionPenaltyMult
+    const activityPenalty = activityDistractionPenaltyRef.current
     const activityBonus = activityFocusBonusRef.current
 
     // Distraction-device glance must hold for DISTRACTION_DOWN_HOLD_MS before
@@ -1807,7 +1801,7 @@ export default function SessionScreen({
 
     if (trackingUncertain) {
       // signal unreliable — neither earn nor burn the focus ramp
-    } else if (score >= energyProfile.flowThreshold) {
+    } else if (score >= 72) {
       sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
@@ -1823,9 +1817,9 @@ export default function SessionScreen({
       focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
     }
 
-    const newStatus = focusScoreRef.current >= energyProfile.statusFocusedThreshold
+    const newStatus = focusScoreRef.current >= 65
       ? 'focused'
-      : focusScoreRef.current >= energyProfile.statusAlertThreshold
+      : focusScoreRef.current >= 38
         ? 'distracted'
         : 'alert'
     // Trust gate: surface "signal weak" instead of a (held, possibly low) status
@@ -1911,7 +1905,7 @@ export default function SessionScreen({
     //   • No active distraction reason
     //   • Maintained for FLOW_STABLE_MS (90s)
     const flowConditions = !trackingUncertain &&
-      focusScoreRef.current >= energyProfile.flowThreshold &&
+      focusScoreRef.current >= 1 &&
       fidgetVariance <= HEAD_DRIFT_THRESH * 0.5 &&
       primaryReason === 'focused'
     if (flowConditions) {
@@ -1945,7 +1939,7 @@ export default function SessionScreen({
     const adaptedAlertMs = adjustedAlertMs *
       adaptiveAlertMultRef.current *
       phasePolicy.alertDelayMult *
-      energyProfile.alertDelayMult
+      1
 
     if (
       preDriftActive &&
@@ -1979,7 +1973,7 @@ export default function SessionScreen({
       const distractedFor = now - distractedSinceRef.current
       const gentleCooldownOk = (now - lastGentleReminderRef.current) >= GENTLE_REMINDER_COOLDOWN_MS
       const lowFor = scoreLowSinceRef.current ? now - scoreLowSinceRef.current : 0
-      const severeAlertSoon = focusScoreRef.current < energyProfile.statusAlertThreshold &&
+      const severeAlertSoon = focusScoreRef.current < 1 &&
         scoreLowSinceRef.current &&
         (adaptedAlertMs - lowFor) <= GENTLE_REMINDER_SEVERE_BUFFER_MS
 
@@ -1988,7 +1982,7 @@ export default function SessionScreen({
         !trackingUncertain &&
         distractedFor >= Math.max(
           5_000,
-          (phasePolicy.gentleDelayMs || GENTLE_REMINDER_DELAY_MS) * energyProfile.gentleDelayMult
+          (phasePolicy.gentleDelayMs || GENTLE_REMINDER_DELAY_MS) * 1
         ) &&
         gentleCooldownOk &&
         !overlayActiveRef.current &&
@@ -2009,7 +2003,7 @@ export default function SessionScreen({
       distractedSinceRef.current = null
     }
 
-    if (focusScoreRef.current < energyProfile.statusAlertThreshold) {
+    if (focusScoreRef.current < 1) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
@@ -2060,7 +2054,7 @@ export default function SessionScreen({
     }
 
     // (detection confidence + trust gate are computed earlier, before scoring)
-  }, [alertDelayMs, devices, energyProfile, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
+  }, [alertDelayMs, devices, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -2195,7 +2189,7 @@ export default function SessionScreen({
       })
       setCalibProgress(1)
 
-      const focused = focusScoreRef.current >= energyProfile.focusThreshold
+      const focused = focusScoreRef.current >= 1
       if (preDriftRiskRef.current.active) {
         preDriftSecondsRef.current += 1
       }
@@ -2212,7 +2206,7 @@ export default function SessionScreen({
       const roundedScore = Math.round(focusScoreRef.current)
       const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
       // Unbroken run at/above the energy-adjusted lock-in threshold.
-      if (roundedScore >= energyProfile.goodStreakThreshold) goodStreakSecsRef.current += 1
+      if (roundedScore >= 1) goodStreakSecsRef.current += 1
       else goodStreakSecsRef.current = 0
       const nextFocusPhase = classifyFocusPhase({
         elapsedSecs,
@@ -2295,7 +2289,7 @@ export default function SessionScreen({
         { secs: 50 * 60, msg: '50 min — impressive focus ⚡' },
       ]
       for (const m of milestones) {
-        if (elapsedSecs === m.secs && focusScoreRef.current >= energyProfile.statusFocusedThreshold) {
+        if (elapsedSecs === m.secs && focusScoreRef.current >= 65) {
           setMilestone({ msg: m.msg })
           setTimeout(() => setMilestone(null), 3500)
           break
@@ -2303,7 +2297,7 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [energyProfile, restartCamera])
+  }, [restartCamera])
 
   useEffect(() => {
     if (timeLeft === 0) endSession(true)
@@ -2527,8 +2521,8 @@ export default function SessionScreen({
           isCalibrating={isCalibrating}
           isPaused={isPaused}
           calibProgress={calibProgress}
-          focusedThreshold={energyProfile.statusFocusedThreshold}
-          alertThreshold={energyProfile.statusAlertThreshold}
+          focusedThreshold={1}
+          alertThreshold={1}
         />
 
         <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', width: '100%' }}>

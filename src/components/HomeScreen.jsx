@@ -75,8 +75,6 @@ export default function HomeScreen({
   task, setTask,
   duration, setDuration,
   goal, setGoal,
-  intendedOutput, setIntendedOutput,
-  successCriteria, setSuccessCriteria,
   energyLevel, setEnergyLevel,
   tags, setTags,
   devices,
@@ -424,44 +422,20 @@ export default function HomeScreen({
 
           {/* Goal input */}
           <div className="field">
-            <label className="field-label">Goal (optional)</label>
+            <label className="field-label">What does done look like?</label>
             <input
               type="text"
               list="goal-suggestions"
               className="text-input"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              placeholder="e.g. Finish intro chapter"
+              placeholder="e.g. Intro chapter drafted, ~800 words"
             />
             {recentGoals.length > 0 && (
               <datalist id="goal-suggestions">
                 {recentGoals.map(g => <option key={g} value={g} />)}
               </datalist>
             )}
-          </div>
-
-          <div className="field">
-            <label className="field-label">Concrete output</label>
-            <input
-              type="text"
-              className="text-input"
-              value={intendedOutput}
-              onChange={(e) => setIntendedOutput(e.target.value.slice(0, 120))}
-              placeholder="What should exist at the end?"
-              maxLength={120}
-            />
-          </div>
-
-          <div className="field">
-            <label className="field-label">Success looks like (optional)</label>
-            <input
-              type="text"
-              className="text-input"
-              value={successCriteria}
-              onChange={(e) => setSuccessCriteria(e.target.value.slice(0, 120))}
-              placeholder="e.g. Draft sent, PR reviewed, 10 pages read"
-              maxLength={120}
-            />
           </div>
 
           <div className="field">

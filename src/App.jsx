@@ -181,8 +181,6 @@ export default function App() {
   const [screen,   setScreen]   = useState('home')
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
-  const [intendedOutput, setIntendedOutput] = useState('')
-  const [successCriteria, setSuccessCriteria] = useState('')
   const [energyLevel, setEnergyLevel] = useState('medium')
   const [duration, setDuration] = useState(30)
   const [tags,     setTags]     = useState([])
@@ -210,17 +208,15 @@ export default function App() {
   const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    const enriched = { ...data, task, goal, intendedOutput, successCriteria, energyLevel, tags }
+    const enriched = { ...data, task, goal, energyLevel, tags }
     const saved = saveSession(enriched)
     setSessionData(saved)
     setScreen('end')
-  }, [task, goal, intendedOutput, successCriteria, energyLevel, tags])
+  }, [task, goal, energyLevel, tags])
 
   const handleRestart = (prefill = null) => {
     setTask(prefill?.task ?? '')
     setGoal(prefill?.goal ?? '')
-    setIntendedOutput(prefill?.intendedOutput ?? '')
-    setSuccessCriteria(prefill?.successCriteria ?? '')
     setEnergyLevel(prefill?.energyLevel ?? 'medium')
     setDuration(prefill?.duration ?? 30)
     setTags(prefill?.tags ?? [])
@@ -262,10 +258,6 @@ export default function App() {
           setTask={setTask}
           goal={goal}
           setGoal={setGoal}
-          intendedOutput={intendedOutput}
-          setIntendedOutput={setIntendedOutput}
-          successCriteria={successCriteria}
-          setSuccessCriteria={setSuccessCriteria}
           energyLevel={energyLevel}
           setEnergyLevel={setEnergyLevel}
           duration={duration}
@@ -299,8 +291,6 @@ export default function App() {
         <SessionScreen
           task={task}
           goal={goal}
-          intendedOutput={intendedOutput}
-          successCriteria={successCriteria}
           energyLevel={energyLevel}
           tags={tags}
           duration={duration}
