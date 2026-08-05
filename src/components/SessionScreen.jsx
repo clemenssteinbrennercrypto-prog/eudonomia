@@ -89,7 +89,7 @@ const CAMERA_FAULT_COPY = {
   },
   library: {
     title: 'Face tracking couldn’t load',
-    hint: 'The tracking engine is downloaded on first use and couldn’t be reached — check your internet connection or any content blocker, then reload.',
+    hint: 'The bundled tracking engine could not be loaded from this app. Reload once; if it persists, reinstall or rebuild the app bundle.',
   },
   stalled: {
     title: 'The camera stopped sending video',
@@ -97,7 +97,7 @@ const CAMERA_FAULT_COPY = {
   },
   no_frames: {
     title: 'Face tracking didn’t start',
-    hint: 'The camera was allowed, but the tracking engine never began analysing. It downloads on first use — check your internet connection or any content blocker, then start a new session.',
+    hint: 'The camera was allowed, but the local tracking engine never began analysing. Try again; if it persists, reinstall or rebuild the app bundle.',
   },
 }
 const CONF_UNCERTAIN_MAX     = 0.55   // detection confidence at/below this = tracking unreliable (Stage 2 trust)
@@ -1126,11 +1126,11 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
     // wrote a fabricated "68% focus" into history. Both consumers (HomeScreen,
     // HistoryDashboard) already treat null as "no score", so say nothing instead
     // of saying something false.
-    const trackingFaulted = !!cameraFaultRef.current
     const hasMeasurement = snapshots.length > 0
+    const trackingFaulted = !!cameraFaultRef.current
     const avgFocusScore = hasMeasurement
       ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
-      : (trackingFaulted ? null : Math.round(focusScoreRef.current))
+      : null
     const focusPhaseSeconds = { ...focusPhaseSecondsRef.current }
     const dominantFocusPhase = Object.entries(focusPhaseSeconds)
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
@@ -1146,8 +1146,9 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
       longestFocusedStreak: longestStreakRef.current,
       peakFocusStreak:      longestStreakRef.current,
       avgFocusScore,
-      finalScore:           (trackingFaulted && !hasMeasurement) ? null : Math.round(focusScoreRef.current),
+      finalScore:           hasMeasurement ? Math.round(focusScoreRef.current) : null,
       trackingFaulted,
+      scoreMeasured:        hasMeasurement,
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
       sessionIntent:        sessionIntentRef.current,
@@ -1983,10 +1984,10 @@ export default function SessionScreen({ task, goal = '', tags = [], duration, de
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!videoRef.current) return
-    // FaceMesh comes from a CDN (see index.html). If it's blocked (offline,
-    // firewall, content blocker) this used to return silently and the session
-    // ran on with a frozen default score — surface it instead. We no longer
-    // need MediaPipe's camera_utils at all; we drive the camera ourselves.
+    // FaceMesh is bundled and served from this app's own origin (see
+    // index.html). If that local runtime fails to load, do not run on with a
+    // frozen default score — surface it instead. We no longer need MediaPipe's
+    // camera_utils at all; we drive the camera ourselves.
     if (!window.FaceMesh) {
       cameraFaultRef.current = 'library'
       setCameraFault('library')

@@ -10,6 +10,7 @@ function fmt(seconds) {
 }
 
 function motivational(pct, distractionEvents, actualSeconds) {
+  if (pct == null) return 'No focus score saved.'
   if (pct >= 85) return 'Peak focus. Outstanding.'
   if (pct >= 75) return 'Strong session.'
   if (pct >= 65 && distractionEvents === 0) return 'Clean run.'
@@ -171,7 +172,8 @@ function makeDebrief({ focusPct, actualSeconds, distractionLog, timeline, preDri
     : null
 
   let headline = 'You built useful focus, but the session had no clear phase data yet.'
-  if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
+  if (focusPct == null) headline = 'Tracking did not produce enough measured focus data for a score.'
+  else if (actualSeconds < 120) headline = 'This was too short to read a stable focus pattern.'
   else if (alignment.observedSeconds >= 60 && alignment.driftPct >= 30) headline = 'Your attention signals were usable, but app/site activity drifted away from the stated aim.'
   else if (alignment.observedSeconds >= 60 && alignment.alignedPct >= 70) headline = 'Your app/site activity mostly matched or supported the stated aim.'
   else if (dominantPhase === 'lock_in') headline = 'The session was mostly lock-in: stable, sustained attention.'
@@ -243,9 +245,17 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     sessionIntent        = null,
     activityAlignment    = null,
     phaseInterventions   = null,
+    avgFocusScore        = null,
+    finalScore           = null,
+    scoreMeasured        = true,
+    trackingFaulted      = false,
   } = sessionData
 
-  const focusPct = actualSeconds > 0 ? Math.round((focusedSeconds / actualSeconds) * 100) : 0
+  const hasFocusMeasurement = scoreMeasured !== false &&
+    (avgFocusScore != null || finalScore != null || (!trackingFaulted && timeline.length > 0))
+  const focusPct = hasFocusMeasurement && actualSeconds > 0
+    ? Math.round((focusedSeconds / actualSeconds) * 100)
+    : null
   const debrief = useMemo(() => makeDebrief({
     focusPct,
     actualSeconds,
@@ -261,6 +271,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   // Personal best detection
   const isPersonalBest = useMemo(() => {
+    if (focusPct == null) return false
     const prevSessions = loadSessions().filter(s => s.id !== id)
     if (prevSessions.length === 0) return false
     const prevMax = Math.max(...prevSessions.map(s => {
@@ -274,7 +285,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   function copySummary() {
     const durationMin = Math.round(actualSeconds / 60)
-    const text = `Eudaimonia session: ${task || 'Focus'} — ${durationMin}min, ${focusPct}% focused, ${distractionEvents} alerts`
+    const focusText = focusPct == null ? 'focus score not measured' : `${focusPct}% focused`
+    const text = `Eudaimonia session: ${task || 'Focus'} — ${durationMin}min, ${focusText}, ${distractionEvents} alerts`
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -287,7 +299,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     const text = [
       '📊 Eudaimonia session',
       `Task: ${task || 'Focus'}`,
-      `Duration: ${durationMin} min · Focus: ${focusPct}%`,
+      `Duration: ${durationMin} min · Focus: ${focusPct == null ? 'not measured' : `${focusPct}%`}`,
       longestStreakMin > 0 ? `Longest streak: ${longestStreakMin} min` : null,
     ].filter(Boolean).join('\n')
     navigator.clipboard.writeText(text).then(() => {
@@ -374,10 +386,10 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct >= 60 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)' }}>
-              {focusPct}%
+            <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct == null ? 'var(--text-muted)' : focusPct >= 60 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)' }}>
+              {focusPct == null ? '--' : `${focusPct}%`}
             </span>
-            <span className="stat-label">focused</span>
+            <span className="stat-label">{focusPct == null ? 'focus not measured' : 'focused'}</span>
             {isPersonalBest && (
               <span style={{ fontSize: 12, color: 'var(--good)', fontWeight: 600, marginTop: 4, display: 'block' }}>
                 New best 🏆
@@ -628,7 +640,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         )}
 
         {/* Smart next session suggestion */}
-        {actualSeconds > 300 && plannedDuration > 0 && (() => {
+        {focusPct != null && actualSeconds > 300 && plannedDuration > 0 && (() => {
           let suggestion = null
           if (focusPct < 50) {
             const mins = Math.round(plannedDuration * 0.75)

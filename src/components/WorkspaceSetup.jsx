@@ -85,8 +85,8 @@ function PillOption({ label, selected, onClick, sub, icon }) {
         alignItems: 'center', justifyContent: 'flex-start',
         gap: 10,
         padding: '0 22px',
-        background: selected ? navy : '#fff',
-        color: selected ? '#fff' : 'var(--text)',
+        background: selected ? navy : 'var(--surface-2)',
+        color: selected ? '#fff' : 'var(--text-secondary)',
         border: `1.5px solid ${selected ? navy : 'var(--line)'}`,
         borderRadius: 100,
         cursor: 'pointer',
@@ -137,7 +137,7 @@ function PositionPicker({ label, value, onChange }) {
             onClick={() => onChange(o.id)}
             style={{
               height: 44,
-              background: value === o.id ? navy : '#fff',
+              background: value === o.id ? navy : 'var(--surface-2)',
               color: value === o.id ? '#fff' : 'var(--text-secondary)',
               border: `1.5px solid ${value === o.id ? navy : 'var(--line)'}`,
               borderRadius: 100,

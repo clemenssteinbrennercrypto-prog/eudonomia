@@ -2,6 +2,18 @@ import { useState, useMemo } from 'react'
 import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
+function hasMeasuredFocus(session) {
+  if (!session || session.scoreMeasured === false) return false
+  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return false
+  return session.actualSeconds > 0 && session.focusedSeconds != null
+}
+
+function sessionFocusPct(session) {
+  return hasMeasuredFocus(session)
+    ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
+    : null
+}
+
 // ── Month Calendar ─────────────────────────────────────────────────────────────
 function MonthCalendar({ sessions, onDayClick, selectedDay }) {
   const now = new Date()
@@ -17,8 +29,9 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
       const d = new Date(s.timestamp)
       if (d.getFullYear() !== year || d.getMonth() !== month) continue
       const key = d.getDate()
+      const pct = sessionFocusPct(s)
+      if (pct == null) continue
       if (!map[key]) map[key] = []
-      const pct = s.actualSeconds > 0 ? Math.round(((s.focusedSeconds || 0) / s.actualSeconds) * 100) : 0
       map[key].push(pct)
     }
     const result = {}
@@ -132,12 +145,14 @@ function fmtTime(ts) {
 }
 
 function focusColor(pct) {
+  if (pct == null) return 'var(--text-muted)'
   if (pct >= 70) return 'var(--good)'
   if (pct >= 40) return 'var(--warn)'
   return 'var(--bad)'
 }
 
 function motivational(pct) {
+  if (pct == null) return 'Not measured'
   if (pct >= 80) return 'Outstanding'
   if (pct >= 60) return 'Solid'
   if (pct >= 40) return 'Getting there'
@@ -167,6 +182,7 @@ function dominantEntry(counts = {}) {
 }
 
 function phaseInsight(session, focusPct) {
+  if (focusPct == null) return 'No measured focus score was saved for this session.'
   const phaseSeconds = session.focusPhases?.seconds || {}
   const dominant = session.focusPhases?.dominant || dominantEntry(phaseSeconds)?.[0] || null
   const fadeDrift = (phaseSeconds.fade || 0) + (phaseSeconds.drift || 0)
@@ -290,12 +306,8 @@ function SessionNote({ session, onNoteUpdate }) {
 
 // ── Session card ──────────────────────────────────────────────────────────────
 function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNoteUpdate }) {
-  const focusPct = session.actualSeconds > 0
-    ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
-    : 0
-  const prevFocusPct = prevSession && prevSession.actualSeconds > 0
-    ? Math.round((prevSession.focusedSeconds / prevSession.actualSeconds) * 100)
-    : null
+  const focusPct = sessionFocusPct(session)
+  const prevFocusPct = sessionFocusPct(prevSession)
   const color = focusColor(focusPct)
 
   return (
@@ -303,7 +315,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
       style={{
         background: 'var(--surface)',
         border: `1.5px solid ${expanded ? 'var(--ultra)' : 'var(--line)'}`,
-        borderLeft: `4px solid ${focusPct >= 70 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)'}`,
+        borderLeft: `4px solid ${focusPct == null ? 'var(--line-strong)' : focusPct >= 70 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)'}`,
         borderRadius: 16,
         padding: '20px 22px',
         cursor: 'pointer',
@@ -332,7 +344,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
             fontWeight: 700,
             color,
           }}>
-            {focusPct}% focused
+            {focusPct == null ? 'Not measured' : `${focusPct}% focused`}
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(session.id) }}
@@ -402,7 +414,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
           <div className="history-stats-grid" style={{ textAlign: 'center' }}>
             {[
               { label: 'Total time', value: fmt(session.actualSeconds) },
-              { label: 'Focus %', value: `${focusPct}%`, color },
+              { label: 'Focus %', value: focusPct == null ? '--' : `${focusPct}%`, color },
               ...(session.finalScore != null ? [{ label: 'Focus score', value: session.finalScore, color }] : []),
               { label: 'Alerts', value: session.distractionEvents ?? 0 },
               { label: 'Best streak', value: fmt(session.longestFocusedStreak) },
@@ -438,6 +450,13 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
             }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: 4 }}>vs last</span>
               {(() => {
+                if (focusPct == null || prevFocusPct == null) {
+                  return (
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Focus comparison unavailable
+                    </span>
+                  )
+                }
                 const focusDiff = focusPct - prevFocusPct
                 const durDiff = (session.actualSeconds ?? 0) - (prevSession.actualSeconds ?? 0)
                 const alertsDiff = (session.distractionEvents ?? 0) - (prevSession.distractionEvents ?? 0)
@@ -554,20 +573,21 @@ function computeCurrentStreak(sessions) {
 function OverallStats({ sessions }) {
   const stats = useMemo(() => {
     if (!sessions.length) return null
+    const measuredSessions = sessions.filter(hasMeasuredFocus)
     // 1. Total focused seconds (not actual seconds)
-    const totalFocusTime = sessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0)
+    const totalFocusTime = measuredSessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0)
     // 2. Rolling avg focus %
-    const avgFocus = Math.round(
-      sessions.reduce((a, s) => a + (s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0), 0) / sessions.length
-    )
+    const avgFocus = measuredSessions.length
+      ? Math.round(measuredSessions.reduce((a, s) => a + sessionFocusPct(s), 0) / measuredSessions.length)
+      : null
     // 3. Current day streak
     const currentStreak = computeCurrentStreak(sessions)
     // 4. Best single session focus %
-    const bestSession = sessions.reduce((best, s) => {
-      const pct = s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0
+    const bestSession = measuredSessions.reduce((best, s) => {
+      const pct = sessionFocusPct(s) ?? 0
       return pct > (best.pct ?? -1) ? { ...s, pct } : best
     }, {})
-    const bestPct = Math.round(bestSession.pct ?? 0)
+    const bestPct = measuredSessions.length ? Math.round(bestSession.pct ?? 0) : null
     return { totalFocusTime, avgFocus, currentStreak, bestPct }
   }, [sessions])
 
@@ -583,9 +603,9 @@ function OverallStats({ sessions }) {
     >
       {[
         { label: 'Total focus time',  value: fmt(stats.totalFocusTime) },
-        { label: 'Avg focus %',       value: `${stats.avgFocus}%`,   color: focusColor(stats.avgFocus) },
+        { label: 'Avg focus %',       value: stats.avgFocus == null ? '--' : `${stats.avgFocus}%`,   color: focusColor(stats.avgFocus) },
         { label: 'Current streak',    value: `${stats.currentStreak}d` },
-        { label: 'Best session',      value: `${stats.bestPct}%`,    color: focusColor(stats.bestPct) },
+        { label: 'Best session',      value: stats.bestPct == null ? '--' : `${stats.bestPct}%`,    color: focusColor(stats.bestPct) },
       ].map((s) => (
         <div key={s.label} style={{
           background: 'var(--surface)',
@@ -641,9 +661,10 @@ function getLast7Days(sessions) {
     const dateStr = d.toDateString()
     const ds = sessions.filter(s => new Date(s.timestamp).toDateString() === dateStr)
     let avgFocus = null
-    if (ds.length > 0) {
+    const measured = ds.filter(hasMeasuredFocus)
+    if (measured.length > 0) {
       avgFocus = Math.round(
-        ds.reduce((a, s) => a + (s.actualSeconds > 0 ? (s.focusedSeconds / s.actualSeconds) * 100 : 0), 0) / ds.length
+        measured.reduce((a, s) => a + sessionFocusPct(s), 0) / measured.length
       )
     }
     days.push({ label, avgFocus, count: ds.length })
@@ -817,14 +838,12 @@ export default function HistoryDashboard({ onClose }) {
   const handleExportCSV = () => {
     const header = ['timestamp', 'task', 'durationSeconds', 'focusPct', 'distractionEvents', 'longestStreakSeconds']
     const rows = sessions.map(s => {
-      const focusPct = s.actualSeconds > 0
-        ? Math.round((s.focusedSeconds / s.actualSeconds) * 100)
-        : 0
+      const focusPct = sessionFocusPct(s)
       return [
         new Date(s.timestamp).toISOString(),
         `"${(s.task || '').replace(/"/g, '""')}"`,
         s.actualSeconds ?? 0,
-        focusPct,
+        focusPct ?? '',
         s.distractionEvents ?? 0,
         s.longestFocusedStreak ?? 0,
       ].join(',')
@@ -862,7 +881,7 @@ export default function HistoryDashboard({ onClose }) {
               Session History
             </h1>
             <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
-              {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} total focused
+              {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.filter(hasMeasuredFocus).reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} measured focused
             </p>
           </div>
           <button

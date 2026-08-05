@@ -28,6 +28,12 @@ function computeStreak() {
   return streak
 }
 
+function hasMeasuredFocus(session) {
+  if (!session || session.scoreMeasured === false) return false
+  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return false
+  return session.actualSeconds > 0 && session.focusedSeconds != null
+}
+
 // Summarise devices array into a human-readable string
 function summariseDevices(devices) {
   if (!devices.length) return null
@@ -83,7 +89,7 @@ export default function HomeScreen({
   const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
-    const last3 = sessions.slice(0, 3).filter(s => s.actualSeconds > 0 && s.focusedSeconds != null)
+    const last3 = sessions.slice(0, 3).filter(hasMeasuredFocus)
     if (last3.length === 0) return null
     const avg = last3.reduce((sum, s) => sum + Math.round((s.focusedSeconds / s.actualSeconds) * 100), 0) / last3.length
     return Math.round(avg)
@@ -111,7 +117,7 @@ export default function HomeScreen({
     const sessions = loadSessions()
     if (sessions.length === 0) return null
     const s = sessions[0]
-    if (!s || !s.actualSeconds || s.actualSeconds === 0) return null
+    if (!hasMeasuredFocus(s)) return null
     const focusPct = s.avgFocusScore != null
       ? s.avgFocusScore
       : s.focusedSeconds != null
@@ -133,7 +139,7 @@ export default function HomeScreen({
     const sessions = loadSessions()
     if (sessions.length === 0) return null
     const last = sessions[0]
-    if (!last || !last.actualSeconds || last.actualSeconds === 0) return null
+    if (!hasMeasuredFocus(last)) return null
     const focusPct = last.focusedSeconds != null
       ? Math.round((last.focusedSeconds / last.actualSeconds) * 100)
       : null
