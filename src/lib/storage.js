@@ -212,3 +212,32 @@ export async function pickOutputFolder() {
     return ''
   }
 }
+
+// ── Intent contract provider ────────────────────────────────────────────────
+// Which engine turns a goal sentence into session expectations. Switchable at
+// any time; the app behaves identically whichever is chosen, only better or
+// worse informed.
+const CONTRACT_KEY = 'eudaimonia_contract_settings'
+
+const CONTRACT_DEFAULTS = {
+  provider: 'keywords',                    // off by default: no network, no key
+  localModel: 'qwen2.5:3b',
+  localEndpoint: 'http://127.0.0.1:11434',
+  cloudModel: 'claude-sonnet-5',
+  apiKey: '',
+}
+
+export function loadContractSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
+    return { ...CONTRACT_DEFAULTS, ...raw }
+  } catch {
+    return { ...CONTRACT_DEFAULTS }
+  }
+}
+
+export function saveContractSettings(patch) {
+  const next = { ...loadContractSettings(), ...patch }
+  try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(next)) } catch {}
+  return next
+}

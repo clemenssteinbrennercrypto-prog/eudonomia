@@ -11,7 +11,8 @@ import {
   stopActivityPolling,
 } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { loadFocusAppsConfig, loadOutputFolder, loadStrictMode } from '../lib/storage'
+import { loadContractSettings, loadFocusAppsConfig, loadOutputFolder, loadStrictMode } from '../lib/storage'
+import { deriveContract } from '../lib/intentContract'
 import {
   classifyGoalAwareActivity,
   deriveSessionIntent,
@@ -924,6 +925,7 @@ export default function SessionScreen({
   // than fetched at the end, because endSession has to build its payload
   // synchronously. Worst case it is one poll interval stale.
   const outputEvidenceRef    = useRef(null)
+  const sessionContractRef   = useRef(null)
   const goodStreakSecsRef    = useRef(0)   // unbroken seconds at/above the focused threshold
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
@@ -1193,6 +1195,7 @@ export default function SessionScreen({
       distractionLog:       distractionLogRef.current,
       sessionIntent:        sessionIntentRef.current,
       outputEvidence:       outputEvidenceRef.current,
+      sessionContract:      sessionContractRef.current,
       activityAlignment:    {
         secondsByKind: { ...activityAlignmentRef.current.secondsByKind },
         byActivity: { ...activityAlignmentRef.current.byActivity },
@@ -1240,6 +1243,27 @@ export default function SessionScreen({
     const interval = setInterval(syncCompanionSession, 3000)
     return () => clearInterval(interval)
   }, [applyCompanionSession, endSession, pushBlockingState])
+
+  // ── Session contract ──────────────────────────────────────────────────────
+  // One call at session start turns the goal sentence into expectations. Which
+  // engine answers is the user's choice; deriveContract never throws, never
+  // hangs and always returns something, so this cannot delay or break a start.
+  useEffect(() => {
+    let cancelled = false
+    const settings = loadContractSettings()
+    deriveContract(
+      { task, goal, tags },
+      {
+        provider: settings.provider,
+        model: settings.provider === 'cloud' ? settings.cloudModel : settings.localModel,
+        endpoint: settings.localEndpoint,
+        apiKey: settings.apiKey,
+      }
+    ).then(contract => {
+      if (!cancelled && contract) sessionContractRef.current = contract
+    })
+    return () => { cancelled = true }
+  }, [task, goal, tags])
 
   // ── Output evidence ───────────────────────────────────────────────────────
   // Did the work actually move? The companion compares the nominated project

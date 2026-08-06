@@ -10,7 +10,7 @@ import {
   stopActivityPolling,
 } from '../lib/activityReceiver'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
+import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
@@ -635,6 +635,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
+  const [contract, setContract] = useState(loadContractSettings)
   const testTimerRef = useRef(null)
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
@@ -978,6 +979,83 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               </span>
             )}
           </div>
+        </div>
+
+        {/* Which engine reads your goal. Switchable at any time — the app works
+            the same whichever is chosen, only better or worse informed, and any
+            failure falls back to the built-in profiles. */}
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--line)',
+          borderRadius: 14, padding: '16px 18px', marginBottom: 16,
+        }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
+            Goal understanding
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
+            How your goal sentence becomes session expectations. Only that one sentence is
+            ever sent — never your activity, window titles or file names.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            {[
+              { id: 'keywords', label: 'Built-in', hint: 'offline · instant' },
+              { id: 'local',    label: 'Local model', hint: 'private · needs Ollama' },
+              { id: 'cloud',    label: 'Claude API', hint: 'best · needs key' },
+            ].map(opt => {
+              const active = contract.provider === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setContract(saveContractSettings({ provider: opt.id }))}
+                  style={{
+                    flex: '1 1 140px',
+                    padding: '9px 12px',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    textAlign: 'left',
+                    background: active ? 'var(--ultra-wash)' : 'transparent',
+                    border: `1px solid ${active ? 'var(--ultra-bright)' : 'var(--line)'}`,
+                    color: active ? 'var(--text)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700 }}>{opt.label}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {opt.hint}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {contract.provider === 'local' && (
+            <input
+              type="text"
+              className="text-input"
+              value={contract.localModel}
+              onChange={e => setContract(saveContractSettings({ localModel: e.target.value }))}
+              placeholder="ollama model, e.g. qwen2.5:3b"
+              style={{ fontSize: 13 }}
+            />
+          )}
+
+          {contract.provider === 'cloud' && (
+            <>
+              <input
+                type="password"
+                className="text-input"
+                value={contract.apiKey}
+                onChange={e => setContract(saveContractSettings({ apiKey: e.target.value.trim() }))}
+                placeholder="Anthropic API key"
+                style={{ fontSize: 13 }}
+              />
+              <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                The key is kept in this app's local storage, unencrypted. Use a key scoped to
+                this purpose that you can revoke.
+              </p>
+            </>
+          )}
         </div>
 
         <div style={{
