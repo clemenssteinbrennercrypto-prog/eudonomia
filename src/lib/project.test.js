@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_STEP_MINUTES,
   addStep,
+  applyRevision,
   createProject,
   estimateRemaining,
   makeStep,
   moveStep,
   nextStep,
   projectProgress,
+  proposeRevisions,
   recordSessionOnStep,
   removeStep,
   resizeOpenSteps,
@@ -197,5 +199,100 @@ describe('estimating what is left', () => {
     p = recordSessionOnStep(p, p.steps[1].id, { sessionId: 's2', minutes: 0 })
     expect(() => estimateRemaining(p)).not.toThrow()
     expect(estimateRemaining(p)).toBeNull()
+  })
+})
+
+// ── The optimization phase ───────────────────────────────────────────────────
+// Proposals only, always with a reason. A plan that rewrote itself quietly
+// would be worse than one that was simply wrong.
+describe('proposing revisions after a session', () => {
+  const built = () => createProject({
+    title: 'x',
+    steps: [{ label: 'a', minutes: 50 }, { label: 'b', minutes: 50 }, { label: 'c', minutes: 50 }],
+  })
+
+  it('proposes nothing when there is nothing to say', () => {
+    const p = built()
+    expect(proposeRevisions(p, { lastStepId: p.steps[0].id, lastOutcome: 'yes' })).toEqual([])
+  })
+
+  it('proposes reopening a step the person says is not done', () => {
+    let p = built()
+    const id = p.steps[0].id
+    p = recordSessionOnStep(p, id, { sessionId: 's1', minutes: 50 })
+
+    const r = proposeRevisions(p, { lastStepId: id, lastOutcome: 'no' })
+    const reopen = r.find(x => x.kind === 'reopen_step')
+    expect(reopen).toBeTruthy()
+
+    const after = applyRevision(p, reopen)
+    expect(after.steps[0].state).toBe('pending')
+    expect(nextStep(after).id).toBe(id)
+  })
+
+  it('treats "partly" as reason to keep it open too', () => {
+    let p = built()
+    const id = p.steps[0].id
+    p = recordSessionOnStep(p, id, { sessionId: 's1', minutes: 50 })
+    expect(proposeRevisions(p, { lastStepId: id, lastOutcome: 'partly' })
+      .some(x => x.kind === 'reopen_step')).toBe(true)
+  })
+
+  it('proposes resizing when the plan is sized wrong for this person', () => {
+    const p = built()
+    const r = proposeRevisions(p, { sessionMinutes: 25 })
+    const resize = r.find(x => x.kind === 'resize_steps')
+    expect(resize.minutes).toBe(25)
+
+    const after = applyRevision(p, resize)
+    expect(after.steps.every(s => s.minutes === 25)).toBe(true)
+  })
+
+  it('does not nag about a small difference', () => {
+    expect(proposeRevisions(built(), { sessionMinutes: 55 })
+      .some(x => x.kind === 'resize_steps')).toBe(false)
+  })
+
+  it('states the real cost when estimates are not surviving contact', () => {
+    let p = built()
+    p = recordSessionOnStep(p, p.steps[0].id, { sessionId: 's1', minutes: 100 })
+    p = recordSessionOnStep(p, p.steps[1].id, { sessionId: 's2', minutes: 100 })
+
+    const pace = proposeRevisions(p).find(x => x.kind === 'pace_estimate')
+    expect(pace.summary).toContain('100')      // adjusted
+    expect(pace.summary).toContain('50')       // planned
+    expect(pace.informational).toBe(true)
+  })
+
+  it('never invents extra steps to "fix" a slow pace', () => {
+    let p = built()
+    p = recordSessionOnStep(p, p.steps[0].id, { sessionId: 's1', minutes: 100 })
+    p = recordSessionOnStep(p, p.steps[1].id, { sessionId: 's2', minutes: 100 })
+    const pace = proposeRevisions(p).find(x => x.kind === 'pace_estimate')
+    expect(applyRevision(p, pace).steps).toHaveLength(3)
+  })
+
+  it('separates "step too big" from "you were distracted"', () => {
+    let p = built()
+    const id = p.steps[0].id
+    p = recordSessionOnStep(p, id, { sessionId: 's1', minutes: 50 })
+
+    const focused = proposeRevisions(p, { lastStepId: id, lastOutcome: 'no', lastFocusPct: 85 })
+    expect(focused.some(x => x.kind === 'step_too_big')).toBe(true)
+
+    const scattered = proposeRevisions(p, { lastStepId: id, lastOutcome: 'no', lastFocusPct: 30 })
+    expect(scattered.some(x => x.kind === 'step_too_big')).toBe(false)
+  })
+
+  it('applies nothing for an informational or unknown proposal', () => {
+    const p = built()
+    expect(applyRevision(p, { kind: 'pace_estimate' })).toBe(p)
+    expect(applyRevision(p, { kind: 'nonsense' })).toBe(p)
+    expect(applyRevision(p, null)).toBe(p)
+  })
+
+  it('survives a malformed project without throwing', () => {
+    expect(proposeRevisions(null, {})).toEqual([])
+    expect(proposeRevisions({}, {})).toEqual([])
   })
 })

@@ -172,3 +172,99 @@ export function estimateRemaining(project, { minSamples = 2 } = {}) {
     materiallyOff: Math.abs(adjustedMinutes - naiveMinutes) >= Math.max(20, naiveMinutes * 0.25),
   }
 }
+
+// ── The optimization phase ───────────────────────────────────────────────────
+// After a session, what the measurement says about the plan that produced it.
+//
+// Everything here is a PROPOSAL with a visible reason. Nothing is applied
+// automatically, and nothing is proposed without evidence: a plan that quietly
+// rewrote itself would be worse than one that was simply wrong, because you
+// could no longer tell which of your own decisions still stood.
+
+/** Below this the difference is not worth interrupting anyone about. */
+const RESIZE_THRESHOLD_MIN = 15
+
+export function proposeRevisions(project, {
+  sessionMinutes = null,   // what history says a session should be
+  lastStepId = null,       // the step the session just worked on
+  lastOutcome = null,      // the user's own verdict: 'yes' | 'partly' | 'no'
+  lastFocusPct = null,
+} = {}) {
+  if (!project?.steps?.length) return []
+  const out = []
+  const progress = projectProgress(project)
+  const lastStep = lastStepId ? project.steps.find(s => s.id === lastStepId) : null
+
+  // 1. The only ground truth in the system: the person said it isn't done.
+  //    A step closed by the timer rather than by finishing should reopen.
+  if (lastStep && lastStep.state === 'done' && (lastOutcome === 'no' || lastOutcome === 'partly')) {
+    out.push({
+      id: 'reopen',
+      kind: 'reopen_step',
+      stepId: lastStep.id,
+      summary: lastOutcome === 'no'
+        ? `You said "${lastStep.label}" isn't done. Reopen it?`
+        : `"${lastStep.label}" is partly there. Keep it open for another session?`,
+      detail: 'The session ended because the timer ended, not because the work did.',
+    })
+  }
+
+  // 2. The plan is sized wrong for how this person actually works.
+  const open = project.steps.filter(s => s.state === 'pending')
+  if (sessionMinutes && open.length) {
+    const current = open[0].minutes
+    if (Math.abs(sessionMinutes - current) >= RESIZE_THRESHOLD_MIN) {
+      out.push({
+        id: 'resize',
+        kind: 'resize_steps',
+        minutes: sessionMinutes,
+        summary: `Resize the remaining ${open.length} ${open.length === 1 ? 'step' : 'steps'} from ${current} to ${sessionMinutes} minutes?`,
+        detail: `${sessionMinutes} minutes is where your focus measurably holds.`,
+      })
+    }
+  }
+
+  // 3. The estimates are not surviving contact. Stated, never silently applied —
+  //    the honest response to "this is slower than planned" is a decision, not
+  //    an invented extra step.
+  const pace = estimateRemaining(project)
+  if (pace?.materiallyOff && progress.remaining > 0) {
+    const slower = pace.paceRatio < 1
+    out.push({
+      id: 'pace',
+      kind: 'pace_estimate',
+      summary: slower
+        ? `At your measured pace the rest is about ${pace.adjustedMinutes} minutes, not ${pace.plannedMinutes}.`
+        : `You are running ahead — the rest looks more like ${pace.adjustedMinutes} minutes than ${pace.plannedMinutes}.`,
+      detail: `Based on ${pace.samples} finished ${pace.samples === 1 ? 'step' : 'steps'}.`,
+      informational: true,
+    })
+  }
+
+  // 4. Focused the whole way and still not done: the step was too big, not the
+  //    person too slow. Worth separating, because the fix is different.
+  if (lastStep && lastOutcome === 'no' && lastFocusPct != null && lastFocusPct >= 70) {
+    out.push({
+      id: 'oversized',
+      kind: 'step_too_big',
+      summary: `You held ${lastFocusPct}% focus and still didn't finish — that step is too big for one sitting.`,
+      detail: 'Splitting it will do more than trying harder.',
+      informational: true,
+    })
+  }
+
+  return out
+}
+
+/** Apply one proposal. Unknown or informational ones change nothing. */
+export function applyRevision(project, revision) {
+  if (!project || !revision) return project
+  switch (revision.kind) {
+    case 'reopen_step':
+      return setStepState(project, revision.stepId, 'pending')
+    case 'resize_steps':
+      return resizeOpenSteps(project, revision.minutes)
+    default:
+      return project
+  }
+}
