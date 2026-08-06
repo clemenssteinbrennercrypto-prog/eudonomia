@@ -6,6 +6,7 @@ import {
   isUsable,
   planningFit,
   suggestNextSession,
+  suggestedSessionMinutes,
   timeOfDayFit,
 } from './calibration'
 
@@ -144,5 +145,20 @@ describe('robustness', () => {
 
   it('never divides by zero on a zero-length session', () => {
     expect(() => calibrate([session({ mins: 0 }), ...many(10)])).not.toThrow()
+  })
+})
+
+describe('sizing a plan step', () => {
+  it('returns nothing until history can say', () => {
+    expect(suggestedSessionMinutes([])).toBeNull()
+    expect(suggestedSessionMinutes(many(5))).toBeNull()
+  })
+
+  it('prefers the length that measurably holds attention', () => {
+    const s = [
+      ...many(4, { planned: 50, mins: 50, pct: 82 }),
+      ...many(4, { planned: 90, mins: 90, pct: 51 }),
+    ]
+    expect(suggestedSessionMinutes(s)).toMatchObject({ minutes: 50, focusPct: 82, n: 4 })
   })
 })
