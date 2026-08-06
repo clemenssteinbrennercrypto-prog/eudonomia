@@ -211,7 +211,11 @@ export function artifactFromTitle(title, app = '') {
   return first.replace(/\s*\(\d+\)\s*$/, '').trim()
 }
 
-export function classifyGoalAwareActivity(activity, config, daemonConnected, sessionIntent) {
+// `contract` is optional and takes precedence when present. It knows what THIS
+// goal needs — "youtube.com is off-goal for writing your thesis" — where the
+// keyword profiles only know what writing generally looks like. Without one,
+// behaviour is exactly as before.
+export function classifyGoalAwareActivity(activity, config, daemonConnected, sessionIntent, contract = null) {
   if (!daemonConnected) {
     return { kind: 'unclear', app: '', domain: '', label: 'No activity data', basis: 'no_activity_data' }
   }
@@ -244,6 +248,26 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     return { kind: 'blocked', app, domain, title, artifact, label, basis: 'personal_blocker' }
   }
 
+  // ── Contract first ────────────────────────────────────────────────────────
+  // The user's own blocklist above still wins: their explicit rule outranks any
+  // model's opinion about their goal.
+  if (contract) {
+    if (contract.offGoal?.length && (appMatchesAny(appKey, contract.offGoal) || domainMatches(domain, contract.offGoal))) {
+      return { kind: 'distraction', app, domain, title, artifact, label, basis: 'contract_off_goal' }
+    }
+    if (contract.expectedTools?.length && (appMatchesAny(appKey, contract.expectedTools) || domainMatches(domain, contract.expectedTools))) {
+      return { kind: 'aligned', app, domain, title, artifact, label, basis: 'contract_tool' }
+    }
+    // The artifact the contract expects, seen in a window title, is the
+    // strongest signal there is: not just the right app, the right document.
+    if (contract.output?.artifactHint && textIncludesAny(activityText, [contract.output.artifactHint])) {
+      return { kind: 'aligned', app, domain, title, artifact, label, basis: 'contract_artifact' }
+    }
+    if (contract.supporting?.length && (appMatchesAny(appKey, contract.supporting) || domainMatches(domain, contract.supporting))) {
+      return { kind: 'supportive', app, domain, title, artifact, label, basis: 'contract_supporting' }
+    }
+  }
+
   const intent = sessionIntent || deriveSessionIntent()
   const matchesIntentKeyword = intent.keywords?.length > 0 && textIncludesAny(activityText, intent.keywords)
   const matchesIntentTool = textIncludesAny(app, intent.toolHints)
@@ -268,6 +292,12 @@ export function classifyGoalAwareActivity(activity, config, daemonConnected, ses
     return { kind: 'distraction', app, domain, title, artifact, label, basis: 'common_distraction' }
   }
 
+  // A confident contract listing expected tools is entitled to say "this isn't
+  // any of them" — which is exactly what the keyword profiles could never do
+  // for a goal outside their six categories.
+  if (contract?.confidence === 'high' && contract.expectedTools?.length) {
+    return { kind: 'off_goal', app, domain, title, artifact, label, basis: 'contract_unmatched' }
+  }
   if (intent.confidence === 'medium') {
     return { kind: 'off_goal', app, domain, title, artifact, label, basis: 'unmatched_session_context' }
   }

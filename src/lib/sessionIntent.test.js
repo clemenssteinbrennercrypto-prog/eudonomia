@@ -117,3 +117,70 @@ describe('time is accumulated per artifact', () => {
     expect(summarizeSessionAlignment(legacy, 5).topArtifacts).toEqual([])
   })
 })
+
+// ── Contract-driven classification ──────────────────────────────────────────
+// The contract knows what THIS goal needs. The keyword profiles only know what
+// "writing" generally looks like, and nothing at all about a goal outside their
+// six categories.
+describe('classification against a session contract', () => {
+  const config = { focusApps: [], distractionApps: [], focusDomains: [], distractionDomains: [] }
+  const contract = {
+    source: 'local',
+    kind: 'writing',
+    expectedTools: ['word', 'overleaf.com'],
+    supporting: ['scholar.google.com'],
+    offGoal: ['youtube.com'],
+    output: { type: 'document', unit: 'words', plausibleRange: [600, 1200], artifactHint: 'thesis' },
+    confidence: 'high',
+  }
+  const classify = (activity, c = contract) =>
+    classifyGoalAwareActivity(activity, config, true, null, c).kind
+
+  it('calls an expected tool aligned', () => {
+    expect(classify({ app: 'Word' })).toBe('aligned')
+    expect(classify({ app: 'Safari', domain: 'overleaf.com' })).toBe('aligned')
+  })
+
+  it('calls a supporting source supportive, not aligned', () => {
+    expect(classify({ app: 'Safari', domain: 'scholar.google.com' })).toBe('supportive')
+  })
+
+  it('calls a goal-specific off-goal site a distraction', () => {
+    expect(classify({ app: 'Safari', domain: 'youtube.com' })).toBe('distraction')
+  })
+
+  it('treats the expected artifact in a window title as the strongest signal', () => {
+    // Not a listed tool, but plainly the right document.
+    expect(classify({ app: 'Preview', title: 'thesis_chapter_1.pdf — Preview' })).toBe('aligned')
+  })
+
+  it('a confident contract can call unmatched activity off-goal', () => {
+    // Numbers is neither a listed tool nor a common distraction — only a
+    // contract that knows this goal can judge it. The keyword profiles cannot
+    // do this at all for a goal outside their six categories.
+    expect(classify({ app: 'Numbers' })).toBe('off_goal')
+  })
+
+  it('stays quiet when the contract is not confident', () => {
+    const unsure = { ...contract, confidence: 'low' }
+    expect(classify({ app: 'Numbers' }, unsure)).toBe('unclear')
+  })
+
+  it('a common distraction is still caught before the contract is consulted', () => {
+    expect(classify({ app: 'TikTok' })).toBe('distraction')
+  })
+
+  it("the user's own blocklist still outranks the contract", () => {
+    // Word is an expected tool here, but the user explicitly blocked it.
+    const blocked = { focusApps: [], distractionApps: ['Word'], focusDomains: [], distractionDomains: [] }
+    expect(classifyGoalAwareActivity({ app: 'Word' }, blocked, true, null, contract).kind).toBe('blocked')
+  })
+
+  it('behaves exactly as before when no contract is supplied', () => {
+    const intent = deriveSessionIntent({ task: 'Write the intro chapter', goal: 'draft essay' })
+    const withNone = classifyGoalAwareActivity({ app: 'Word' }, config, true, intent)
+    const withNull = classifyGoalAwareActivity({ app: 'Word' }, config, true, intent, null)
+    expect(withNone.kind).toBe(withNull.kind)
+    expect(withNone.basis).not.toContain('contract')
+  })
+})

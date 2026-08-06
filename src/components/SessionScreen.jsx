@@ -1560,7 +1560,8 @@ export default function SessionScreen({
         activityRef.current,
         focusAppsConfigRef.current,
         activityConnected,
-        sessionIntentRef.current
+        sessionIntentRef.current,
+        sessionContractRef.current
       )
       activityClassCacheRef.current = {
         activity: activityRef.current,
@@ -2354,8 +2355,13 @@ export default function SessionScreen({
   const activityConnected = isActivityConnected()
   // Per-render memo (renders fire several times/sec from score updates); reclassify
   // only when the activity/intent actually changes.
+  // The contract arrives asynchronously, so it is read from the ref rather than
+  // included in the deps — the pill picks it up on the next activity change,
+  // and the scoring path above already uses it from the first frame.
   const activityClassification = useMemo(
-    () => classifyGoalAwareActivity(activityStatus, focusAppsConfigRef.current, activityConnected, sessionIntent),
+    () => classifyGoalAwareActivity(
+      activityStatus, focusAppsConfigRef.current, activityConnected, sessionIntent, sessionContractRef.current
+    ),
     [activityStatus, activityConnected, sessionIntent]
   )
 
