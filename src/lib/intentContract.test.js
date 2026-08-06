@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   PROVIDERS,
+  buildPlanPrompt,
   buildPrompt,
+  derivePlan,
+  normalizePlan,
   clearContractCache,
   deriveContract,
   normalizeContract,
@@ -184,5 +187,65 @@ describe('switching providers is safe', () => {
     await deriveContract(goalInput, { provider: 'local' })
     await deriveContract(goalInput, { provider: 'local' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── Plans ────────────────────────────────────────────────────────────────────
+describe('plans go through the same boundary as contracts', () => {
+  it('accepts a well-formed plan', () => {
+    const p = normalizePlan({
+      steps: [{ label: 'Outline', note: 'headings only' }, { label: 'Draft' }],
+      kind: 'writing', confidence: 'high',
+    }, { source: 'local' })
+    expect(p.source).toBe('local')
+    expect(p.steps.map(s => s.label)).toEqual(['Outline', 'Draft'])
+  })
+
+  it('accepts bare strings, since models ignore the shape they were asked for', () => {
+    expect(normalizePlan({ steps: ['Outline', 'Draft'] }).steps).toHaveLength(2)
+  })
+
+  it('caps a runaway plan instead of accepting forty steps', () => {
+    const p = normalizePlan({ steps: Array.from({ length: 40 }, (_, i) => `step ${i}`) })
+    expect(p.steps.length).toBeLessThanOrEqual(8)
+  })
+
+  it('refuses a plan with no usable steps', () => {
+    expect(normalizePlan({ steps: [] })).toBeNull()
+    expect(normalizePlan({ steps: ['', '  ', null] })).toBeNull()
+    expect(normalizePlan({ notSteps: true })).toBeNull()
+    expect(normalizePlan(null)).toBeNull()
+  })
+
+  it('never lets a model set the duration — that comes from measurement', () => {
+    const p = normalizePlan({ steps: [{ label: 'Draft', minutes: 240, duration: 999 }] })
+    expect(p.steps[0].minutes).toBeUndefined()
+    expect(p.steps[0].duration).toBeUndefined()
+  })
+
+  it('asks the model not to invent durations', () => {
+    expect(buildPlanPrompt({ goal: 'x' })).toContain('Do NOT give durations')
+  })
+
+  it('falls back to a template plan when no model answers', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down') }))
+    const p = await derivePlan({ task: 'Write the intro chapter' }, { provider: 'local' })
+    expect(p.source).toBe('keywords')
+    expect(p.steps.length).toBeGreaterThan(1)
+    // A template must admit it is one.
+    expect(p.confidence).toBe('low')
+  })
+
+  it('uses a model plan when one arrives', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ response: JSON.stringify({
+        steps: [{ label: 'Collect sources' }, { label: 'Draft section 1' }],
+        kind: 'research', confidence: 'high',
+      })}),
+    })))
+    const p = await derivePlan({ goal: 'literature review' }, { provider: 'local' })
+    expect(p.source).toBe('local')
+    expect(p.steps[0].label).toBe('Collect sources')
   })
 })

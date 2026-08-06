@@ -241,3 +241,57 @@ export function saveContractSettings(patch) {
   try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(next)) } catch {}
   return next
 }
+
+// ── Projects ────────────────────────────────────────────────────────────────
+// A project outlives its sessions, so it is stored separately from them.
+const PROJECTS_KEY = 'eudaimonia_projects'
+const ACTIVE_PROJECT_KEY = 'eudaimonia_active_project'
+
+export function loadProjects() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]')
+    return Array.isArray(raw) ? raw.filter(p => p && p.id) : []
+  } catch {
+    return []
+  }
+}
+
+function writeProjects(projects) {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)) } catch {}
+  return projects
+}
+
+/** Insert or replace by id — the project model returns new objects, never mutates. */
+export function saveProject(project) {
+  if (!project?.id) return null
+  const projects = loadProjects()
+  const i = projects.findIndex(p => p.id === project.id)
+  if (i === -1) projects.unshift(project)
+  else projects[i] = project
+  writeProjects(projects)
+  return project
+}
+
+export function deleteProject(id) {
+  writeProjects(loadProjects().filter(p => p.id !== id))
+  if (loadActiveProjectId() === id) setActiveProject(null)
+}
+
+export function loadActiveProjectId() {
+  try { return localStorage.getItem(ACTIVE_PROJECT_KEY) || null } catch { return null }
+}
+
+export function setActiveProject(id) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_PROJECT_KEY, id)
+    else localStorage.removeItem(ACTIVE_PROJECT_KEY)
+  } catch {}
+  return id || null
+}
+
+/** The project the next session belongs to, or null when working ad hoc. */
+export function loadActiveProject() {
+  const id = loadActiveProjectId()
+  if (!id) return null
+  return loadProjects().find(p => p.id === id && !p.archivedAt) || null
+}
