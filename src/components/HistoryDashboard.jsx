@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
+import { calibrate } from '../lib/calibration'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
 function hasMeasuredFocus(session) {
@@ -702,6 +703,58 @@ function getLast7Days(sessions) {
   return days
 }
 
+// What your own history says about how you work. Statistics over your sessions,
+// not a model's opinion — and silent until there is enough to be honest about.
+function PersonalCalibration({ sessions }) {
+  const c = useMemo(() => calibrate(sessions), [sessions])
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--line)',
+      borderRadius: 16,
+      padding: '20px',
+      marginBottom: 24,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+          How you work
+        </p>
+        {c.ready && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            from {c.sessionsAnalysed} measured sessions
+          </span>
+        )}
+      </div>
+
+      {!c.ready ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+          {c.needMore} more measured {c.needMore === 1 ? 'session' : 'sessions'} and this can tell you
+          when you focus best, whether you over-plan, and which session length actually holds.
+          Nothing is claimed before then — a pattern read from four sessions is a guess.
+        </p>
+      ) : c.insights.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+          No pattern stands out yet. Your sessions look consistent across times and lengths,
+          which is its own answer.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {c.insights.map(i => (
+            <div key={i.kind} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ color: 'var(--ultra-bright)', fontSize: 13, lineHeight: 1.5 }}>—</span>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {i.text}
+                <span style={{ color: 'var(--text-muted)' }}> ({i.n} sessions)</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function WeeklyTrends({ sessions }) {
   const days = useMemo(() => getLast7Days(sessions), [sessions])
   const MAX_H = 48
@@ -1063,6 +1116,7 @@ export default function HistoryDashboard({ onClose }) {
           <>
             <WeeklySummary sessions={sessions} />
             <WeeklyTrends sessions={sessions} />
+          <PersonalCalibration sessions={sessions} />
             <OverallStats sessions={sessions} />
 
             {/* Date filter pills */}

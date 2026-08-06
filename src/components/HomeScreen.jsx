@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
+import { suggestNextSession } from '../lib/calibration'
 import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadSessions } from '../lib/storage'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
@@ -94,6 +95,9 @@ export default function HomeScreen({
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
   const sessionCount = useMemo(() => loadSessions().length, [])
+  // What your own history says about when you work best. Returns null until
+  // there are enough sessions to say anything honest.
+  const timing = useMemo(() => suggestNextSession(loadSessions()), [])
   const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
@@ -211,6 +215,19 @@ export default function HomeScreen({
             </div>
           )}
           <p className="app-tagline">Stay present. Stay focused.</p>
+          {timing && (
+            <div style={{ marginTop: 8 }}>
+              <span style={{
+                background: timing.inWindow ? 'rgba(47,227,168,0.10)' : 'rgba(122,152,255,0.08)',
+                border: `1px solid ${timing.inWindow ? 'rgba(47,227,168,0.30)' : 'var(--line)'}`,
+                borderRadius: 100, padding: '3px 12px',
+                fontSize: 11.5, fontWeight: 500,
+                color: timing.inWindow ? 'var(--good)' : 'var(--text-secondary)',
+              }}>
+                {timing.inWindow ? '● ' : ''}{timing.text}
+              </span>
+            </div>
+          )}
           {lastSessionPill && (
             <div
               onClick={onShowHistory}
