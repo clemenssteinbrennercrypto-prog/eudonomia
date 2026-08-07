@@ -3,14 +3,12 @@ import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
-import ProjectScreen from './components/ProjectScreen'
 import WorkspaceSetup from './components/WorkspaceSetup'
 import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
-import { loadActiveProject, loadFocusModeEnabled, saveFocusModeEnabled, saveProject, saveSession } from './lib/storage'
-import { recordSessionOnStep } from './lib/project'
+import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 
@@ -187,8 +185,6 @@ export default function App() {
   const [duration, setDuration] = useState(30)
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
-  // Which project step this session is working on, if any.
-  const [stepRef, setStepRef] = useState(null)
   const [devices,  setDevicesRaw] = useState(loadDevices)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const updateStatus = useAppUpdateStatus()
@@ -209,40 +205,14 @@ export default function App() {
     })
   }, [])
 
-  // Home either hands us a project step, or nothing at all for an ad-hoc session.
-  const handleStart = useCallback((fromStep) => {
-    if (fromStep?.stepId) {
-      setTask(fromStep.task)
-      setGoal(fromStep.goal)
-      setDuration(fromStep.duration)
-      setStepRef({ projectId: fromStep.projectId, stepId: fromStep.stepId })
-    } else {
-      setStepRef(null)
-    }
-    setScreen('session')
-  }, [])
+  const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    const enriched = { ...data, task, goal, energyLevel, tags, ...(stepRef || {}) }
+    const enriched = { ...data, task, goal, energyLevel, tags }
     const saved = saveSession(enriched)
-
-    // Close the step this session was working on. A step is one sitting by
-    // definition, so finishing the session finishes the step — the user can
-    // reopen it from the project if the work is not actually done.
-    if (stepRef?.projectId) {
-      const project = loadActiveProject()
-      if (project?.id === stepRef.projectId) {
-        saveProject(recordSessionOnStep(project, stepRef.stepId, {
-          sessionId: saved.id,
-          minutes: Math.round((saved.actualSeconds || 0) / 60),
-          done: true,
-        }))
-      }
-    }
-
     setSessionData(saved)
     setScreen('end')
-  }, [task, goal, energyLevel, tags, stepRef])
+  }, [task, goal, energyLevel, tags])
 
   const handleRestart = (prefill = null) => {
     setTask(prefill?.task ?? '')
@@ -301,13 +271,6 @@ export default function App() {
           onShowHistory={() => setScreen('history')}
           onShowSetup={() => setScreen('setup')}
           onShowFocusApps={() => setScreen('focus-apps')}
-          onPlanProject={() => setScreen('project')}
-        />
-      )}
-      {screen === 'project' && (
-        <ProjectScreen
-          onDone={() => setScreen('home')}
-          onCancel={() => setScreen('home')}
         />
       )}
       {screen === 'focus-apps' && (

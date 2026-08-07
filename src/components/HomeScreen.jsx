@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
 import { suggestNextSession } from '../lib/calibration'
-import { nextStep, projectProgress } from '../lib/project'
-import { loadActiveProject, loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadSessions } from '../lib/storage'
+import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadSessions } from '../lib/storage'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
@@ -86,7 +85,6 @@ export default function HomeScreen({
   onShowHistory,
   onShowSetup,
   onShowFocusApps,
-  onPlanProject,
 }) {
   const [legalTab, setLegalTab] = useState(null)
   const [outputFolder, setOutputFolder] = useState(loadOutputFolder)
@@ -100,12 +98,6 @@ export default function HomeScreen({
   // What your own history says about when you work best. Returns null until
   // there are enough sessions to say anything honest.
   const timing = useMemo(() => suggestNextSession(loadSessions()), [])
-  // What the app knows is next. When there is a project, home stops asking and
-  // starts telling — the form becomes the exception rather than the ritual.
-  const project = useMemo(() => loadActiveProject(), [])
-  const step = project ? nextStep(project) : null
-  const progress = project ? projectProgress(project) : null
-  const [showForm, setShowForm] = useState(!step)
   const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
@@ -206,9 +198,6 @@ export default function HomeScreen({
             <button className="home-header-action" onClick={onShowSetup}>
               Setup
             </button>
-            <button className="home-header-action" onClick={onPlanProject}>
-              Plan a project
-            </button>
             <button className="home-header-action" onClick={onShowHistory}>
               History{sessionCount > 0 ? ` (${sessionCount})` : ''}
             </button>
@@ -257,57 +246,6 @@ export default function HomeScreen({
           )}
         </div>
 
-        {step && !showForm && (
-          <div className="home-form" style={{ gap: 18 }}>
-            <div>
-              <p style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
-                letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 0 10px',
-              }}>
-                Next up · {project.title}
-              </p>
-              <p style={{ fontSize: 21, fontWeight: 500, color: 'var(--text)', margin: 0, lineHeight: 1.35 }}>
-                {step.label}
-              </p>
-              {step.note && (
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', lineHeight: 1.5 }}>
-                  {step.note}
-                </p>
-              )}
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0' }}>
-                {step.minutes} min · step {progress.done + 1} of {progress.total}
-                {timing?.inWindow ? ' · your strongest window is now' : ''}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="start-btn"
-              onClick={() => onStart({
-                task: project.title,
-                goal: step.label,
-                duration: step.minutes,
-                projectId: project.id,
-                stepId: step.id,
-              })}
-            >
-              Start
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 12, color: 'var(--text-muted)', fontFamily: 'inherit',
-              }}
-            >
-              Work on something else
-            </button>
-          </div>
-        )}
-
-        {(!step || showForm) && (
         <div className="home-form">
 
           {/* Device summary bar */}
@@ -609,26 +547,12 @@ export default function HomeScreen({
 
           <button
             className="start-btn"
-            onClick={() => onStart()}
+            onClick={onStart}
             disabled={!task.trim()}
           >
             Start Session
           </button>
-
-          {step && (
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 12, color: 'var(--text-muted)', fontFamily: 'inherit',
-              }}
-            >
-              ← Back to {project.title}
-            </button>
-          )}
         </div>
-        )}
       </div>
     </div>
 

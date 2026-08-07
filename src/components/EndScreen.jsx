@@ -1,8 +1,5 @@
 import { useState, useMemo } from 'react'
 import { updateSession, loadSessions } from '../lib/storage'
-import { applyRevision, proposeRevisions } from '../lib/project'
-import { suggestedSessionMinutes } from '../lib/calibration'
-import { loadActiveProject, saveProject } from '../lib/storage'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 
 function fmt(seconds) {
@@ -406,8 +403,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     sessionIntent        = null,
     activityAlignment    = null,
     outputEvidence       = null,
-    projectId            = null,
-    stepId               = null,
     phaseInterventions   = null,
     avgFocusScore        = null,
     finalScore           = null,
@@ -421,29 +416,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     ? Math.round((focusedSeconds / actualSeconds) * 100)
     : null
   const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
-
-  // ── The optimization phase ────────────────────────────────────────────────
-  // What the measurement says about the plan that produced this session. Only
-  // proposals, each with its reason; nothing changes until you say so.
-  const [project, setProject] = useState(() => (projectId ? loadActiveProject() : null))
-  const [dismissed, setDismissed] = useState([])
-  const [applied, setApplied] = useState([])
-  const revisions = useMemo(() => {
-    if (!project || project.id !== projectId) return []
-    return proposeRevisions(project, {
-      sessionMinutes: suggestedSessionMinutes(loadSessions())?.minutes ?? null,
-      lastStepId: stepId,
-      lastOutcome: selectedOutcome,
-      lastFocusPct: focusPct,
-    }).filter(r => !dismissed.includes(r.id) && !applied.includes(r.id))
-  }, [project, projectId, stepId, selectedOutcome, focusPct, dismissed, applied])
-
-  const accept = (rev) => {
-    const next = applyRevision(project, rev)
-    saveProject(next)
-    setProject(next)
-    setApplied(a => [...a, rev.id])
-  }
   const [actualCompleted, setActualCompleted] = useState(completedText || '')
   const [blocker, setBlocker] = useState(blockerText || '')
   const debrief = useMemo(() => makeDebrief({
@@ -629,66 +601,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <span className="stat-label">distracted time</span>
           </div>
         </div>
-
-        {/* The optimization phase — what the measurement says about the plan.
-            Proposals only, each carrying its reason, each dismissible. A plan
-            that rewrote itself quietly would be worse than one that was simply
-            wrong: you could no longer tell which of your decisions still stood. */}
-        {revisions.length > 0 && (
-          <div style={{
-            width: '100%', boxSizing: 'border-box',
-            background: 'var(--surface)',
-            border: '1px solid var(--line-strong)',
-            borderRadius: 14, padding: '16px 18px',
-          }}>
-            <p style={{
-              fontSize: 11, fontWeight: 700, color: 'var(--ultra-bright)',
-              letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 12px',
-            }}>
-              Adjust the plan
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {revisions.map(rev => (
-                <div key={rev.id}>
-                  <p style={{ fontSize: 14, color: 'var(--text)', margin: 0, lineHeight: 1.45 }}>
-                    {rev.summary}
-                  </p>
-                  {rev.detail && (
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', lineHeight: 1.45 }}>
-                      {rev.detail}
-                    </p>
-                  )}
-                  {!rev.informational && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button
-                        type="button"
-                        onClick={() => accept(rev)}
-                        style={{
-                          background: 'var(--ultra)', border: 'none', borderRadius: 100,
-                          padding: '7px 18px', fontSize: 12.5, fontWeight: 700,
-                          color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-                        }}
-                      >
-                        Do it
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDismissed(d => [...d, rev.id])}
-                        style={{
-                          background: 'transparent', border: '1px solid var(--line)', borderRadius: 100,
-                          padding: '7px 18px', fontSize: 12.5, fontWeight: 600,
-                          color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit',
-                        }}
-                      >
-                        Leave it
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Session debrief */}
         {actualSeconds > 0 && (

@@ -239,19 +239,3 @@ export function suggestNextSession(sessions = [], now = new Date()) {
       : `Your strongest window is the ${part.label} (${best.focusPct}% across ${best.n} sessions).`,
   }
 }
-
-/**
- * How long a session should be for this person, in minutes.
- *
- * This is what sizes the steps of a plan. It prefers the length that measurably
- * holds their attention, and returns null — not a guess — when history cannot
- * say yet. The caller decides what to do with silence; inventing a number here
- * would put a fabricated figure into every plan.
- */
-export function suggestedSessionMinutes(sessions = []) {
-  const c = calibrate(sessions)
-  if (!c.ready) return null
-  const best = c.duration?.best
-  if (!best) return null
-  return { minutes: best.minutes, focusPct: best.focusPct, n: best.n }
-}
