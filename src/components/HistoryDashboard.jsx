@@ -2,18 +2,12 @@ import { useState, useMemo } from 'react'
 import { loadSessions, deleteSession, clearAllSessions, updateSession } from '../lib/storage'
 import { calibrate } from '../lib/calibration'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
-
-function hasMeasuredFocus(session) {
-  if (!session || session.scoreMeasured === false) return false
-  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return false
-  return session.actualSeconds > 0 && session.focusedSeconds != null
-}
-
-function sessionFocusPct(session) {
-  return hasMeasuredFocus(session)
-    ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
-    : null
-}
+import {
+  HISTORY_TREND_RANGES,
+  buildHistoryTrend,
+  hasMeasuredFocus,
+  sessionFocusPct,
+} from '../lib/historyTrend'
 
 // ── Month Calendar ─────────────────────────────────────────────────────────────
 function MonthCalendar({ sessions, onDayClick, selectedDay }) {
@@ -683,26 +677,6 @@ function groupByDate(sessions) {
 }
 
 // ── CHANGE 2: Weekly trend bar chart ─────────────────────────────────────────
-function getLast7Days(sessions) {
-  const days = []
-  const now = new Date()
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(0,0,0,0)
-    const label = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3)
-    const dateStr = d.toDateString()
-    const ds = sessions.filter(s => new Date(s.timestamp).toDateString() === dateStr)
-    let avgFocus = null
-    const measured = ds.filter(hasMeasuredFocus)
-    if (measured.length > 0) {
-      avgFocus = Math.round(
-        measured.reduce((a, s) => a + sessionFocusPct(s), 0) / measured.length
-      )
-    }
-    days.push({ label, avgFocus, count: ds.length })
-  }
-  return days
-}
-
 // What your own history says about how you work. Statistics over your sessions,
 // not a model's opinion — and silent until there is enough to be honest about.
 function PersonalCalibration({ sessions }) {
@@ -755,11 +729,32 @@ function PersonalCalibration({ sessions }) {
   )
 }
 
-function WeeklyTrends({ sessions }) {
-  const days = useMemo(() => getLast7Days(sessions), [sessions])
-  const MAX_H = 48
+function FocusTrends({ sessions }) {
+  const [range, setRange] = useState('week')
+  const [weekOffset, setWeekOffset] = useState(0)
+  const trend = useMemo(
+    () => buildHistoryTrend(sessions, { range, weekOffset }),
+    [sessions, range, weekOffset]
+  )
+  const buckets = trend.buckets
+  const MAX_H = 64
   const GOAL_PCT = 70
-  const goalLineBottom = Math.round((GOAL_PCT / 100) * MAX_H) // px from bottom of bar area
+  const BAR_AREA_H = 82
+  const goalLineBottom = Math.round((GOAL_PCT / 100) * MAX_H)
+  const showScores = buckets.length <= 14
+  const labelEvery = range === '30days'
+    ? 5
+    : range === 'all'
+      ? Math.max(1, Math.ceil(buckets.length / 12))
+      : 1
+  const minChartWidth = range === 'week' || range === 'year'
+    ? '100%'
+    : `${Math.max(640, buckets.length * (range === 'all' ? 40 : 28))}px`
+
+  const changeRange = (nextRange) => {
+    setRange(nextRange)
+    setWeekOffset(0)
+  }
 
   return (
     <div style={{
@@ -769,36 +764,95 @@ function WeeklyTrends({ sessions }) {
       boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
       marginBottom: 24,
     }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16, margin: '0 0 16px' }}>
-        Last 7 days
-      </p>
-      <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+          Focus trend
+        </p>
+        {range === 'week' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              aria-label="Previous week"
+              onClick={() => setWeekOffset(offset => offset - 1)}
+              style={{
+                width: 26, height: 26, borderRadius: 8,
+                border: '1px solid var(--line)', background: 'transparent',
+                color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >←</button>
+            <span style={{ minWidth: 126, textAlign: 'center', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
+              {trend.title}
+            </span>
+            <button
+              type="button"
+              aria-label="Next week"
+              disabled={!trend.canGoForward}
+              onClick={() => setWeekOffset(offset => Math.min(0, offset + 1))}
+              style={{
+                width: 26, height: 26, borderRadius: 8,
+                border: '1px solid var(--line)', background: 'transparent',
+                color: trend.canGoForward ? 'var(--text-secondary)' : 'var(--line-strong)',
+                cursor: trend.canGoForward ? 'pointer' : 'default', fontFamily: 'inherit',
+              }}
+            >→</button>
+          </div>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {trend.title}
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap' }}>
+        {HISTORY_TREND_RANGES.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={range === option.value}
+            onClick={() => changeRange(option.value)}
+            style={{
+              border: range === option.value ? '1px solid var(--ultra)' : '1px solid var(--line)',
+              borderRadius: 100, padding: '5px 12px',
+              fontSize: 11, fontWeight: 600,
+              background: range === option.value ? 'var(--ultra)' : 'transparent',
+              color: range === option.value ? '#fff' : 'var(--text-muted)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ position: 'relative', minWidth: minChartWidth }}>
         {/* Goal line at 70% */}
         <div style={{
           position: 'absolute',
           left: 0, right: 0,
-          bottom: 28 + goalLineBottom, // 28px = label height approx
+          bottom: 30 + goalLineBottom,
           borderTop: '1.5px dashed #94a3b8',
           zIndex: 1,
           pointerEvents: 'none',
         }}>
-          <span style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: 'var(--text-secondary)', fontWeight: 600 }}>70%</span>
+          <span style={{ position: 'absolute', right: 4, top: -10, fontSize: 9, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>70%</span>
         </div>
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {days.map((day, i) => {
-              const filled = day.avgFocus !== null
-              const h = filled ? Math.max(4, Math.round((day.avgFocus / 100) * MAX_H)) : 4
-              const color = filled ? focusColor(day.avgFocus) : 'var(--line)'
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: buckets.length > 14 ? 3 : 6 }}>
+            {buckets.map((bucket, i) => {
+              const filled = bucket.avgFocus !== null
+              const h = filled ? Math.max(4, Math.round((bucket.avgFocus / 100) * MAX_H)) : 4
+              const color = filled ? focusColor(bucket.avgFocus) : 'var(--line)'
               const tooltip = filled
-                ? `${day.label} — ${day.avgFocus}% avg, ${day.count} session${day.count !== 1 ? 's' : ''}`
-                : `${day.label} — no sessions`
+                ? `${bucket.dateLabel} — ${bucket.avgFocus}% avg, ${bucket.count} session${bucket.count !== 1 ? 's' : ''}`
+                : `${bucket.dateLabel} — ${bucket.count ? `${bucket.count} unmeasured session${bucket.count !== 1 ? 's' : ''}` : 'no sessions'}`
+              const showLabel = i % labelEvery === 0 || i === buckets.length - 1
               return (
-                <div key={i} title={tooltip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: filled ? 'var(--text-muted)' : 'transparent' }}>
-                    {filled ? `${day.avgFocus}%` : '0'}
+                <div key={bucket.key} title={tooltip} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ minHeight: 12, fontSize: 9, fontWeight: 600, color: filled && showScores ? 'var(--text-muted)' : 'transparent' }}>
+                    {filled && showScores ? `${bucket.avgFocus}%` : '0'}
                   </span>
-                  <div style={{ height: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
+                  <div style={{ height: BAR_AREA_H, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', width: '100%' }}>
                     <div style={{
                       width: '100%', height: h,
                       background: color,
@@ -807,33 +861,30 @@ function WeeklyTrends({ sessions }) {
                       transition: 'height 0.3s ease',
                     }} />
                   </div>
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>{day.label}</span>
-                  <span style={{ fontSize: 9, color: filled ? 'var(--line-strong)' : 'transparent', fontWeight: 500 }}>
-                    {filled ? day.count : '0'}
+                  <span style={{ minHeight: 14, fontSize: 9, color: showLabel ? 'var(--text-muted)' : 'transparent', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                    {showLabel ? bucket.label : '·'}
+                  </span>
+                  <span style={{ minHeight: 12, fontSize: 9, color: filled ? 'var(--line-strong)' : 'transparent', fontWeight: 500 }}>
+                    {filled ? bucket.count : '0'}
                   </span>
                 </div>
               )
             })}
           </div>
-          {/* Trend line SVG overlay */}
           {(() => {
-            const filledDays = days.map((d, i) => ({ ...d, i })).filter(d => d.avgFocus !== null)
-            if (filledDays.length < 2) return null
-            // Each day takes 1/7 of width; bar midpoint at (i + 0.5) / 7
-            // Bar top is at: 70 - h px from top of bar area (height=70)
-            // Label area below adds ~24px; score label above adds ~16px
-            // We place SVG over the bar area (height 70, positioned with top offset for score label ~16px)
-            const W = 100; const H = 70
-            const points = filledDays.map(d => {
-              const x = ((d.i + 0.5) / 7) * W
-              const barH = Math.max(4, Math.round((d.avgFocus / 100) * MAX_H))
-              const y = H - barH // midpoint top of bar
-              return `${x},${y}`
+            const filledBuckets = buckets.map((bucket, i) => ({ ...bucket, i })).filter(bucket => bucket.avgFocus !== null)
+            if (filledBuckets.length < 2) return null
+            const width = 100
+            const points = filledBuckets.map(bucket => {
+              const x = ((bucket.i + 0.5) / buckets.length) * width
+              const barH = Math.max(4, Math.round((bucket.avgFocus / 100) * MAX_H))
+              return `${x},${BAR_AREA_H - barH}`
             }).join(' ')
             return (
               <svg
-                style={{ position: 'absolute', top: 16, left: 0, width: '100%', height: 70, pointerEvents: 'none' }}
-                viewBox={`0 0 ${W} ${H}`}
+                aria-hidden="true"
+                style={{ position: 'absolute', top: 14, left: 0, width: '100%', height: BAR_AREA_H, pointerEvents: 'none' }}
+                viewBox={`0 0 ${width} ${BAR_AREA_H}`}
                 preserveAspectRatio="none"
               >
                 <polyline
@@ -845,15 +896,15 @@ function WeeklyTrends({ sessions }) {
                   strokeLinejoin="round"
                   strokeDasharray="3,2"
                 />
-                {filledDays.map(d => {
-                  const x = ((d.i + 0.5) / 7) * W
-                  const barH = Math.max(4, Math.round((d.avgFocus / 100) * MAX_H))
-                  const y = H - barH
-                  return <circle key={d.i} cx={x} cy={y} r="2" fill="#6366f1" opacity="0.7" />
+                {filledBuckets.map(bucket => {
+                  const x = ((bucket.i + 0.5) / buckets.length) * width
+                  const barH = Math.max(4, Math.round((bucket.avgFocus / 100) * MAX_H))
+                  return <circle key={bucket.key} cx={x} cy={BAR_AREA_H - barH} r="2" fill="#6366f1" opacity="0.7" />
                 })}
               </svg>
             )
           })()}
+          </div>
         </div>
       </div>
     </div>
@@ -863,7 +914,7 @@ function WeeklyTrends({ sessions }) {
 function getThisWeekSessions(sessions) {
   const start = new Date()
   start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - start.getDay())
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
   return sessions.filter(session => new Date(session.timestamp) >= start)
 }
 
@@ -1115,8 +1166,8 @@ export default function HistoryDashboard({ onClose }) {
         ) : (
           <>
             <WeeklySummary sessions={sessions} />
-            <WeeklyTrends sessions={sessions} />
-          <PersonalCalibration sessions={sessions} />
+            <FocusTrends sessions={sessions} />
+            <PersonalCalibration sessions={sessions} />
             <OverallStats sessions={sessions} />
 
             {/* Date filter pills */}
