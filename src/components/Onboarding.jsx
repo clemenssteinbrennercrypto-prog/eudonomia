@@ -101,6 +101,26 @@ export default function Onboarding({ onComplete }) {
     setTimeout(() => { setStep(next); setVisible(true) }, 220)
   }
 
+  // Why the camera failed decides what the user should do about it, and the
+  // remedies are not interchangeable: a denial needs System Settings and will
+  // NOT re-prompt on a second click, while a camera held by Zoom just needs the
+  // other app closed. One generic "try again" sent both down a dead end.
+  const cameraFailureMessage = (err) => {
+    switch (err?.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Camera access was denied. macOS will not ask a second time — allow Eudaimonia under System Settings › Privacy & Security › Camera, then come back.'
+      case 'NotReadableError':
+      case 'AbortError':
+        return 'Another app is using the camera. Quit it (Zoom, Teams, FaceTime, Photo Booth) and try again.'
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return 'No camera found. Connect one, then try again.'
+      default:
+        return 'The camera could not be started. Try again, or continue without it for now.'
+    }
+  }
+
   const handleEnableCamera = async () => {
     setError(null)
     setLoading(true)
@@ -111,10 +131,20 @@ export default function Onboarding({ onComplete }) {
       setLoading(false)
       setAwakenPhase('scanning')
       transitionTo(3) // → the awakening
-    } catch {
+    } catch (err) {
       setLoading(false)
-      setError('Camera access is needed to sense your focus. Allow it for Eudaimonia in System Settings, then try again.')
+      setError(cameraFailureMessage(err))
     }
+  }
+
+  // The way out. Without it this screen is a wall: onboarded is only stored on
+  // success, so a reflexive "Don't Allow" — or a camera Zoom happens to be
+  // holding — locks the user out of the app entirely, on the first interaction
+  // after install. Offered only once the camera has actually failed, so the
+  // happy path is still "grant it".
+  const handleContinueWithoutCamera = () => {
+    localStorage.setItem('eudaimonia_onboarded', 'true')
+    onComplete()
   }
 
   const slide = SLIDES[step] || SLIDES[0]
@@ -189,6 +219,19 @@ export default function Onboarding({ onComplete }) {
           >
             {loading ? 'Requesting camera…' : slide.cta}
           </button>
+
+          {error && step === 2 && (
+            <button
+              onClick={handleContinueWithoutCamera}
+              style={{
+                background: 'none', border: 'none', padding: '2px 6px', marginTop: -18,
+                fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer',
+                textDecoration: 'underline', textUnderlineOffset: 4,
+              }}
+            >
+              Continue without camera
+            </button>
+          )}
 
           <div style={{ display: 'flex', gap: 7 }}>
             {SLIDES.map((_, i) => (
