@@ -151,6 +151,19 @@ scoring or detection.**
    Separately, `irisH > 0` means eyes toward the user's RIGHT — the OPPOSITE
    convention. Scoring depends on that opposition. Do not "simplify" it without
    re-deriving from data.
+8. **The score bands are named constants and must stay separated.**
+   `FOCUSED_SCORE` (40) < `GOOD_STREAK_SCORE` (65) < `FLOW_SCORE` (72), all in
+   `attention.js`. `FOCUSED_SCORE` decides `focusedSeconds`, which IS the
+   reported focus percentage — history trends, calibration, the end screen and
+   the CSV export are all derived from it. Removing the energy profile replaced
+   all three with the literal `1`, so every second at score ≥ 1 counted as
+   focused and the metric stopped separating a good session from a bad one.
+   Nothing failed: no test touched them, and the downstream tests fabricate
+   `focusedSeconds` from a percentage instead of measuring it. The band tests in
+   `attention.test.js` now fail if any bar collapses — do not weaken them.
+   Note the bands do NOT protect against a dead camera: 68 (the no-data default)
+   clears `FOCUSED_SCORE`. That is what the frame heartbeat and `trackingFaulted`
+   are for; the two guards are independent and both are load-bearing.
 
 ---
 

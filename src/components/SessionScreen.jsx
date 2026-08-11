@@ -24,6 +24,9 @@ import {
 // used to be prose in CLAUDE.md are enforced there now.
 import {
   CALIBRATION_SECS,
+  FLOW_SCORE,
+  FOCUSED_SCORE,
+  GOOD_STREAK_SCORE,
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
@@ -33,6 +36,7 @@ import {
   computeThresholds,
   getCircadianFactor,
   headVariance,
+  isFocusedSecond,
 } from '../lib/attention'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
@@ -1930,7 +1934,7 @@ export default function SessionScreen({
     //   • No active distraction reason
     //   • Maintained for FLOW_STABLE_MS (90s)
     const flowConditions = !trackingUncertain &&
-      focusScoreRef.current >= 1 &&
+      focusScoreRef.current >= FLOW_SCORE &&
       fidgetVariance <= HEAD_DRIFT_THRESH * 0.5 &&
       primaryReason === 'focused'
     if (flowConditions) {
@@ -2159,8 +2163,8 @@ export default function SessionScreen({
       // ── Camera health ────────────────────────────────────────────────────
       // The scoring pipeline only runs from MediaPipe frames. If frames stop
       // (or never start), focusScoreRef stays frozen at its 68 default — and
-      // because 68 clears the energy-adjusted focus threshold, the loop below
-      // counted every second as "focused",
+      // because 68 clears FOCUSED_SCORE, the loop below counted every second
+      // as "focused",
       // producing a fabricated ~100% session for a camera that was never on.
       // A frame heartbeat catches every cause at once: denied permission,
       // camera busy, unplugged mid-session, blocked CDN, MediaPipe crash.
@@ -2214,7 +2218,7 @@ export default function SessionScreen({
       })
       setCalibProgress(1)
 
-      const focused = focusScoreRef.current >= 1
+      const focused = isFocusedSecond(focusScoreRef.current)
       if (preDriftRiskRef.current.active) {
         preDriftSecondsRef.current += 1
       }
@@ -2230,8 +2234,9 @@ export default function SessionScreen({
 
       const roundedScore = Math.round(focusScoreRef.current)
       const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
-      // Unbroken run at/above the energy-adjusted lock-in threshold.
-      if (roundedScore >= 1) goodStreakSecsRef.current += 1
+      // Unbroken run at/above the good-score bar. Counting anything lower lets a
+      // steadily mediocre session accumulate its way into Lock-in.
+      if (roundedScore >= GOOD_STREAK_SCORE) goodStreakSecsRef.current += 1
       else goodStreakSecsRef.current = 0
       const nextFocusPhase = classifyFocusPhase({
         elapsedSecs,

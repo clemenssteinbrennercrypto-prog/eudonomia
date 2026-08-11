@@ -37,6 +37,27 @@ export const RECOVERY_WINDOW_MS  = 120_000
 export const RAMP_STREAK_SECS    = 20   // unbroken seconds at/above the focused threshold → Ramp
 export const LOCK_IN_STREAK_SECS = 240  // …and 4 min of it → Lock-in
 
+// ── The score bands ──────────────────────────────────────────────────────────
+// The bars a live score has to clear. They were once returned by an energy
+// profile; that profile is gone (energy must not move the ruler — see AGENTS.md
+// §5), so they live here as plain constants, named and tested.
+//
+// They are named rather than inline because collapsing one is silent and
+// catastrophic: `focused` decides `focusedSeconds`, which IS the reported focus
+// percentage, and every downstream feature — history trends, calibration, the
+// end screen, the CSV export — is computed from it. When these three were
+// briefly replaced by the literal 1, every second of every session counted as
+// focused and the metric stopped telling a good session from a bad one.
+export const FOCUSED_SCORE     = 40  // a second counts toward focusedSeconds
+export const GOOD_STREAK_SCORE = 65  // …and toward the ramp / lock-in streak
+export const FLOW_SCORE        = 72  // flow needs "good", not merely "not drifting"
+
+/** Does this second count as focused? The one call site that defines the
+ *  headline metric, kept pure so a test can hold it in place. */
+export function isFocusedSecond(score) {
+  return Number.isFinite(score) && score >= FOCUSED_SCORE
+}
+
 export function clamp01(value) {
   return Math.max(0, Math.min(1, value))
 }

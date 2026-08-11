@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   CALIBRATION_SECS,
+  FLOW_SCORE,
+  FOCUSED_SCORE,
+  GOOD_STREAK_SCORE,
   LOCK_IN_STREAK_SECS,
   RAMP_STREAK_SECS,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
+  isFocusedSecond,
   classifyFocusPhase,
   classifyHorizontalAttention,
   computeThresholds,
@@ -224,5 +228,67 @@ describe('headVariance', () => {
   it('returns 0 rather than NaN without enough history', () => {
     expect(headVariance([])).toBe(0)
     expect(headVariance([{ x: 0.5, y: 0.5 }])).toBe(0)
+  })
+})
+
+// The score bands decide the only number the product actually reports. They
+// have collapsed once already: removing the energy profile replaced all three
+// with the literal 1, so every second at score >= 1 counted as focused and a
+// bad session became indistinguishable from a good one. Nothing failed — no
+// test touched them, and every downstream test fabricates focusedSeconds from a
+// percentage instead of measuring it.
+describe('the score bands stay separated', () => {
+  it('orders them: focused < good streak < flow', () => {
+    expect(FOCUSED_SCORE).toBeLessThan(GOOD_STREAK_SCORE)
+    expect(GOOD_STREAK_SCORE).toBeLessThan(FLOW_SCORE)
+  })
+
+  it('keeps every bar well clear of the score floor', () => {
+    // A bar near 0 makes every second qualify. That is the whole failure.
+    for (const bar of [FOCUSED_SCORE, GOOD_STREAK_SCORE, FLOW_SCORE]) {
+      expect(bar).toBeGreaterThan(30)
+    }
+  })
+
+  it('does not count a drifting second as focused', () => {
+    expect(isFocusedSecond(0)).toBe(false)
+    expect(isFocusedSecond(1)).toBe(false)
+    expect(isFocusedSecond(20)).toBe(false)
+    expect(isFocusedSecond(FOCUSED_SCORE)).toBe(true)
+  })
+
+  it('survives a score that never arrived', () => {
+    for (const junk of [null, undefined, NaN, 'high']) {
+      expect(isFocusedSecond(junk)).toBe(false)
+    }
+  })
+
+  it('still counts the 68 default — which is why the frame heartbeat matters', () => {
+    // With no camera frames the score sits frozen at its 68 default, and 68
+    // clears this bar. The threshold is therefore NOT what stops a fabricated
+    // 100% session; the frame heartbeat and trackingFaulted are. Do not remove
+    // them on the assumption that the band protects you.
+    expect(isFocusedSecond(68)).toBe(true)
+  })
+
+  it('never lets a steadily mediocre session accumulate into Lock-in', () => {
+    // Replays SessionScreen's accumulator: a second only extends the streak
+    // at/above GOOD_STREAK_SCORE. At 50 the user is above water and nothing
+    // more — ten minutes of that must not read as locked in.
+    const MEDIOCRE = 50
+    let streak = 0
+    for (let s = 0; s < 600; s++) {
+      if (MEDIOCRE >= GOOD_STREAK_SCORE) streak += 1
+      else streak = 0
+    }
+    expect(streak).toBe(0)
+    expect(classifyFocusPhase({
+      elapsedSecs: 600,
+      score: MEDIOCRE,
+      goodStreakSecs: streak,
+      msSinceDistraction: Infinity,
+      preDriftActive: false,
+      inFlow: false,
+    })).not.toBe('lock_in')
   })
 })

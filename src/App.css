@@ -415,6 +415,15 @@ body {
   text-transform: uppercase;
 }
 
+/* A quiet aside inside a field label — lowercase and unspaced so it reads as a
+   sentence rather than a second heading. */
+.field-note {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.72;
+}
+
 .text-input {
   width: 100%;
   padding: 13px 16px;
@@ -477,7 +486,9 @@ body {
 }
 
 .energy-btn {
-  min-height: 58px;
+  /* One line since the "gentler bar" hint was removed — it described scoring
+     behaviour that does not exist. */
+  min-height: 46px;
   padding: 9px 10px;
   border: 1.5px solid var(--line);
   border-radius: 12px;

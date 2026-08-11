@@ -66,10 +66,16 @@ function summariseDevices(devices) {
 }
 
 const DURATIONS = [15, 30, 60, 90]
+// No hints about "a gentler bar" here. Energy is recorded as CONTEXT and does
+// not move a single threshold — the labels used to promise "Full standard /
+// Normal read / Gentler bar", which described an energy-adjusted scoring
+// profile that was deliberately removed. One ruler every day is the point:
+// comparable history is worth more than a kind number. Energy colours how a
+// result is read afterwards (see EndScreen), never how it is measured.
 const ENERGY_LEVELS = [
-  { value: 'fresh', label: 'Fresh', hint: 'Full standard' },
-  { value: 'medium', label: 'Medium', hint: 'Normal read' },
-  { value: 'tired', label: 'Tired', hint: 'Gentler bar' },
+  { value: 'fresh', label: 'Fresh' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'tired', label: 'Tired' },
 ]
 
 export default function HomeScreen({
@@ -456,9 +462,9 @@ export default function HomeScreen({
           </div>
 
           <div className="field">
-            <label className="field-label">Energy</label>
+            <label className="field-label">Energy <span className="field-note">— recorded as context; the bar stays the same</span></label>
             <div className="energy-grid">
-              {ENERGY_LEVELS.map(({ value, label, hint }) => (
+              {ENERGY_LEVELS.map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
@@ -467,7 +473,6 @@ export default function HomeScreen({
                   className={`energy-btn${energyLevel === value ? ' active' : ''}`}
                 >
                   <span>{label}</span>
-                  <small>{hint}</small>
                 </button>
               ))}
             </div>
