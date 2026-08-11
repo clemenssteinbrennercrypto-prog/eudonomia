@@ -18,7 +18,12 @@ const SLIDES = [
   {
     kicker: 'How it works',
     title: 'It reads the\nsignals of focus',
-    body: 'Blink rate, eye openness, head position — turned into a live focus score. No video is recorded. No data leaves your device. Ever.',
+    // "No data leaves your device. Ever." was the old line. It was not true:
+    // the app asks GitHub for updates on launch and every five minutes, which
+    // sends an IP address. Naming what actually stays — the camera and the
+    // sessions — is both accurate and a stronger claim than an absolute one
+    // a single network call disproves. Keep it that way; see LegalModal.jsx.
+    body: 'Blink rate, eye openness, head position — turned into a live focus score. No video is ever recorded, and nothing from your camera or your sessions leaves your Mac.',
     cta: 'Continue',
   },
   {
