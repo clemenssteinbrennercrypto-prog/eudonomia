@@ -289,17 +289,33 @@ Working and verified: ultramarine design across the app, motion layer with
 `prefers-reduced-motion`, real 2D gaze tracking, camera fault detection and
 sleep/wake recovery, bundled offline MediaPipe, artifact tracking, output
 evidence in Rust, personal calibration, switchable goal-understanding providers.
+CI runs the unit tests on every push to `main` (job `test-build`, step "Run unit
+tests") — confirmed green 11 Aug 2026, so a red suite will be caught.
 
 Open, in rough priority order:
 
 1. **Real usage.** Calibration stays silent below 8 sessions and output evidence
    needs a nominated folder. Several features cannot be judged until they have
-   data. This matters more than the next feature.
-2. **Apple Developer Program** (€99/yr, individual — no company needed). Until
+   data. This matters more than the next feature. As of 11 Aug 2026 the stored
+   history holds ten sessions, none newer than 4 Aug — which is why a scoring
+   regression sat unnoticed for five days.
+2. **Impressum address.** `LegalModal.jsx` carries a `TODO(legal)`: § 5 ECG
+   requires a geographic address (street, number, postcode) and "Wien,
+   Österreich" is not one. Only Clemens can supply it. Launch blocker.
+3. **Apple Developer Program** (€99/yr, individual — no company needed). Until
    then builds are ad-hoc signed and Gatekeeper warns on first launch. The
    signing pipeline is already written and waiting on six `APPLE_*` secrets.
-3. **`npm test` in CI** — Stony added it to `companion-test.yml`; confirm it runs.
 4. **Splitting `SessionScreen.jsx`** — after launch, not before.
 5. **Windows port** — architecturally feasible (the Rust is ~1600 lines and
    macOS-specific only at the edges; the hosts-file technique is identical). The
    hard part is reading browser URLs without AppleScript. Wait for demand.
+
+Product weaknesses found 11 Aug 2026 and NOT yet addressed — these are
+decisions for Clemens, not bugs to fix unasked:
+
+- **The differentiator ships off.** A new user sees "0 focus apps · 0 blocked".
+  Blocking is the one thing competitors lack, and it is empty by default, behind
+  a config screen and an admin password. Most users will never see it work.
+- **Nothing brings the user back.** There is no notification, reminder or
+  scheduling anywhere in the codebase. A focus tracker without re-engagement is
+  a one-week app.
