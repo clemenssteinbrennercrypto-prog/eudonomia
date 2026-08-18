@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
-import { updateSession, loadSessions } from '../lib/storage'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { updateSession, loadSessions, loadContractSettings } from '../lib/storage'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
+import { deriveVerdict } from '../lib/sessionVerdict'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -378,6 +379,20 @@ function makeDebrief({
   return { headline, notes: notes.slice(0, 5), recommendations: recommendations.slice(0, 3), dominantPhase, phaseSeconds, alignment }
 }
 
+const VERDICT_COLORS = {
+  yes: 'var(--good)',
+  partly: 'var(--warn)',
+  no: 'var(--bad)',
+  unclear: 'var(--text-muted)',
+}
+
+const VERDICT_LABELS = {
+  yes: 'Matched your goal',
+  partly: 'Partly matched',
+  no: 'Did not match',
+  unclear: 'Not enough to tell',
+}
+
 export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   const {
     id,
@@ -409,6 +424,33 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     scoreMeasured        = true,
     trackingFaulted      = false,
   } = sessionData
+
+  // The verdict — did the work match the intention? Runs once, after the fact,
+  // and is allowed to come back empty: no model configured, evidence too thin,
+  // or the model failed all render as nothing. See sessionVerdict.js.
+  const [verdict, setVerdict] = useState(null)
+  const [verdictPending, setVerdictPending] = useState(false)
+  const verdictAskedRef = useRef(false)
+
+  useEffect(() => {
+    if (verdictAskedRef.current) return   // StrictMode double-mounts; only pay once
+    verdictAskedRef.current = true
+
+    const settings = loadContractSettings()
+    if (settings.provider !== 'local' && settings.provider !== 'cloud') return
+
+    let cancelled = false
+    setVerdictPending(true)
+    deriveVerdict(sessionData, {
+      provider: settings.provider,
+      model: settings.provider === 'cloud' ? settings.cloudModel : settings.localModel,
+      endpoint: settings.localEndpoint,
+      apiKey: settings.apiKey,
+    })
+      .then(result => { if (!cancelled) setVerdict(result) })
+      .finally(() => { if (!cancelled) setVerdictPending(false) })
+    return () => { cancelled = true }
+  }, [sessionData])
 
   const hasFocusMeasurement = scoreMeasured !== false &&
     (avgFocusScore != null || finalScore != null || (!trackingFaulted && timeline.length > 0))
@@ -510,6 +552,47 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           )}
           <h1 className="end-headline">{motivational(focusPct, distractionEvents, actualSeconds)}</h1>
         </div>
+
+        {/* Intention vs output. Absent when there is nothing honest to say. */}
+        {verdictPending && !verdict && (
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: -4 }}>
+            Reading the session…
+          </p>
+        )}
+        {verdict && (
+          <div style={{
+            width: '100%',
+            background: 'var(--surface)',
+            border: '1px solid var(--line)',
+            borderLeft: `3px solid ${VERDICT_COLORS[verdict.matched]}`,
+            borderRadius: 14,
+            padding: '16px 18px',
+            display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em',
+              textTransform: 'uppercase', color: VERDICT_COLORS[verdict.matched],
+            }}>
+              {VERDICT_LABELS[verdict.matched]}
+            </span>
+            <p style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text)', margin: 0, lineHeight: 1.45 }}>
+              {verdict.headline}
+            </p>
+            {verdict.reason && (
+              <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                {verdict.reason}
+              </p>
+            )}
+            {verdict.suggestion && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0', lineHeight: 1.55 }}>
+                Next time: {verdict.suggestion}
+              </p>
+            )}
+            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', opacity: 0.7, marginTop: 2 }}>
+              {verdict.source === 'cloud' ? 'Cloud model' : 'Local model'} · {verdict.confidence} confidence
+            </span>
+          </div>
+        )}
 
         {/* Timeline bar */}
         {timeline.length > 0 && (

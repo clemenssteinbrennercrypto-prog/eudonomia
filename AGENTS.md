@@ -101,7 +101,9 @@ src/
   lib/
     attention.js       (+test)  PURE scoring/gaze maths — the invariants live here
     sessionIntent.js   (+test)  activity classification, artifacts
+    modelClient.js              the ONLY place that talks to a model (transport)
     intentContract.js  (+test)  goal → expectations, switchable model providers
+    sessionVerdict.js  (+test)  did the work match the intention? (after a session)
     calibration.js     (+test)  what YOUR history says about how you work
     activityReceiver.js         talks to the companion over HTTP
     storage.js                  localStorage
@@ -201,6 +203,26 @@ duration — session length comes from the user's measured history.
 
 **The user's explicit rule outranks any inference.** Their own blocklist wins
 over any model's opinion about their goal.
+
+**Aggregate before a model sees a session.** `sessionVerdict.js`'s
+`buildVerdictInput()` is where cost and privacy turn out to be the same
+boundary. A raw session record is ~33,000 tokens and ~92% of that is the
+per-second `timeline` — data a model cannot use and would be billed for.
+Aggregating first brings it to ~1,200: a 27x cost difference, larger than the
+gap between the cheapest and most expensive model. The fields dropped for cost
+are exactly the ones carrying private content — window titles (`label`),
+title-derived artifact names (`byArtifact`), the watched folder path (`root`),
+changed file names (`changedNames`). What survives is app names, bare
+hostnames, durations and counts. Two test blocks nail this down; both were
+verified to fail when the leak is reintroduced. Do not enrich that payload
+without reading them.
+
+**A model that cannot judge says nothing.** `deriveVerdict()` returns null on
+the `keywords` provider rather than a cheap verdict, because keyword matching
+cannot weigh "40 minutes in Figma" against "write the intro chapter". Null is
+also what an absent model, a thin session and a failed call return — the end
+screen renders nothing in every case. An absent verdict costs the user nothing;
+a fabricated one costs trust.
 
 ### The one thing that leaves the device
 
