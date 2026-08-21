@@ -229,14 +229,6 @@ fn main() {
 
     activity::start_polling(state.clone(), session.clone(), debug.clone());
 
-    let server_state = AppState {
-        activity: state.clone(),
-        session: session.clone(),
-        debug: debug.clone(),
-        // No folder is watched until the UI nominates one for a session.
-        output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
-    };
-
     let current_build_timestamp = bundled_build_timestamp();
 
     tauri::Builder::default()
@@ -260,8 +252,17 @@ fn main() {
             quit_app
         ])
         .setup(move |app| {
+            let server_state = AppState {
+                activity: state.clone(),
+                session: session.clone(),
+                debug: debug.clone(),
+                companion_version: app.package_info().version.to_string(),
+                // No folder is watched until the UI nominates one for a session.
+                output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            };
+
             // HTTP server on the tauri-managed tokio runtime.
-            tauri::async_runtime::spawn(server::run(server_state.clone()));
+            tauri::async_runtime::spawn(server::run(server_state));
 
             let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia", true, None::<&str>)?;

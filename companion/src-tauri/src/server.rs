@@ -31,6 +31,9 @@ pub struct AppState {
     pub activity: SharedActivity,
     pub session: SharedSession,
     pub debug: SharedDebug,
+    /// Version from Tauri's merged runtime config. This is the version the
+    /// updater compares, which can intentionally differ from Cargo.toml.
+    pub companion_version: String,
     /// Opening snapshot of the watched project folder, if the user nominated
     /// one for this session. None means output evidence is simply off.
     pub output_baseline: Arc<Mutex<Option<OutputSnapshot>>>,
@@ -90,6 +93,18 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         return preflight().await;
     }
 
+    let body = debug_body(&state);
+
+    let response = (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response();
+    with_cors(response)
+}
+
+fn debug_body(state: &AppState) -> String {
     let activity = state
         .activity
         .lock()
@@ -117,7 +132,7 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
     let session_active = session.active;
     let session_end_ts = session.end_ts;
 
-    let body = serde_json::json!({
+    serde_json::json!({
         "sessionActive": session_active,
         "sessionState": session_state,
         "sessionEndTs": session_end_ts,
@@ -139,17 +154,9 @@ async fn debug(State(state): State<AppState>, method: Method) -> Response {
         "hostBlockActive": debug.host_block_active,
         "hostBlockError": debug.host_block_error,
         "helperInstalled": crate::blocking::helper_available(),
-        "companionVersion": env!("CARGO_PKG_VERSION"),
+        "companionVersion": state.companion_version,
     })
-    .to_string();
-
-    let response = (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        body,
-    )
-        .into_response();
-    with_cors(response)
+    .to_string()
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -421,4 +428,25 @@ pub async fn run(state: AppState) {
         serve_on(v4, router(state.clone())),
         serve_on(v6, router(state)),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{debug_body, AppState};
+
+    #[test]
+    fn debug_reports_the_tauri_app_version() {
+        let state = AppState {
+            activity: Default::default(),
+            session: Default::default(),
+            debug: Default::default(),
+            companion_version: "0.1.2608221200".to_string(),
+            output_baseline: Default::default(),
+        };
+
+        let body: serde_json::Value =
+            serde_json::from_str(&debug_body(&state)).expect("valid debug JSON");
+
+        assert_eq!(body["companionVersion"], "0.1.2608221200");
+    }
 }
