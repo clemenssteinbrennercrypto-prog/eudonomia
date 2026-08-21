@@ -42,9 +42,15 @@ Pushes to `main` use `.github/workflows/companion-test.yml` instead. That
 workflow refreshes and verifies the bundled UI, builds unsigned internal macOS
 artifacts, uploads them as workflow artifacts, and publishes updater artifacts
 to the moving `internal-test` prerelease using `TAURI_SIGNING_PRIVATE_KEY`.
-Test-channel builds use `src-tauri/tauri.test.conf.json`, so they poll
-`releases/download/internal-test/latest.json` instead of the production
-`releases/latest/download/latest.json` endpoint.
+Local and test-channel builds poll `releases/download/internal-test/latest.json`
+so the in-app update button follows the newest build from `main`. Production
+builds override that endpoint through `src-tauri/tauri.release.conf.json` and
+only install published production releases.
+
+The native updater also compares release publication time with the bundled UI's
+`builtAt` value. A numerically higher SemVer from an older channel is refused,
+so a local or CI build can never update back to an older interface merely
+because the two channels use different version schemes.
 
 This internal channel still needs Tauri updater signing, because Tauri refuses
 to install unsigned updater archives. It intentionally does not require Apple
@@ -69,13 +75,13 @@ workflows run `npm run refresh:companion-webui` followed by
 writes `companion/webui/build-info.json`, verifies relative bundled assets, and
 then swaps the bundle directory into place.
 
-The base Tauri config is internal-build friendly: unsigned builds do not create
-updater artifacts and do not opt into hardened runtime or entitlements. The
-test workflow adds `src-tauri/tauri.test.conf.json`, which enables updater
-artifacts and points at the internal channel. The production release workflow
-adds `src-tauri/tauri.release.conf.json`, which enables updater artifacts plus
-macOS hardened runtime and entitlements while preserving the production updater
-endpoint.
+The base Tauri config is internal-build friendly: unsigned builds use the
+internal updater channel, do not create updater artifacts, and do not opt into
+hardened runtime or entitlements. The test workflow adds
+`src-tauri/tauri.test.conf.json`, which enables updater artifacts. The
+production release workflow adds `src-tauri/tauri.release.conf.json`, which
+switches back to the production updater endpoint and enables updater artifacts,
+macOS hardened runtime, and entitlements.
 
 ## Build
 

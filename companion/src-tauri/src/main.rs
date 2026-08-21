@@ -17,7 +17,8 @@ mod server;
 use activity::{
     ActivityState, DebugState, SessionConfig, SharedActivity, SharedDebug, SharedSession,
 };
-use serde::Serialize;
+use semver::Version;
+use serde::{Deserialize, Serialize};
 use server::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -27,6 +28,36 @@ use tauri::{
 };
 
 const MAIN_LABEL: &str = "main";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BundledBuildInfo {
+    built_at: String,
+}
+
+fn bundled_build_timestamp() -> Option<i64> {
+    let info: BundledBuildInfo =
+        serde_json::from_str(include_str!("../../webui/build-info.json")).ok()?;
+    chrono::DateTime::parse_from_rfc3339(&info.built_at)
+        .ok()
+        .map(|date| date.timestamp())
+}
+
+fn should_install_update(
+    current_version: &Version,
+    release_version: &Version,
+    current_built_at: Option<i64>,
+    release_published_at: Option<i64>,
+) -> bool {
+    if release_version <= current_version {
+        return false;
+    }
+
+    match (current_built_at, release_published_at) {
+        (Some(current), Some(release)) => release > current,
+        _ => true,
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,11 +157,6 @@ async fn install_native_update(app: tauri::AppHandle) -> NativeUpdateInstallResu
             match update.download_and_install(|_, _| {}, || {}).await {
                 Ok(()) => {
                     app.restart();
-                    NativeUpdateInstallResult {
-                        installed: true,
-                        version: Some(version),
-                        error: None,
-                    }
                 }
                 Err(err) => NativeUpdateInstallResult {
                     installed: false,
@@ -160,7 +186,6 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.set_focus();
     }
 }
-
 
 /// Native folder picker for output evidence. Returns the chosen path, or None
 /// if the user cancelled. Only the path is returned — the companion reads
@@ -212,8 +237,21 @@ fn main() {
         output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
     };
 
+    let current_build_timestamp = bundled_build_timestamp();
+
     tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .default_version_comparator(move |current, release| {
+                    should_install_update(
+                        &current,
+                        &release.version,
+                        current_build_timestamp,
+                        release.pub_date.map(|date| date.unix_timestamp()),
+                    )
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             check_native_update,
@@ -258,4 +296,54 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running eudonomia");
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::should_install_update;
+    use semver::Version;
+
+    fn version(value: &str) -> Version {
+        Version::parse(value).expect("valid test version")
+    }
+
+    #[test]
+    fn rejects_a_higher_semver_published_before_the_current_ui() {
+        assert!(!should_install_update(
+            &version("0.1.2"),
+            &version("0.1.10"),
+            Some(200),
+            Some(100),
+        ));
+    }
+
+    #[test]
+    fn accepts_a_higher_semver_published_after_the_current_ui() {
+        assert!(should_install_update(
+            &version("0.1.2"),
+            &version("0.1.2608221200"),
+            Some(100),
+            Some(200),
+        ));
+    }
+
+    #[test]
+    fn never_accepts_a_lower_semver_even_with_a_newer_publish_date() {
+        assert!(!should_install_update(
+            &version("0.1.2608221200"),
+            &version("0.1.10"),
+            Some(100),
+            Some(200),
+        ));
+    }
+
+    #[test]
+    fn falls_back_to_semver_when_publish_dates_are_unavailable() {
+        assert!(should_install_update(
+            &version("0.1.2"),
+            &version("0.1.10"),
+            None,
+            None,
+        ));
+    }
 }

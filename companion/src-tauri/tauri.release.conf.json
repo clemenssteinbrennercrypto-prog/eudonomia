@@ -1,4 +1,11 @@
 {
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/clemenssteinbrennercrypto-prog/eudonomia/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "createUpdaterArtifacts": true,
     "macOS": {
