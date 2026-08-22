@@ -1,13 +1,14 @@
 // AppleScript-based activity polling.
 //
 // Every 3 seconds we ask macOS which app is frontmost (and, if it's a known
-// browser, which URL the active tab shows) and store the result in a shared
-// ActivityState that the HTTP server exposes on /status.
+// browser, which URL the active tab shows), store the result in shared state,
+// and emit it directly to the bundled Tauri WebView.
 
 use serde::Serialize;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ActivityState {
@@ -42,7 +43,7 @@ pub struct DebugState {
 
 pub type SharedDebug = Arc<Mutex<DebugState>>;
 
-/// Blocking configuration pushed by the bundled UI via POST /session.
+/// Blocking configuration pushed by the bundled UI through a Tauri command.
 /// While a session is active, blocked apps get hidden and blocked browser
 /// domains get redirected away — enforcement lives in `enforce_blocking`.
 #[derive(Debug, Clone, Default)]
@@ -61,7 +62,7 @@ pub struct SessionConfig {
     /// Whether an /etc/hosts block is currently applied, and for which domains.
     /// These track the real state of the file (not the requested config) so the
     /// reconcile loop only prompts for admin on an actual transition. A fresh
-    /// POST /session must preserve these — never reset them blindly.
+    /// Session updates must preserve these — never reset them blindly.
     pub host_block_applied: bool,
     pub applied_domains: Vec<String>,
 }
@@ -153,7 +154,7 @@ fn should_hide_app(
     }
 }
 
-/// Failsafe, mirroring the browser extension's rule: if the web app dies
+/// Failsafe: if the bundled WebView dies
 /// without clearing the session flag, blocking must stop on its own once the
 /// planned session end (+ grace) has passed — never block indefinitely.
 const BLOCK_GRACE_MS: u64 = 2 * 60 * 1000;
@@ -519,7 +520,11 @@ fn reconcile_host_blocking(session: &SharedSession, debug: &SharedDebug) {
     }
 }
 
-fn poll_once(state: &SharedActivity, session: &SharedSession, debug: &SharedDebug) {
+fn poll_once(
+    state: &SharedActivity,
+    session: &SharedSession,
+    debug: &SharedDebug,
+) -> Option<ActivityState> {
     let poll_ts = now_ms();
     if let Ok(mut d) = debug.lock() {
         d.last_poll_ts = poll_ts;
@@ -530,7 +535,7 @@ fn poll_once(state: &SharedActivity, session: &SharedSession, debug: &SharedDebu
     reconcile_host_blocking(session, debug);
 
     let Some((app, window)) = frontmost_app_and_window(debug) else {
-        return;
+        return None;
     };
 
     let url = if BROWSER_APPS.contains(&app.as_str()) {
@@ -542,22 +547,33 @@ fn poll_once(state: &SharedActivity, session: &SharedSession, debug: &SharedDebu
 
     enforce_blocking(session, debug, &app, domain.as_deref());
 
-    if let Ok(mut guard) = state.lock() {
-        *guard = ActivityState {
-            app,
-            window,
-            url,
-            domain,
-            ts: now_ms(),
-        };
-    }
+    let activity = ActivityState {
+        app,
+        window,
+        url,
+        domain,
+        ts: now_ms(),
+    };
+    let mut guard = state.lock().ok()?;
+    *guard = activity.clone();
+    Some(activity)
 }
 
 /// Spawn the polling loop. AppleScript via `osascript` is blocking, so the
 /// loop runs on a dedicated OS thread rather than a tokio task.
-pub fn start_polling(state: SharedActivity, session: SharedSession, debug: SharedDebug) {
+pub fn start_polling(state: crate::native::NativeState, app: AppHandle) {
     std::thread::spawn(move || loop {
-        poll_once(&state, &session, &debug);
+        let session_before_poll = crate::native::session_snapshot(&state);
+        if let Some(activity) = poll_once(&state.activity, &state.session, &state.debug) {
+            let _ = app.emit(crate::native::ACTIVITY_UPDATED_EVENT, activity);
+        }
+        let session_after_poll = crate::native::session_snapshot(&state);
+        if session_after_poll != session_before_poll {
+            let _ = app.emit(
+                crate::native::SESSION_STATE_CHANGED_EVENT,
+                session_after_poll,
+            );
+        }
         std::thread::sleep(Duration::from_secs(3));
     });
 }

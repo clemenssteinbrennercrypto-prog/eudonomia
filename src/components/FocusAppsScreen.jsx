@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  fetchCompanionDebug,
-  getActivitySourceStatus,
   getLastActivity,
-  installCompanionHelper,
   isActivityConnected,
-  pushCompanionSession,
-  startActivityPolling,
-  stopActivityPolling,
+  startActivityUpdates,
+  stopActivityUpdates,
 } from '../lib/activityReceiver'
+import {
+  fetchCompanionDebug,
+  installCompanionHelper,
+  pushCompanionSession,
+} from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
@@ -631,7 +632,6 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [strictMode, setStrictMode] = useState(() => loadStrictMode())
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
-  const [activitySources, setActivitySources] = useState(() => getActivitySourceStatus())
   const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
@@ -648,19 +648,17 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   )
 
   useEffect(() => {
-    startActivityPolling((nextActivity) => {
+    startActivityUpdates((nextActivity) => {
       setActivity(nextActivity)
-      setActivitySources(getActivitySourceStatus())
       setActivityConnected(isActivityConnected())
     })
     const heartbeat = setInterval(() => {
       setActivity(getLastActivity())
-      setActivitySources(getActivitySourceStatus())
       setActivityConnected(isActivityConnected())
     }, 1000)
     return () => {
       clearInterval(heartbeat)
-      stopActivityPolling()
+      stopActivityUpdates()
     }
   }, [])
 
@@ -763,16 +761,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     testTimerRef.current = setTimeout(stopTestBlocking, 60_000)
   }
 
-  const activityRuntimeLabel = activitySources.primarySource === 'companion'
-    ? 'Native Companion'
-    : activitySources.primarySource === 'extension'
-      ? 'Legacy browser extension fallback'
-      : 'Native Companion'
+  const activityRuntimeLabel = 'Native Companion'
   const currentActivityValue = activityConnected
     ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity')
-    : activitySources.extensionConnected && !activitySources.companionConnected
-      ? 'Extension fallback seen, Companion not connected'
-      : 'Waiting for Companion activity'
+    : 'Waiting for Companion activity'
 
   return (
     <div className="screen-center" style={{ background: 'var(--bg)' }}>
@@ -1085,11 +1077,6 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             }}>
               {currentActivityValue}
             </div>
-            {activitySources.primarySource === 'extension' && (
-              <div style={{ marginTop: 4, color: 'var(--warn)', fontSize: 11, fontWeight: 750, lineHeight: 1.35 }}>
-                Legacy fallback only. Start the Companion app for native tracking and blocking.
-              </div>
-            )}
           </div>
           <span style={{
             border: `1px solid ${activityPreview.kind === 'focus' ? 'rgba(47,227,168,0.20)' : activityPreview.kind === 'distraction' ? 'rgba(255,77,106,0.20)' : 'var(--line)'}`,

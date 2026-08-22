@@ -94,28 +94,6 @@ pub fn install_helper() -> Result<(), String> {
     }
 }
 
-/// Uninstall the helper + sudoers rule (one admin prompt). Clears any block
-/// first so removal can't strand a block.
-pub fn uninstall_helper() -> Result<(), String> {
-    let _ = clear_block();
-    let shell =
-        format!("rm -f {HELPER_PATH} {SUDOERS_PATH}; rmdir /Library/Eudonomia 2>/dev/null || true");
-    let apple = format!(
-        r#"do shell script "{}" with administrator privileges"#,
-        shell.replace('\\', "\\\\").replace('"', "\\\"")
-    );
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(&apple)
-        .output()
-        .map_err(|e| format!("osascript: {e}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
-}
-
 /// Remove any existing Eudonomia block (between the markers, inclusive),
 /// leaving the rest of the file untouched. Idempotent.
 pub fn strip_eudonomia_block(content: &str) -> String {

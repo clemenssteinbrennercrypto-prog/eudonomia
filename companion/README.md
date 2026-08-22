@@ -1,19 +1,17 @@
 # Eudonomia (native macOS app)
 
-A native macOS app (Tauri) that hosts the [Eudonomia](https://eudaimonia-psi.vercel.app)
-focus tracker in its own window and enforces distraction blocking on the whole
-machine. Running the UI in-app avoids every browser↔localhost problem (Brave
-shields, IPv6, mixed content).
+A native macOS app (Tauri) that embeds the Eudonomia React interface in its own
+WebView and enforces distraction blocking on the whole machine. The native app
+is the product; there is no standalone browser-app runtime.
 
 ## What it does
 
 - **Hosts the UI** in its own window from a **locally bundled** copy of the web
-  app (`companion/webui`) — no browser, no extension. Loading the UI from the
-  app's own local origin is what makes the in-app WebView able to reach the
-  local companion server; a remote (https) origin is blocked from talking to
-  localhost. A menubar tray gives quick open/quit.
+  app (`companion/webui`) — no browser and no extension. A menubar tray gives
+  quick open/quit.
 - **Detects the frontmost app + browser tab URL** every 3 seconds via AppleScript
-  (Safari, Chrome, Arc, Brave) and serves it on `http://127.0.0.1:7331/status`.
+  (Safari, Chrome, Arc, Brave) and emits the result only to the bundled WebView
+  through a Tauri event.
 - **Blocks distractions during a session:**
   - Websites → `/etc/hosts`, system-wide across **all** browsers. A one-time
     privileged helper (installed with a single admin prompt) lets this run
@@ -101,11 +99,22 @@ The app shows a small build badge in the lower-left corner, for example
 
 ## How it connects
 
-The in-app WebView talks to the companion's local server on
-`http://127.0.0.1:7331` (CORS + Private-Network headers, bound on IPv4 and IPv6).
-Response shape:
+The bundled WebView and Rust core communicate in-process through Tauri IPC.
+No local HTTP server or listening socket is part of the app.
 
-```json
-{ "app": "Safari", "window": "YouTube", "url": "https://www.youtube.com/…",
-  "domain": "youtube.com", "ts": 1720000000000 }
-```
+Commands:
+
+- `get_activity_status` — latest frontmost app/browser metadata
+- `get_companion_debug` — native protection and permission status
+- `get_companion_session` / `set_companion_session` — session and blocking state
+- `install_blocking_helper` — one-time privileged helper installation
+- `set_output_watch_folder` / `get_output_delta` — metadata-only output evidence
+
+Events:
+
+- `activity-updated` — fresh activity metadata after a native poll
+- `session-state-changed` — accepted session changes and native expiry
+
+Private window titles, URLs, activity state, and watched-folder metadata stay
+inside the Tauri process/WebView boundary. The Vite browser development view has
+no fallback transport and receives none of this data.

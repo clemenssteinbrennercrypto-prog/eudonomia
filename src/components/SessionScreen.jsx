@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
-  fetchCompanionSession,
   getLastActivity,
   isActivityConnected,
-  pushCompanionSession,
-  fetchOutputDelta,
-  setOutputWatchFolder,
-  setExtensionFallbackSession,
-  startActivityPolling,
-  stopActivityPolling,
+  startActivityUpdates,
+  stopActivityUpdates,
 } from '../lib/activityReceiver'
+import {
+  fetchCompanionSession,
+  fetchOutputDelta,
+  listenCompanionSession,
+  pushCompanionSession,
+  setOutputWatchFolder,
+} from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, loadFocusAppsConfig, loadOutputFolder, loadStrictMode } from '../lib/storage'
 import { deriveContract } from '../lib/intentContract'
@@ -1025,8 +1027,6 @@ export default function SessionScreen({
     if (session.sessionState === 'active' || session.sessionState === 'paused') {
       companionSessionHadActiveRef.current = true
     }
-    setExtensionFallbackSession(false)
-
     if (sessionEndedRef.current) return true
 
     if (session.sessionState === 'paused' && !isPausedRef.current) {
@@ -1090,8 +1090,7 @@ export default function SessionScreen({
       sessionState,
       ...companionBlockingRef.current,
     })
-    const companionOwnsSession = applyCompanionSession(companionSession)
-    setExtensionFallbackSession(active && !companionOwnsSession, endTs)
+    applyCompanionSession(companionSession)
     return companionSession
   }, [applyCompanionSession])
 
@@ -1136,13 +1135,13 @@ export default function SessionScreen({
     pushBlocking()
     const blockingInterval = setInterval(pushBlocking, 30_000)
 
-    startActivityPolling((activity) => {
+    startActivityUpdates((activity) => {
       activityRef.current = activity
       setActivityStatus(activity)
     })
     return () => {
       clearInterval(blockingInterval)
-      stopActivityPolling()
+      stopActivityUpdates()
       pushBlockingState(false, sessionEndedRef.current ? 'ended' : 'inactive')
     }
   }, [duration, pushBlockingState])
@@ -1159,7 +1158,6 @@ export default function SessionScreen({
   const endSession = useCallback((completed = false) => {
     if (sessionEndedRef.current) return
     sessionEndedRef.current = true
-    setExtensionFallbackSession(false)
     pushBlockingState(false, 'ended')
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
@@ -1221,8 +1219,10 @@ export default function SessionScreen({
   }, [duration, energyLevel, onEnd, pushBlockingState, stopAmbient])
 
   useEffect(() => {
-    const syncCompanionSession = async () => {
-      const companionSession = await fetchCompanionSession()
+    let cancelled = false
+    let unlisten = () => {}
+
+    const syncCompanionSession = (companionSession) => {
       if (!companionSession || sessionEndedRef.current) return
       if (companionSession.sessionState === 'inactive' || companionSession.sessionState === 'ended') {
         // Only honour an end signal the companion produced AFTER our latest
@@ -1243,9 +1243,18 @@ export default function SessionScreen({
       applyCompanionSession(companionSession)
     }
 
-    syncCompanionSession()
-    const interval = setInterval(syncCompanionSession, 3000)
-    return () => clearInterval(interval)
+    fetchCompanionSession().then(session => {
+      if (!cancelled) syncCompanionSession(session)
+    })
+    listenCompanionSession(syncCompanionSession).then(stop => {
+      if (cancelled) stop()
+      else unlisten = stop
+    })
+
+    return () => {
+      cancelled = true
+      unlisten()
+    }
   }, [applyCompanionSession, endSession, pushBlockingState])
 
   // ── Session contract ──────────────────────────────────────────────────────

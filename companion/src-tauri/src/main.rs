@@ -2,24 +2,22 @@
 //
 // A normal windowed app that loads the bundled Eudonomia UI in its own WebView,
 // plus a menubar tray for quick access and quit. Loading the UI in the app's own
-// window sidesteps every browser↔localhost problem (Brave shields,
-// IPv6, mixed content): the WebView talks to the in-process companion server on
-// 127.0.0.1:7331 directly. Two background workers run for the app's lifetime:
-// the AppleScript activity poller and the axum HTTP server.
+// window. The WebView talks to Rust only through Tauri commands and events, so
+// private activity data is never exposed through a local network port.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod activity;
 mod blocking;
+mod native;
 mod output;
-mod server;
 
 use activity::{
     ActivityState, DebugState, SessionConfig, SharedActivity, SharedDebug, SharedSession,
 };
+use native::NativeState;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use server::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -227,8 +225,6 @@ fn main() {
     let session: SharedSession = Arc::new(Mutex::new(SessionConfig::default()));
     let debug: SharedDebug = Arc::new(Mutex::new(DebugState::default()));
 
-    activity::start_polling(state.clone(), session.clone(), debug.clone());
-
     let current_build_timestamp = bundled_build_timestamp();
 
     tauri::Builder::default()
@@ -247,12 +243,19 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             check_native_update,
+            native::get_activity_status,
+            native::get_companion_debug,
+            native::get_companion_session,
+            native::set_companion_session,
+            native::install_blocking_helper,
+            native::set_output_watch_folder,
+            native::get_output_delta,
             pick_output_folder,
             install_native_update,
             quit_app
         ])
         .setup(move |app| {
-            let server_state = AppState {
+            let native_state = NativeState {
                 activity: state.clone(),
                 session: session.clone(),
                 debug: debug.clone(),
@@ -261,8 +264,8 @@ fn main() {
                 output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
             };
 
-            // HTTP server on the tauri-managed tokio runtime.
-            tauri::async_runtime::spawn(server::run(server_state));
+            app.manage(native_state.clone());
+            activity::start_polling(native_state, app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia", true, None::<&str>)?;

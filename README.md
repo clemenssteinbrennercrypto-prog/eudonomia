@@ -9,7 +9,7 @@ and route users to the app download.
 - **Companion:** Tauri macOS app in `companion/`
 - **UI:** React + Vite, bundled into `companion/webui`
 - **Attention tracking:** MediaPipe in the local WebView
-- **Activity/blocking:** native Companion service on localhost:7331
+- **Activity/blocking:** in-process Rust commands and Tauri events
 - **Marketing site:** Vercel surface for product explanation and downloads
 
 ## Local Development
@@ -19,8 +19,10 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) for UI iteration. For the
-actual product runtime, build/run the Companion from `companion/src-tauri`.
+Open the Vite development URL for isolated UI iteration only. It is not a
+standalone product and native activity, output evidence, helper installation,
+and blocking intentionally stay unavailable there. For the actual product
+runtime, build/run the Companion from `companion/src-tauri`.
 
 ## Native Companion
 
@@ -50,9 +52,8 @@ The native app displays a small build/version badge. Use it, or inspect
 `companion/webui/build-info.json`, to confirm a fresh build contains the commit
 or workflow run you expected.
 
-The old browser extension remains in `extension/` as a legacy fallback for
-experiments, but it is not the product path and should not be presented as
-required setup.
+The old browser extension source remains archived in `extension/`, but it is not
+built, wired into the app, or a supported product path.
 
 ## Website Deployment (Vercel)
 

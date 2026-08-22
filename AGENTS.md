@@ -12,13 +12,15 @@ pull` before you start and before you push.**
 
 ## 1. What this is
 
-A focus tracker with teeth. Two halves:
+A focus tracker with teeth. It is one native macOS product with two layers:
 
-- **Web app** (`src/`) — React 18 + Vite, plain JSX, no TypeScript. Reads the
+- **Embedded UI** (`src/`) — React 18 + Vite, plain JSX, no TypeScript. Bundled
+  into the Tauri WebView; it is not a standalone browser product. Reads the
   webcam via MediaPipe FaceMesh and turns attention into a live focus score.
-- **Native macOS companion** (`companion/src-tauri/`) — Tauri 2 + Rust. Hosts the
-  web UI in its own window, watches which app/site is frontmost, and **blocks**
-  distracting apps and sites during a session.
+- **Native core** (`companion/src-tauri/`) — Tauri 2 + Rust. Hosts the UI,
+  watches which app/site is frontmost, and **blocks** distracting apps and sites
+  during a session. Rust and React communicate only through Tauri commands and
+  events; there is no local HTTP service.
 
 The differentiator is that last word. Every competitor measures. This one
 intervenes. Keep that asymmetry in mind when weighing features.
@@ -37,8 +39,8 @@ anywhere. There is exactly one deliberate exception, described in §5.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm test           # vitest, 79 tests — must stay green
+npm run dev        # isolated UI development only; native features unavailable
+npm test           # vitest, 126 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -46,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # 19 tests
+cargo test         # 26 tests
 cargo check
 ```
 
@@ -105,13 +107,14 @@ src/
     intentContract.js  (+test)  goal → expectations, switchable model providers
     sessionVerdict.js  (+test)  did the work match the intention? (after a session)
     calibration.js     (+test)  what YOUR history says about how you work
-    activityReceiver.js         talks to the companion over HTTP
+    activityReceiver.js         consumes native activity commands/events
+    nativeCompanion.js   (+test) the only React ↔ Rust IPC boundary
     storage.js                  localStorage
 companion/src-tauri/src/
     activity.rs        frontmost app/tab via AppleScript, app hiding
     blocking.rs        website blocking via /etc/hosts + privileged helper
+    native.rs          Tauri commands, events and shared native state
     output.rs          output evidence — did the work actually move
-    server.rs          axum HTTP server on 127.0.0.1:7331
 ```
 
 **`SessionScreen.jsx` is 2800 lines with ~125 pieces of state.** It is the known
@@ -291,8 +294,9 @@ navigator.mediaDevices.getUserMedia = async () => {
 - **Never guess at visual taste.** Ask for a reference or a concrete direction.
 - **He writes German; the codebase and commits are English.** Replying in German
   is welcome.
-- **Do not kill the running companion** without checking `/debug` for an active
-  session first, and say so before you do.
+- **Do not kill the running companion** without checking the native Protection
+  screen for an inactive session and disabled app/website blocking first, and
+  say so before you do.
 
 ### Commits
 
