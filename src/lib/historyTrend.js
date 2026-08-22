@@ -12,8 +12,11 @@ export function hasMeasuredFocus(session) {
 }
 
 export function sessionFocusPct(session) {
+  const measuredDenominator = Number.isFinite(session?.measuredSeconds) && session.measuredSeconds > 0
+    ? session.measuredSeconds
+    : session?.actualSeconds
   return hasMeasuredFocus(session)
-    ? Math.round((session.focusedSeconds / session.actualSeconds) * 100)
+    ? Math.round((session.focusedSeconds / measuredDenominator) * 100)
     : null
 }
 

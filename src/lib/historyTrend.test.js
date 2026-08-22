@@ -23,6 +23,15 @@ describe('session focus measurement', () => {
     expect(hasMeasuredFocus(faulted)).toBe(false)
     expect(sessionFocusPct(faulted)).toBeNull()
   })
+
+  it('does not turn an unmeasured camera gap into distracted time', () => {
+    const partial = sessionAt(NOW, 50, {
+      actualSeconds: 3600,
+      measuredSeconds: 1800,
+      focusedSeconds: 900,
+    })
+    expect(sessionFocusPct(partial)).toBe(50)
+  })
 })
 
 describe('history trend ranges', () => {

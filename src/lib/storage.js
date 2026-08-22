@@ -3,9 +3,15 @@
 // Max 100 sessions kept (oldest purged first)
 
 import { getDomainFromAppPreset, getDomainsFromAppPreset } from './focusAppsConfig'
+import {
+  addSessionToFocusLedger,
+  emptyFocusLedger,
+  removeSessionFromFocusLedger,
+} from './focusMetric'
 
 const STORAGE_KEY = 'eudaimonia_sessions'
 const MAX_SESSIONS = 100
+export const FOCUS_LEDGER_KEY = 'eudaimonia_focus_daily_v1'
 export const FOCUS_APPS_KEY = 'eudaimonia_focus_apps'
 export const FOCUS_MODE_KEY = 'eudaimonia_focus_mode_enabled'
 
@@ -76,6 +82,7 @@ export function saveSession(sessionData) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
   } catch {}
+  saveFocusLedger(addSessionToFocusLedger(loadFocusLedger(), entry))
   return entry
 }
 
@@ -92,6 +99,7 @@ export function deleteSession(id) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
   } catch {}
+  saveFocusLedger(removeSessionFromFocusLedger(loadFocusLedger(), id))
 }
 
 export function updateSession(id, patch) {
@@ -103,6 +111,24 @@ export function updateSession(id, patch) {
 
 export function clearAllSessions() {
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(FOCUS_LEDGER_KEY)
+}
+
+export function loadFocusLedger() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FOCUS_LEDGER_KEY) || 'null')
+    return parsed?.schemaVersion === 1 && parsed.days && typeof parsed.days === 'object'
+      ? parsed
+      : emptyFocusLedger()
+  } catch {
+    return emptyFocusLedger()
+  }
+}
+
+function saveFocusLedger(ledger) {
+  try {
+    localStorage.setItem(FOCUS_LEDGER_KEY, JSON.stringify(ledger))
+  } catch {}
 }
 
 export function loadFocusAppsConfig() {

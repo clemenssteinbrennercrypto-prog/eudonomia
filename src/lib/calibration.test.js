@@ -53,6 +53,11 @@ describe('refuses to speak from thin data', () => {
     expect(isUsable(session({ mins: 10 }))).toBe(true)
   })
 
+  it('does not treat an unmeasured camera gap as poor focus', () => {
+    const partial = session({ mins: 60, pct: 25, extra: { measuredSeconds: 1800, focusedSeconds: 900 } })
+    expect(timeOfDayFit([partial, partial, partial]).ranked[0].focusPct).toBe(50)
+  })
+
   it('does not rank times of day from one session each', () => {
     const spread = [
       session({ hour: 7 }), session({ hour: 10 }), session({ hour: 13 }),

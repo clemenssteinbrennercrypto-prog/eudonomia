@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { updateSession, loadSessions, loadContractSettings } from '../lib/storage'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 import { deriveVerdict } from '../lib/sessionVerdict'
+import { sessionFocusPct } from '../lib/historyTrend'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -11,7 +12,7 @@ function fmt(seconds) {
 }
 
 function motivational(pct, distractionEvents, actualSeconds) {
-  if (pct == null) return 'No focus score saved.'
+  if (pct == null) return 'No focus measurement saved.'
   if (pct >= 85) return 'Peak focus. Outstanding.'
   if (pct >= 75) return 'Strong session.'
   if (pct >= 65 && distractionEvents === 0) return 'Clean run.'
@@ -398,6 +399,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     id,
     actualSeconds        = 0,
     focusedSeconds       = 0,
+    measuredSeconds      = null,
     distractionEvents    = 0,
     preDriftEvents       = 0,
     preDriftSeconds      = 0,
@@ -454,8 +456,11 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   const hasFocusMeasurement = scoreMeasured !== false &&
     (avgFocusScore != null || finalScore != null || (!trackingFaulted && timeline.length > 0))
-  const focusPct = hasFocusMeasurement && actualSeconds > 0
-    ? Math.round((focusedSeconds / actualSeconds) * 100)
+  const focusDenominator = Number.isFinite(measuredSeconds) && measuredSeconds > 0
+    ? measuredSeconds
+    : actualSeconds
+  const focusPct = hasFocusMeasurement && focusDenominator > 0
+    ? Math.round((focusedSeconds / focusDenominator) * 100)
     : null
   const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
   const [actualCompleted, setActualCompleted] = useState(completedText || '')
@@ -491,10 +496,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     if (focusPct == null) return false
     const prevSessions = loadSessions().filter(s => s.id !== id)
     if (prevSessions.length === 0) return false
-    const prevMax = Math.max(...prevSessions.map(s => {
-      const a = s.actualSeconds || 0
-      return a > 0 ? Math.round(((s.focusedSeconds || 0) / a) * 100) : 0
-    }))
+    const prevMax = Math.max(...prevSessions.map(s => sessionFocusPct(s) ?? 0))
     return focusPct > prevMax
   }, [id, focusPct])
   const [copied, setCopied] = useState(false)
@@ -502,7 +504,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
 
   function copySummary() {
     const durationMin = Math.round(actualSeconds / 60)
-    const focusText = focusPct == null ? 'focus score not measured' : `${focusPct}% focused`
+    const focusText = focusPct == null ? 'focus not measured' : `${focusPct}% of measured time above threshold`
     const text = `Eudaimonia session: ${task || 'Focus'} — ${durationMin}min, ${focusText}, ${distractionEvents} alerts`
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
@@ -647,7 +649,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <span className="stat-value stat-value-large" style={{ fontSize: 72, color: focusPct == null ? 'var(--text-muted)' : focusPct >= 60 ? 'var(--good)' : focusPct >= 40 ? 'var(--warn)' : 'var(--bad)' }}>
               {focusPct == null ? '--' : `${focusPct}%`}
             </span>
-            <span className="stat-label">{focusPct == null ? 'focus not measured' : 'focused'}</span>
+            <span className="stat-label">{focusPct == null ? 'focus not measured' : 'time above threshold'}</span>
             {isPersonalBest && (
               <span style={{ fontSize: 12, color: 'var(--good)', fontWeight: 600, marginTop: 4, display: 'block' }}>
                 New best 🏆
@@ -679,7 +681,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           <div className="stat-divider" />
           <div className="stat">
             <span className="stat-value" style={{ color: 'var(--bad)' }}>
-              {Math.round(Math.max(0, actualSeconds - focusedSeconds) / 60)}m
+              {Math.round(Math.max(0, focusDenominator - focusedSeconds) / 60)}m
             </span>
             <span className="stat-label">distracted time</span>
           </div>

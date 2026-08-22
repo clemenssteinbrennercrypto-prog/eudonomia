@@ -10,6 +10,8 @@
 // becomes a horoscope. Every claim carries the sample it rests on, and no claim
 // is made below the thresholds below.
 
+import { sessionFocusPct } from './historyTrend'
+
 /** Nothing at all is claimed under this many usable sessions. */
 export const MIN_SESSIONS = 8
 /** A bucket (time of day, duration) needs this many before it can be compared. */
@@ -43,8 +45,7 @@ export function isUsable(session) {
 }
 
 export function focusPct(session) {
-  if (!session?.actualSeconds) return null
-  return Math.round((session.focusedSeconds / session.actualSeconds) * 100)
+  return sessionFocusPct(session)
 }
 
 /** Sessions are stamped when they end, so the start is where the work happened. */

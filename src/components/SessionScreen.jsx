@@ -40,6 +40,7 @@ import {
   headVariance,
   isFocusedSecond,
 } from '../lib/attention'
+import { ATTENTION_SCORING_VERSION } from '../lib/focusMetric'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -919,6 +920,8 @@ export default function SessionScreen({
 
   // ── Session stats refs ────────────────────────────────────────────────────
   const focusedSecondsRef    = useRef(0)
+  const measuredSecondsRef   = useRef(0)
+  const scoreSumRef          = useRef(0)
   const distractionEventsRef = useRef(0)
   const preDriftEventsRef    = useRef(0)
   const preDriftSecondsRef   = useRef(0)
@@ -1162,22 +1165,26 @@ export default function SessionScreen({
     stopAmbient()
     // If currently paused, include the ongoing pause interval in the total
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
-    const actualSeconds = Math.round((Date.now() - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
-    const snapshots = timelineSnapshotsRef.current
+    const endedAt = Date.now()
+    const actualSeconds = Math.round((endedAt - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     // A session whose camera never delivered usable frames has no measurement:
     // focusScoreRef is still sitting at its 68 default. Reporting that as a score
     // wrote a fabricated "68% focus" into history. Both consumers (HomeScreen,
     // HistoryDashboard) already treat null as "no score", so say nothing instead
     // of saying something false.
-    const hasMeasurement = snapshots.length > 0
+    const measuredSeconds = measuredSecondsRef.current
+    const hasMeasurement = measuredSeconds > 0
     const trackingFaulted = !!cameraFaultRef.current
     const avgFocusScore = hasMeasurement
-      ? Math.round(snapshots.reduce((sum, s) => sum + (s.score || 0), 0) / snapshots.length)
+      ? Math.round(scoreSumRef.current / measuredSeconds)
       : null
     const focusPhaseSeconds = { ...focusPhaseSecondsRef.current }
     const dominantFocusPhase = Object.entries(focusPhaseSeconds)
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
     onEnd({
+      startedAt:            startTimeRef.current,
+      endedAt,
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
       plannedDuration:      duration,
       energyLevel,
       actualSeconds,
@@ -1186,6 +1193,8 @@ export default function SessionScreen({
       distractionEvents:    distractionEventsRef.current,
       preDriftEvents:       preDriftEventsRef.current,
       preDriftSeconds:      preDriftSecondsRef.current,
+      measuredSeconds,
+      scoreSum:             scoreSumRef.current,
       focusedSeconds:       focusedSecondsRef.current,
       longestFocusedStreak: longestStreakRef.current,
       peakFocusStreak:      longestStreakRef.current,
@@ -2255,6 +2264,8 @@ export default function SessionScreen({
         preDriftActive: preDriftRiskRef.current.active,
         inFlow: inFlowRef.current,
       })
+      measuredSecondsRef.current += 1
+      scoreSumRef.current += roundedScore
       focusPhaseSecondsRef.current[nextFocusPhase] = (focusPhaseSecondsRef.current[nextFocusPhase] || 0) + 1
       if (nextFocusPhase !== focusPhaseRef.current) {
         focusPhaseTransitionsRef.current.push({

@@ -150,7 +150,9 @@ export function buildVerdictInput(session) {
     goal,
     plannedMinutes: nonNegative(session.plannedDuration),
     actualMinutes: Math.round(actualSeconds / 60),
-    focusPct: focusMeasured ? Math.round((session.focusedSeconds / actualSeconds) * 100) : null,
+    focusPct: focusMeasured
+      ? Math.round((session.focusedSeconds / (session.measuredSeconds || actualSeconds)) * 100)
+      : null,
     observedMinutes: Math.round(observedSeconds / 60),
     activities,
     output,

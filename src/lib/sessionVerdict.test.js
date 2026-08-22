@@ -130,6 +130,15 @@ describe('it refuses rather than guessing', () => {
     expect(buildVerdictPrompt(input)).not.toContain('Attention:')
   })
 
+  it('does not describe an unmeasured camera gap as distracted time', () => {
+    const input = buildVerdictInput(sessionFixture({
+      actualSeconds: 3600,
+      measuredSeconds: 1800,
+      focusedSeconds: 900,
+    }))
+    expect(input.focusPct).toBe(50)
+  })
+
   it('survives records written before these fields existed', () => {
     for (const junk of [null, undefined, 'text', 42, []]) {
       expect(buildVerdictInput(junk)).toBeNull()

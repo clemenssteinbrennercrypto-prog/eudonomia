@@ -11,6 +11,7 @@ import HistoryDashboard from './components/HistoryDashboard'
 import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
+import { withSessionFocusMetric } from './lib/focusMetric'
 
 const isNativeRuntime = () => Boolean(window.__TAURI__?.core?.invoke)
 
@@ -208,7 +209,7 @@ export default function App() {
   const handleStart = () => setScreen('session')
 
   const handleEnd = useCallback((data) => {
-    const enriched = { ...data, task, goal, energyLevel, tags }
+    const enriched = withSessionFocusMetric({ ...data, task, goal, energyLevel, tags })
     const saved = saveSession(enriched)
     setSessionData(saved)
     setScreen('end')

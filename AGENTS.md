@@ -169,6 +169,13 @@ scoring or detection.**
    Note the bands do NOT protect against a dead camera: 68 (the no-data default)
    clears `FOCUSED_SCORE`. That is what the frame heartbeat and `trackingFaulted`
    are for; the two guards are independent and both are load-bearing.
+9. **Derived Focus Score history is versioned, never silently reinterpreted.**
+   `focusMetric.js` summarizes the live signal without changing it. Its V1
+   parameters are explicit product estimates, not research constants. Only
+   sessions tagged with the matching attention-scoring version enter the daily
+   ledger; legacy sessions stay absent rather than being guessed. Review V1
+   after 30 valid measured days and create V2 for changed parameters instead of
+   rewriting stored V1 days.
 
 ---
 

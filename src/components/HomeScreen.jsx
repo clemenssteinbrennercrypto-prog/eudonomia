@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import LegalModal from './LegalModal'
 import { suggestNextSession } from '../lib/calibration'
-import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadSessions } from '../lib/storage'
+import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadFocusLedger, loadSessions } from '../lib/storage'
+import { hasMeasuredFocus, sessionFocusPct } from '../lib/historyTrend'
+import { FOCUS_METRIC_V1, buildFocusPeriod } from '../lib/focusMetric'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
@@ -27,12 +29,6 @@ function computeStreak() {
     else if (i > 0) break
   }
   return streak
-}
-
-function hasMeasuredFocus(session) {
-  if (!session || session.scoreMeasured === false) return false
-  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return false
-  return session.actualSeconds > 0 && session.focusedSeconds != null
 }
 
 // Summarise devices array into a human-readable string
@@ -105,11 +101,19 @@ export default function HomeScreen({
   // there are enough sessions to say anything honest.
   const timing = useMemo(() => suggestNextSession(loadSessions()), [])
   const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
+  const todayFocus = useMemo(
+    () => buildFocusPeriod(loadFocusLedger(), { range: 'day' }),
+    []
+  )
+  const todayMeasuredMinutes = Math.round(todayFocus.measuredSeconds / 60)
+  const todayQualification = Math.min(100, Math.round(
+    (todayMeasuredMinutes / FOCUS_METRIC_V1.fullDayMinutes) * 100
+  ))
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
     const last3 = sessions.slice(0, 3).filter(hasMeasuredFocus)
     if (last3.length === 0) return null
-    const avg = last3.reduce((sum, s) => sum + Math.round((s.focusedSeconds / s.actualSeconds) * 100), 0) / last3.length
+    const avg = last3.reduce((sum, s) => sum + sessionFocusPct(s), 0) / last3.length
     return Math.round(avg)
   }, [])
   const recentTask = useMemo(() => {
@@ -136,11 +140,8 @@ export default function HomeScreen({
     if (sessions.length === 0) return null
     const s = sessions[0]
     if (!hasMeasuredFocus(s)) return null
-    const focusPct = s.avgFocusScore != null
-      ? s.avgFocusScore
-      : s.focusedSeconds != null
-        ? Math.round((s.focusedSeconds / s.actualSeconds) * 100)
-        : null
+    const isEfficiency = s.sessionEfficiency != null
+    const focusPct = isEfficiency ? s.sessionEfficiency : sessionFocusPct(s)
     if (focusPct === null) return null
     const minsAgo = Math.round((Date.now() - (s.timestamp || 0)) / 60000)
     let timeStr
@@ -150,7 +151,7 @@ export default function HomeScreen({
       const d = Math.round(minsAgo / 1440)
       timeStr = d === 1 ? 'yesterday' : `${d} days ago`
     }
-    return { focusPct, timeStr }
+    return { focusPct, timeStr, label: isEfficiency ? 'efficiency' : 'above threshold' }
   }, [])
 
   const durationSuggestion = useMemo(() => {
@@ -158,9 +159,7 @@ export default function HomeScreen({
     if (sessions.length === 0) return null
     const last = sessions[0]
     if (!hasMeasuredFocus(last)) return null
-    const focusPct = last.focusedSeconds != null
-      ? Math.round((last.focusedSeconds / last.actualSeconds) * 100)
-      : null
+    const focusPct = sessionFocusPct(last)
     if (focusPct === null) return null
     const lastDurMin = Math.round(last.actualSeconds / 60)
     if (focusPct > 80) {
@@ -216,7 +215,7 @@ export default function HomeScreen({
                 fontSize: 12, fontWeight: 600, color: 'var(--warn)',
                 letterSpacing: '0.02em',
               }}>
-                🔥 {streak} day streak{avgFocus !== null ? ` · avg ${avgFocus}%` : ''}
+                🔥 {streak} day streak{avgFocus !== null ? ` · avg ${avgFocus}% above threshold` : ''}
               </span>
             </div>
           )}
@@ -246,13 +245,70 @@ export default function HomeScreen({
                 fontSize: 11, fontWeight: 500, color: 'var(--text-muted)',
                 letterSpacing: '0.01em',
               }}>
-                Last session: {lastSessionPill.focusPct}% focus · {lastSessionPill.timeStr}
+                Last session: {lastSessionPill.focusPct} {lastSessionPill.label} · {lastSessionPill.timeStr}
               </span>
             </div>
           )}
         </div>
 
         <div className="home-form">
+
+          <button
+            type="button"
+            onClick={onShowHistory}
+            aria-label="Open Focus Score history"
+            style={{
+              width: '100%', padding: '18px',
+              background: 'rgba(122,152,255,0.06)',
+              border: '1px solid var(--line)', borderRadius: 16,
+              cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }}>
+              <div>
+                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 5 }}>
+                  Today&apos;s Focus Score
+                </span>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontSize: 46, lineHeight: 1, fontWeight: 300, letterSpacing: '-0.04em', color: todayFocus.score == null ? 'var(--text-muted)' : 'var(--ultra-bright)' }}>
+                    {todayFocus.score ?? '--'}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>/ 100</span>
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Details →</span>
+            </div>
+
+            {todayFocus.score == null ? (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '13px 0 0' }}>
+                Starts after 5 measured minutes with at least 80% tracking coverage.
+              </p>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 16 }}>
+                  {[
+                    ['Efficiency', todayFocus.efficiency],
+                    ['Deep focus', `${Math.round(todayFocus.deepFocusMinutes)}m`],
+                    ['Measured', `${todayMeasuredMinutes}m`],
+                  ].map(([label, value]) => (
+                    <span key={label} style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{value}</span>
+                      <span style={{ display: 'block', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginTop: 2 }}>{label}</span>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 10, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    <span>Full-day qualification</span>
+                    <span>{todayMeasuredMinutes} / {FOCUS_METRIC_V1.fullDayMinutes} min</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.10)' }}>
+                    <div style={{ width: `${todayQualification}%`, height: '100%', borderRadius: 999, background: 'var(--ultra-bright)' }} />
+                  </div>
+                </div>
+              </>
+            )}
+          </button>
 
           {/* Device summary bar */}
           {devices.length > 0 ? (
