@@ -210,6 +210,28 @@ export function addSessionToFocusLedger(ledger, session) {
   }
 }
 
+// Recover sessions that never made it into the ledger — an older build that
+// predates this ledger entirely, a save that raced a crash, whatever the
+// cause. Only rescues sessions that already carry valid, version-matched v1
+// measurement data (attentionScoringVersion, measuredSeconds, scoreSum,
+// focusPhases); it re-derives nothing about them and estimates nothing for
+// sessions that never tracked properly in the first place — the same "no
+// fabricated scores" guarantee the rest of this module keeps. A session
+// already present under its day is left untouched, so this is safe to run
+// on every app start.
+export function backfillFocusLedger(ledger, sessions) {
+  let next = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
+  for (const session of sessions || []) {
+    if (!session?.id) continue
+    const day = localDayKey(session.startedAt ?? session.timestamp)
+    const alreadyRecorded = day &&
+      Object.prototype.hasOwnProperty.call(next.days[day]?.sessions || {}, session.id)
+    if (alreadyRecorded) continue
+    next = addSessionToFocusLedger(next, withSessionFocusMetric(session))
+  }
+  return next
+}
+
 export function removeSessionFromFocusLedger(ledger, sessionId) {
   const safe = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
   let changed = false

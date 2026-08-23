@@ -3,6 +3,7 @@ import {
   ATTENTION_SCORING_VERSION,
   FOCUS_METRIC_V1,
   addSessionToFocusLedger,
+  backfillFocusLedger,
   buildFocusPeriod,
   calculateDailyFocus,
   deriveSessionFocusMetric,
@@ -33,6 +34,30 @@ function measuredSession({
     focusPhases: { seconds: phaseSeconds(measuredSeconds, phase) },
   }
   return { ...base, ...deriveSessionFocusMetric(base) }
+}
+
+// Unlike measuredSession, this stops short of deriveSessionFocusMetric — it
+// models what an older build (one that predates the ledger, or predates
+// focusMetricVersion/sessionEfficiency entirely) would have actually saved:
+// real measurement fields, no derived ones.
+function rawSession({
+  id = 'session-1',
+  startedAt = new Date(2026, 7, 17, 9).getTime(),
+  measuredSeconds = 3600,
+  actualSeconds = measuredSeconds + 20,
+  efficiency = 80,
+  phase = 'lock_in',
+} = {}) {
+  return {
+    id,
+    startedAt,
+    timestamp: startedAt + actualSeconds * 1000,
+    attentionScoringVersion: ATTENTION_SCORING_VERSION,
+    actualSeconds,
+    measuredSeconds,
+    scoreSum: measuredSeconds * efficiency,
+    focusPhases: { seconds: phaseSeconds(measuredSeconds, phase) },
+  }
 }
 
 function dailyEntry({ minutes, efficiency, phase = 'lock_in', id = 'x' }) {
@@ -114,6 +139,36 @@ describe('daily focus formula', () => {
         broken: { version: 1, measuredSeconds: 60, scoreSum: 60_000, deepFocusSeconds: 60 },
       },
     })).toBeNull()
+  })
+})
+
+describe('backfilling the ledger from already-stored sessions', () => {
+  it('recovers a valid session an older build never added to the ledger', () => {
+    const raw = rawSession({ id: 'never-ledgered' })
+    const ledger = backfillFocusLedger(emptyFocusLedger(), [raw])
+    expect(ledger.days['2026-08-17'].sessions['never-ledgered']).toBeTruthy()
+    expect(calculateDailyFocus(ledger.days['2026-08-17']).score).not.toBeNull()
+  })
+
+  it('does not touch a session already present under its day', () => {
+    const raw = rawSession({ id: 'present', efficiency: 80 })
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), measuredSession({ id: 'present', efficiency: 80 }))
+    const beforeValue = ledger.days['2026-08-17'].sessions['present']
+    ledger = backfillFocusLedger(ledger, [raw])
+    expect(ledger.days['2026-08-17'].sessions['present']).toBe(beforeValue)
+  })
+
+  it('estimates nothing for a session that never tracked properly', () => {
+    const tooShort = rawSession({ id: 'too-short', measuredSeconds: 100, actualSeconds: 120 })
+    const ledger = backfillFocusLedger(emptyFocusLedger(), [tooShort])
+    expect(ledger.days).toEqual({})
+  })
+
+  it('is a no-op over an already-complete ledger', () => {
+    const raw = rawSession({ id: 'complete' })
+    const first = backfillFocusLedger(emptyFocusLedger(), [raw])
+    const second = backfillFocusLedger(first, [raw])
+    expect(second).toEqual(first)
   })
 })
 

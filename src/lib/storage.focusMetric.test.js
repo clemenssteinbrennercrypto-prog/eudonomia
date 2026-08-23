@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   FOCUS_LEDGER_KEY,
+  backfillFocusLedgerFromSessions,
   clearAllSessions,
   deleteSession,
   loadFocusLedger,
@@ -48,6 +49,28 @@ describe('focus ledger persistence', () => {
     clearAllSessions()
     expect(loadSessions()).toEqual([])
     expect(localStorage.getItem(FOCUS_LEDGER_KEY)).toBeNull()
+  })
+
+  it('backfills a session an older build saved without ever writing to the ledger', () => {
+    // Simulates a build older than the ledger itself: the raw session made it
+    // to eudaimonia_sessions (e.g. via a direct write, standing in for a pre-
+    // ledger saveSession), but focusMetricVersion/sessionEfficiency and any
+    // ledger entry were never produced.
+    const raw = {
+      id: 'pre-ledger-build',
+      startedAt: new Date(2026, 7, 17, 9).getTime(),
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      actualSeconds: 620,
+      measuredSeconds: 600,
+      scoreSum: 48_000,
+      focusPhases: { seconds: { arrival: 0, ramp: 0, lock_in: 600, fade: 0, recovery: 0, drift: 0 } },
+    }
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([raw]))
+    expect(loadFocusLedger().days).toEqual({})
+
+    const ledger = backfillFocusLedgerFromSessions()
+    expect(ledger.days['2026-08-17'].sessions['pre-ledger-build']).toBeTruthy()
+    expect(loadFocusLedger().days['2026-08-17'].sessions['pre-ledger-build']).toBeTruthy()
   })
 
   it('keeps daily contributions after detailed history reaches its 100-session cap', () => {
