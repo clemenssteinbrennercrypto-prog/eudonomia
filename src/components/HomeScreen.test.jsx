@@ -1,5 +1,5 @@
 import React from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import HomeScreen from './HomeScreen'
 import { saveSession } from '../lib/storage'
@@ -29,6 +29,16 @@ function renderHome() {
 beforeEach(() => {
   globalThis.localStorage = new MemoryStorage()
   globalThis.window = { __TAURI__: null }
+  // Pinned well clear of local midnight — see HistoryDashboard.test.jsx for
+  // why an unmocked Date.now() here is flaky: a session "122 minutes ago"
+  // can land in yesterday's ledger bucket if the suite runs shortly after
+  // midnight, same day-boundary trap a real user hits with a late session.
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2026, 7, 4, 14, 0, 0))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('HomeScreen Focus Score', () => {

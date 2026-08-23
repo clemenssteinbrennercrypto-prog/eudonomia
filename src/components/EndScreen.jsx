@@ -3,6 +3,7 @@ import { updateSession, loadSessions, loadContractSettings } from '../lib/storag
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 import { deriveVerdict } from '../lib/sessionVerdict'
 import { sessionFocusPct } from '../lib/historyTrend'
+import { describeFocusMetricRejection } from '../lib/focusMetric'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -425,6 +426,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     finalScore           = null,
     scoreMeasured        = true,
     trackingFaulted      = false,
+    focusMetricRejection = null,
+    measurementCoverage  = null,
   } = sessionData
 
   // The verdict — did the work match the intention? Runs once, after the fact,
@@ -686,6 +689,23 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             <span className="stat-label">distracted time</span>
           </div>
         </div>
+
+        {focusMetricRejection && (() => {
+          const notice = describeFocusMetricRejection(focusMetricRejection, { measuredSeconds, measurementCoverage })
+          if (!notice) return null
+          return (
+            <div style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'rgba(251,146,60,0.08)',
+              border: '1px solid rgba(251,146,60,0.25)',
+              borderRadius: 14,
+              padding: '12px 16px',
+              fontSize: 12.5, lineHeight: 1.5, color: 'var(--warn)',
+            }}>
+              Not counted toward your daily focus score: {notice}
+            </div>
+          )
+        })()}
 
         {/* Session debrief */}
         {actualSeconds > 0 && (

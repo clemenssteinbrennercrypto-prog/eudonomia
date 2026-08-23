@@ -1,5 +1,5 @@
 import React from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import HistoryDashboard from './HistoryDashboard'
 import { saveSession } from '../lib/storage'
@@ -14,6 +14,19 @@ class MemoryStorage {
 
 beforeEach(() => {
   globalThis.localStorage = new MemoryStorage()
+  // Pinned well clear of local midnight: a "started 122 minutes ago" session
+  // computed from a real, unmocked Date.now() would land in yesterday's
+  // ledger bucket whenever the suite happens to run in the ~2h after
+  // midnight, failing this test for a reason that has nothing to do with
+  // the code under test. Same day-boundary trap a user hits with a late
+  // session checked just after midnight — pin time so the test is
+  // deterministic instead of hiding that edge case.
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2026, 7, 4, 14, 0, 0))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('HistoryDashboard focus score runtime', () => {
