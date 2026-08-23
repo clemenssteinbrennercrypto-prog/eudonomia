@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
@@ -8,7 +8,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
-import { loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
+import { backfillFocusLedgerFromSessions, loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 import { withSessionFocusMetric } from './lib/focusMetric'
@@ -189,6 +189,15 @@ export default function App() {
   const [devices,  setDevicesRaw] = useState(loadDevices)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const updateStatus = useAppUpdateStatus()
+
+  // Runs once per app start, before Home's first read of the ledger — catches
+  // up any already-stored session that qualifies for the score but never made
+  // it into the ledger (e.g. saved by a build older than this ledger).
+  const backfilledRef = useRef(false)
+  if (!backfilledRef.current) {
+    backfilledRef.current = true
+    backfillFocusLedgerFromSessions()
+  }
 
   const setDevices = useCallback((val) => {
     setDevicesRaw(prev => {

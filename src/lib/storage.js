@@ -5,6 +5,7 @@
 import { getDomainFromAppPreset, getDomainsFromAppPreset } from './focusAppsConfig'
 import {
   addSessionToFocusLedger,
+  backfillFocusLedger,
   emptyFocusLedger,
   removeSessionFromFocusLedger,
 } from './focusMetric'
@@ -129,6 +130,17 @@ function saveFocusLedger(ledger) {
   try {
     localStorage.setItem(FOCUS_LEDGER_KEY, JSON.stringify(ledger))
   } catch {}
+}
+
+// Catches up the ledger with any currently-stored session that has valid v1
+// measurement data but never made it in (an older build that predates the
+// ledger, a save that raced a crash). Cheap and idempotent — safe to call on
+// every app start. See backfillFocusLedger for what it will and won't touch.
+export function backfillFocusLedgerFromSessions() {
+  const before = loadFocusLedger()
+  const after = backfillFocusLedger(before, loadSessions())
+  if (after !== before) saveFocusLedger(after)
+  return after
 }
 
 export function loadFocusAppsConfig() {
