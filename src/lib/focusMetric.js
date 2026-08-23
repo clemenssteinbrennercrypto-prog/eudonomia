@@ -143,6 +143,27 @@ export function withSessionFocusMetric(session) {
   return { ...session, ...deriveSessionFocusMetric(session) }
 }
 
+// A session's headline "focus %" (fraction of TRACKED time above threshold)
+// says nothing about how much of the session was tracked at all, so a
+// session can read as a great result while still being silently excluded
+// from the (coverage-gated) daily score. Give that silence a reason.
+export function describeFocusMetricRejection(reason, { measuredSeconds, measurementCoverage } = {}) {
+  const measuredMinutes = Number.isFinite(measuredSeconds) ? Math.round(measuredSeconds / 60) : 0
+  const coveragePct = Number.isFinite(measurementCoverage) ? Math.round(measurementCoverage * 100) : null
+  switch (reason) {
+    case 'insufficient_duration':
+      return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
+    case 'low_coverage':
+      return `Camera tracking covered only ${coveragePct ?? '<80'}% of this session (sleep, lid close, lost permission, or a dropped feed all count) — the daily score needs at least ${Math.round(FOCUS_METRIC_V1.minCoverage * 100)}%.`
+    case 'legacy_scoring_version':
+      return 'This session used an older scoring version, so it is not counted toward your daily score.'
+    case 'invalid_measurement':
+      return "This session's tracking data didn't validate, so it wasn't counted toward your daily score."
+    default:
+      return null
+  }
+}
+
 export function emptyFocusLedger() {
   return { schemaVersion: 1, days: {} }
 }

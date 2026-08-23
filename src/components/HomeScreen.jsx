@@ -3,7 +3,7 @@ import LegalModal from './LegalModal'
 import { suggestNextSession } from '../lib/calibration'
 import { loadOutputFolder, pickOutputFolder, saveOutputFolder, loadFocusAppsConfig, loadFocusLedger, loadSessions } from '../lib/storage'
 import { hasMeasuredFocus, sessionFocusPct } from '../lib/historyTrend'
-import { FOCUS_METRIC_V1, buildFocusPeriod } from '../lib/focusMetric'
+import { FOCUS_METRIC_V1, buildFocusPeriod, describeFocusMetricRejection, localDayKey } from '../lib/focusMetric'
 
 const QUICK_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
@@ -109,6 +109,18 @@ export default function HomeScreen({
   const todayQualification = Math.min(100, Math.round(
     (todayMeasuredMinutes / FOCUS_METRIC_V1.fullDayMinutes) * 100
   ))
+  // A session can look great on its own End screen and still be silently
+  // excluded from today's score (coverage/duration gate) — tell the user
+  // why instead of leaving an unexplained "--".
+  const todayRejectionNote = useMemo(() => {
+    if (todayFocus.score != null) return null
+    const todayKey = localDayKey(Date.now())
+    const rejected = loadSessions().find(
+      s => localDayKey(s.startedAt ?? s.timestamp) === todayKey && s.focusMetricRejection
+    )
+    if (!rejected) return null
+    return describeFocusMetricRejection(rejected.focusMetricRejection, rejected)
+  }, [todayFocus.score])
   const avgFocus = useMemo(() => {
     const sessions = loadSessions()
     const last3 = sessions.slice(0, 3).filter(hasMeasuredFocus)
@@ -281,7 +293,7 @@ export default function HomeScreen({
 
             {todayFocus.score == null ? (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '13px 0 0' }}>
-                Starts after 5 measured minutes with at least 80% tracking coverage.
+                {todayRejectionNote ?? 'Starts after 5 measured minutes with at least 80% tracking coverage.'}
               </p>
             ) : (
               <>
