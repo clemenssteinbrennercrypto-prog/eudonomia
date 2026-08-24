@@ -4,6 +4,7 @@ import {
   FOCUS_METRIC_V1,
   addSessionToFocusLedger,
   backfillFocusLedger,
+  buildFocusMetricDiagnostics,
   buildFocusPeriod,
   calculateDailyFocus,
   deriveSessionFocusMetric,
@@ -150,6 +151,31 @@ describe('session focus metric refusals', () => {
     expect(recoverLegacyTimelineMeasurement(legacy)).toMatchObject({
       measuredSeconds: 600,
       focusMeasurementSource: 'legacy_timeline_v1',
+    })
+  })
+})
+
+describe('privacy-safe focus diagnostics', () => {
+  it('reports measurement structure without private session content', () => {
+    const session = {
+      ...legacyTimelineSession(),
+      task: 'PRIVATE TASK',
+      goal: 'PRIVATE GOAL',
+      timeline: legacyTimelineSession().timeline.map(sample => ({
+        ...sample,
+        activity: { label: 'PRIVATE WINDOW TITLE' },
+      })),
+      outputEvidence: { root: '/PRIVATE/PATH', changedNames: ['PRIVATE_FILE.txt'] },
+    }
+    const diagnostic = buildFocusMetricDiagnostics([session], emptyFocusLedger())
+    const serialized = JSON.stringify(diagnostic)
+    expect(serialized).not.toContain('PRIVATE')
+    expect(diagnostic.sessions[0]).toMatchObject({
+      phaseSeconds: 600,
+      validScoreSamples: 120,
+      recoveredFromLegacyTimeline: true,
+      currentDerivedRejection: null,
+      ledgerState: 'missing',
     })
   })
 })

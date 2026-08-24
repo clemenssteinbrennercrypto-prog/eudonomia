@@ -140,6 +140,60 @@ export function recoverLegacyTimelineMeasurement(session) {
   }
 }
 
+export function buildFocusMetricDiagnostics(sessions, ledger) {
+  const safeLedger = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
+  return {
+    diagnosticVersion: 1,
+    focusMetricVersion: FOCUS_METRIC_V1.version,
+    attentionScoringVersion: ATTENTION_SCORING_VERSION,
+    sessions: (sessions || []).map((session, index) => {
+      const phases = phaseTotals(session?.focusPhases?.seconds)
+      const validSamples = Array.isArray(session?.timeline)
+        ? session.timeline.filter(sample =>
+          finiteNonNegative(sample?.second) &&
+          Number.isFinite(sample?.score) &&
+          sample.score >= 0 && sample.score <= 100)
+        : []
+      const seconds = [...new Set(validSamples.map(sample => sample.second))].sort((a, b) => a - b)
+      const spanSeconds = seconds.length
+        ? seconds[seconds.length - 1] - seconds[0] + FOCUS_METRIC_V1.legacyTimelineSampleSeconds
+        : 0
+      const recovered = recoverLegacyTimelineMeasurement(session)
+      const derived = deriveSessionFocusMetric(session)
+      const day = localDayKey(session?.startedAt ?? session?.timestamp)
+      const ledgerItem = day && session?.id ? safeLedger.days[day]?.sessions?.[session.id] : null
+      return {
+        index,
+        actualSeconds: Number.isFinite(session?.actualSeconds) ? session.actualSeconds : null,
+        storedAttentionScoringVersion: session?.attentionScoringVersion ?? null,
+        storedFocusMetricVersion: session?.focusMetricVersion ?? null,
+        storedMeasuredSeconds: Number.isFinite(session?.measuredSeconds) ? session.measuredSeconds : null,
+        storedScoreSum: Number.isFinite(session?.scoreSum) ? session.scoreSum : null,
+        storedMeasurementSource: session?.focusMeasurementSource || null,
+        storedRejection: session?.focusMetricRejection || null,
+        phaseSeconds: phases?.measuredSeconds ?? null,
+        phaseValues: Object.fromEntries(Object.keys(FOCUS_METRIC_V1.phaseWeights)
+          .map(phase => [phase, Number.isFinite(session?.focusPhases?.seconds?.[phase])
+            ? session.focusPhases.seconds[phase]
+            : null])),
+        timelineIsArray: Array.isArray(session?.timeline),
+        timelineLength: Array.isArray(session?.timeline) ? session.timeline.length : null,
+        validScoreSamples: validSamples.length,
+        uniqueScoreSeconds: seconds.length,
+        firstScoreSecond: seconds[0] ?? null,
+        lastScoreSecond: seconds[seconds.length - 1] ?? null,
+        scoreSpanSeconds: spanSeconds,
+        recoveredFromLegacyTimeline: Boolean(recovered),
+        currentDerivedRejection: derived.focusMetricRejection,
+        currentMeasurementCoverage: derived.measurementCoverage,
+        ledgerState: ledgerItem
+          ? ledgerItem.status === 'unmeasured' ? 'unmeasured' : 'measured'
+          : 'missing',
+      }
+    }),
+  }
+}
+
 function measurementForMetric(session) {
   if (session?.attentionScoringVersion === ATTENTION_SCORING_VERSION) return session
   return recoverLegacyTimelineMeasurement(session) || session

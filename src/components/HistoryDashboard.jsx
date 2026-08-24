@@ -8,7 +8,7 @@ import {
   hasMeasuredFocus,
   sessionFocusPct,
 } from '../lib/historyTrend'
-import { FOCUS_METRIC_V1, buildFocusPeriod, emptyFocusLedger } from '../lib/focusMetric'
+import { FOCUS_METRIC_V1, buildFocusMetricDiagnostics, buildFocusPeriod, emptyFocusLedger } from '../lib/focusMetric'
 
 // ── Month Calendar ─────────────────────────────────────────────────────────────
 function MonthCalendar({ sessions, onDayClick, selectedDay }) {
@@ -1249,6 +1249,17 @@ export default function HistoryDashboard({ onClose }) {
     URL.revokeObjectURL(url)
   }
 
+  const handleExportFocusDiagnostics = () => {
+    const diagnostic = buildFocusMetricDiagnostics(sessions, focusLedger)
+    const blob = new Blob([JSON.stringify(diagnostic, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `eudonomia-focus-diagnostics-${new Date().toISOString().slice(0,10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleExpand = (id) => {
     setExpandedId((prev) => (prev === id ? null : id))
   }
@@ -1450,6 +1461,18 @@ export default function HistoryDashboard({ onClose }) {
                     }}
                   >
                     Export CSV
+                  </button>
+                  <button
+                    onClick={handleExportFocusDiagnostics}
+                    title="Exports numeric focus measurement structure only — no tasks, goals, app names, window titles, or files."
+                    style={{
+                      background: 'none', border: '1px solid var(--line)',
+                      color: 'var(--text-muted)', fontSize: 13, padding: '8px 20px',
+                      borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    Focus diagnostics
                   </button>
                   <button
                     onClick={() => window.print()}
