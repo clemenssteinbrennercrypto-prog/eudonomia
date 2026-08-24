@@ -73,6 +73,38 @@ describe('focus ledger persistence', () => {
     expect(loadFocusLedger().days['2026-08-17'].sessions['pre-ledger-build']).toBeTruthy()
   })
 
+  it('persists a recoverable legacy timeline with explicit migration provenance', () => {
+    const measuredSeconds = 600
+    const legacy = {
+      id: 'legacy-timeline',
+      startedAt: new Date(2026, 7, 17, 9).getTime(),
+      actualSeconds: 620,
+      timeline: Array.from({ length: 120 }, (_, index) => ({
+        second: 25 + index * 5,
+        score: 86,
+        focused: true,
+      })),
+      focusPhases: {
+        seconds: { arrival: 0, ramp: 0, lock_in: measuredSeconds, fade: 0, recovery: 0, drift: 0 },
+      },
+    }
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([legacy]))
+
+    backfillFocusLedgerFromSessions()
+
+    expect(loadSessions()[0]).toMatchObject({
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      measuredSeconds,
+      sessionEfficiency: 86,
+      focusMeasurementSource: 'legacy_timeline_v1',
+      focusMetricRejection: null,
+    })
+    expect(loadFocusLedger().days['2026-08-17'].sessions['legacy-timeline']).toMatchObject({
+      source: 'legacy_timeline_v1',
+      measuredSeconds,
+    })
+  })
+
   it('keeps daily contributions after detailed history reaches its 100-session cap', () => {
     for (let index = 0; index < 101; index += 1) {
       saveSession(validSession(new Date(2026, 7, 17 + index, 9).getTime()))

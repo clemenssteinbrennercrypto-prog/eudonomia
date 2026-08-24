@@ -171,11 +171,14 @@ scoring or detection.**
    are for; the two guards are independent and both are load-bearing.
 9. **Derived Focus Score history is versioned, never silently reinterpreted.**
    `focusMetric.js` summarizes the live signal without changing it. Its V1
-   parameters are explicit product estimates, not research constants. Only
-   sessions tagged with the matching attention-scoring version enter the daily
-   ledger; legacy sessions stay absent rather than being guessed. Review V1
-   after 30 valid measured days and create V2 for changed parameters instead of
-   rewriting stored V1 days.
+   parameters are explicit product estimates, not research constants. Current
+   sessions enter with the matching attention-scoring version. Pre-ledger
+   sessions may enter only through the explicit `legacy_timeline_v1` migration,
+   which requires their saved five-second score timeline plus exact phase-second
+   totals and records that provenance; an old focus percentage alone is never
+   enough. Legacy sessions without those raw measurements stay absent rather
+   than being guessed. Review V1 after 30 valid measured days and create V2 for
+   changed parameters instead of rewriting stored V1 days.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   calculateDailyFocus,
   deriveSessionFocusMetric,
   emptyFocusLedger,
+  recoverLegacyTimelineMeasurement,
   removeSessionFromFocusLedger,
 } from './focusMetric'
 
@@ -60,6 +61,28 @@ function rawSession({
   }
 }
 
+function legacyTimelineSession({
+  id = 'legacy-timeline',
+  startedAt = new Date(2026, 7, 17, 9).getTime(),
+  measuredSeconds = 600,
+  actualSeconds = measuredSeconds + 20,
+  score = 84,
+} = {}) {
+  return {
+    id,
+    startedAt,
+    timestamp: startedAt + actualSeconds * 1000,
+    actualSeconds,
+    focusedSeconds: Math.round(measuredSeconds * 0.9),
+    avgFocusScore: score,
+    timeline: Array.from(
+      { length: Math.floor(measuredSeconds / FOCUS_METRIC_V1.legacyTimelineSampleSeconds) },
+      (_, index) => ({ second: 20 + (index + 1) * 5, score, focused: score >= 40 })
+    ),
+    focusPhases: { seconds: phaseSeconds(measuredSeconds, 'lock_in') },
+  }
+}
+
 function dailyEntry({ minutes, efficiency, phase = 'lock_in', id = 'x' }) {
   const session = measuredSession({ id, measuredSeconds: minutes * 60, efficiency, phase })
   return addSessionToFocusLedger(emptyFocusLedger(), session).days['2026-08-17']
@@ -91,6 +114,33 @@ describe('session focus metric refusals', () => {
     const session = measuredSession()
     session.focusPhases.seconds.lock_in -= 10
     expect(deriveSessionFocusMetric(session).focusMetricRejection).toBe('invalid_measurement')
+  })
+
+  it('recovers pre-ledger sessions from real timeline and phase measurements', () => {
+    const legacy = legacyTimelineSession()
+    expect(recoverLegacyTimelineMeasurement(legacy)).toMatchObject({
+      measuredSeconds: 600,
+      scoreSum: 50_400,
+      focusMeasurementSource: 'legacy_timeline_v1',
+    })
+    expect(deriveSessionFocusMetric(legacy)).toMatchObject({
+      sessionEfficiency: 84,
+      focusMetricRejection: null,
+      focusMeasurementSource: 'legacy_timeline_v1',
+    })
+  })
+
+  it('does not reconstruct history from focus percentage without raw score samples', () => {
+    const legacy = legacyTimelineSession()
+    delete legacy.timeline
+    expect(recoverLegacyTimelineMeasurement(legacy)).toBeNull()
+    expect(deriveSessionFocusMetric(legacy).focusMetricRejection).toBe('legacy_scoring_version')
+  })
+
+  it('rejects a sparse legacy timeline instead of overstating camera coverage', () => {
+    const legacy = legacyTimelineSession()
+    legacy.timeline = legacy.timeline.slice(0, 20)
+    expect(recoverLegacyTimelineMeasurement(legacy)).toBeNull()
   })
 })
 
@@ -170,6 +220,23 @@ describe('backfilling the ledger from already-stored sessions', () => {
     const first = backfillFocusLedger(emptyFocusLedger(), [raw])
     const second = backfillFocusLedger(first, [raw])
     expect(second).toEqual(first)
+  })
+
+  it('upgrades an existing unmeasured marker when legacy raw data can be recovered', () => {
+    const legacy = legacyTimelineSession({ id: 'upgrade-marker' })
+    const marked = addSessionToFocusLedger(emptyFocusLedger(), {
+      ...legacy,
+      focusMetricVersion: FOCUS_METRIC_V1.version,
+      focusMetricRejection: 'legacy_scoring_version',
+    })
+    expect(marked.days['2026-08-17'].sessions['upgrade-marker'].status).toBe('unmeasured')
+
+    const upgraded = backfillFocusLedger(marked, [legacy])
+    expect(upgraded.days['2026-08-17'].sessions['upgrade-marker']).toMatchObject({
+      source: 'legacy_timeline_v1',
+      measuredSeconds: 600,
+    })
+    expect(calculateDailyFocus(upgraded.days['2026-08-17']).score).not.toBeNull()
   })
 })
 

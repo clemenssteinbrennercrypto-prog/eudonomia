@@ -1215,7 +1215,7 @@ export default function HistoryDashboard({ onClose }) {
   }
 
   const handleExportCSV = () => {
-    const header = ['timestamp', 'task', 'goal', 'intendedOutput', 'successCriteria', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'timeAboveThresholdPct', 'focusEfficiency', 'deepFocusMinutes', 'focusMetricVersion', 'distractionEvents', 'longestStreakSeconds']
+    const header = ['timestamp', 'task', 'goal', 'intendedOutput', 'successCriteria', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'timeAboveThresholdPct', 'focusEfficiency', 'deepFocusMinutes', 'focusMetricVersion', 'focusMeasurementSource', 'distractionEvents', 'longestStreakSeconds']
     const rows = sessions.map(s => {
       const focusPct = sessionFocusPct(s)
       return [
@@ -1234,6 +1234,7 @@ export default function HistoryDashboard({ onClose }) {
         s.sessionEfficiency ?? '',
         s.deepFocusMinutes ?? '',
         s.focusMetricVersion ?? '',
+        s.focusMeasurementSource ?? '',
         s.distractionEvents ?? 0,
         s.longestFocusedStreak ?? 0,
       ].join(',')

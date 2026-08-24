@@ -8,6 +8,7 @@ import {
   backfillFocusLedger,
   emptyFocusLedger,
   removeSessionFromFocusLedger,
+  withSessionFocusMetric,
 } from './focusMetric'
 
 const STORAGE_KEY = 'eudaimonia_sessions'
@@ -132,13 +133,17 @@ function saveFocusLedger(ledger) {
   } catch {}
 }
 
-// Catches up the ledger with any currently-stored session that has valid v1
-// measurement data but never made it in (an older build that predates the
-// ledger, a save that raced a crash). Cheap and idempotent — safe to call on
-// every app start. See backfillFocusLedger for what it will and won't touch.
+// Catches up the ledger and persists explicit schema upgrades for recoverable
+// pre-ledger timelines. Cheap and idempotent — safe to call on every app start.
+// See backfillFocusLedger for what it will and won't touch.
 export function backfillFocusLedgerFromSessions() {
+  const sessions = loadSessions()
+  const upgradedSessions = sessions.map(withSessionFocusMetric)
+  if (JSON.stringify(upgradedSessions) !== JSON.stringify(sessions)) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(upgradedSessions)) } catch {}
+  }
   const before = loadFocusLedger()
-  const after = backfillFocusLedger(before, loadSessions())
+  const after = backfillFocusLedger(before, upgradedSessions)
   if (after !== before) saveFocusLedger(after)
   return after
 }

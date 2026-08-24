@@ -14,6 +14,8 @@ export const FOCUS_METRIC_V1 = Object.freeze({
   calibrationReviewDays: 30,
   efficiencyExponent: 0.75,
   volumeExponent: 0.25,
+  legacyTimelineSampleSeconds: 5,
+  minLegacyTimelineCoverage: 0.80,
   phaseWeights: Object.freeze({
     lock_in: 1.00,
     ramp: 0.75,
@@ -92,11 +94,60 @@ function phaseTotals(phaseSeconds) {
   return { measuredSeconds, deepFocusSeconds }
 }
 
-export function deriveSessionFocusMetric(session) {
-  const measuredSeconds = session?.measuredSeconds
-  const scoreSum = session?.scoreSum
-  const actualSeconds = session?.actualSeconds
+// Sessions written before the daily ledger still contain genuine camera
+// measurements: one score snapshot every five seconds plus exact per-phase
+// second totals. Recover those measurements with explicit provenance instead
+// of pretending the old record was written by the current accumulator schema.
+// A headline focus percentage alone is intentionally insufficient.
+export function recoverLegacyTimelineMeasurement(session) {
+  if (session?.attentionScoringVersion != null) return null
   const phases = phaseTotals(session?.focusPhases?.seconds)
+  if (!phases || phases.measuredSeconds <= 0 || !finiteNonNegative(session?.actualSeconds)) return null
+  if (!Array.isArray(session?.timeline)) return null
+
+  const samplesBySecond = new Map()
+  for (const sample of session.timeline) {
+    if (
+      !finiteNonNegative(sample?.second) ||
+      !Number.isFinite(sample?.score) ||
+      sample.score < 0 ||
+      sample.score > 100
+    ) continue
+    samplesBySecond.set(sample.second, sample.score)
+  }
+  const scores = [...samplesBySecond.values()]
+  if (scores.length === 0) return null
+
+  const representedSeconds = Math.min(
+    phases.measuredSeconds,
+    scores.length * FOCUS_METRIC_V1.legacyTimelineSampleSeconds
+  )
+  const timelineCoverage = representedSeconds / phases.measuredSeconds
+  if (timelineCoverage < FOCUS_METRIC_V1.minLegacyTimelineCoverage) return null
+
+  const averageScore = scores.reduce((sum, score) => sum + score, 0) / scores.length
+  return {
+    attentionScoringVersion: ATTENTION_SCORING_VERSION,
+    actualSeconds: session.actualSeconds,
+    measuredSeconds: phases.measuredSeconds,
+    scoreSum: averageScore * phases.measuredSeconds,
+    focusPhases: session.focusPhases,
+    focusMeasurementSource: 'legacy_timeline_v1',
+    legacyTimelineCoverage: Math.round(timelineCoverage * 1000) / 1000,
+  }
+}
+
+function measurementForMetric(session) {
+  if (session?.attentionScoringVersion === ATTENTION_SCORING_VERSION) return session
+  return recoverLegacyTimelineMeasurement(session) || session
+}
+
+export function deriveSessionFocusMetric(session) {
+  const measurement = measurementForMetric(session)
+  const measuredSeconds = measurement?.measuredSeconds
+  const scoreSum = measurement?.scoreSum
+  const actualSeconds = measurement?.actualSeconds
+  const phases = phaseTotals(measurement?.focusPhases?.seconds)
 
   const reject = (reason, coverage = null) => ({
     focusMetricVersion: FOCUS_METRIC_V1.version,
@@ -106,7 +157,7 @@ export function deriveSessionFocusMetric(session) {
     focusMetricRejection: reason,
   })
 
-  if (session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
+  if (measurement?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
     return reject('legacy_scoring_version')
   }
   if (!finiteNonNegative(actualSeconds) || !finiteNonNegative(measuredSeconds) || !finiteNonNegative(scoreSum)) {
@@ -135,12 +186,14 @@ export function deriveSessionFocusMetric(session) {
     sessionEfficiency: clamp(Math.round(rawEfficiency), 1, 100),
     deepFocusMinutes: Math.round((phases.deepFocusSeconds / 60) * 10) / 10,
     measurementCoverage: Math.round(coverage * 1000) / 1000,
+    focusMeasurementSource: measurement.focusMeasurementSource || 'live_v1',
     focusMetricRejection: null,
   }
 }
 
 export function withSessionFocusMetric(session) {
-  return { ...session, ...deriveSessionFocusMetric(session) }
+  const recovered = recoverLegacyTimelineMeasurement(session)
+  return { ...session, ...(recovered || {}), ...deriveSessionFocusMetric(recovered ? { ...session, ...recovered } : session) }
 }
 
 // A session's headline "focus %" (fraction of TRACKED time above threshold)
@@ -187,6 +240,7 @@ function validContribution(session) {
       measuredSeconds: session.measuredSeconds,
       scoreSum: session.scoreSum,
       deepFocusSeconds: session.deepFocusMinutes * 60,
+      source: session.focusMeasurementSource || 'live_v1',
     },
   }
 }
@@ -228,21 +282,18 @@ export function addSessionToFocusLedger(ledger, session) {
 
 // Recover sessions that never made it into the ledger — an older build that
 // predates this ledger entirely, a save that raced a crash, whatever the
-// cause. Only rescues sessions that already carry valid, version-matched v1
-// measurement data (attentionScoringVersion, measuredSeconds, scoreSum,
-// focusPhases); it re-derives nothing about them and estimates nothing for
-// sessions that never tracked properly in the first place — the same "no
-// fabricated scores" guarantee the rest of this module keeps. A session
-// already present under its day is left untouched, so this is safe to run
-// on every app start.
+// cause. Current sessions must carry valid, version-matched v1 accumulators;
+// pre-ledger sessions must pass the stricter legacy timeline recovery above.
+// A percentage alone is never backfilled. Valid contributions already present
+// are untouched, while an old unmeasured marker may be upgraded when its raw
+// timeline proves usable. This is safe to run on every app start.
 export function backfillFocusLedger(ledger, sessions) {
   let next = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
   for (const session of sessions || []) {
     if (!session?.id) continue
     const day = localDayKey(session.startedAt ?? session.timestamp)
-    const alreadyRecorded = day &&
-      Object.prototype.hasOwnProperty.call(next.days[day]?.sessions || {}, session.id)
-    if (alreadyRecorded) continue
+    const recorded = day ? next.days[day]?.sessions?.[session.id] : null
+    if (recorded && recorded.status !== 'unmeasured') continue
     next = addSessionToFocusLedger(next, withSessionFocusMetric(session))
   }
   return next
