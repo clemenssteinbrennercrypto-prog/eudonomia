@@ -105,10 +105,11 @@ describe('session focus metric refusals', () => {
     expect(session.focusMetricRejection).toBe('insufficient_duration')
   })
 
-  it('requires eighty percent post-calibration coverage', () => {
+  it('scores real measured segments without turning session gaps into data', () => {
     const session = measuredSession({ measuredSeconds: 300, actualSeconds: 421 })
     expect(session.measurementCoverage).toBeLessThan(0.8)
-    expect(session.focusMetricRejection).toBe('low_coverage')
+    expect(session.focusMetricRejection).toBeNull()
+    expect(session.sessionEfficiency).toBe(80)
   })
 
   it('rejects phase totals that do not match measured time', () => {
@@ -271,6 +272,31 @@ describe('backfilling the ledger from already-stored sessions', () => {
     expect(upgraded.days['2026-08-17'].sessions['upgrade-marker']).toMatchObject({
       source: 'legacy_timeline_v1',
       measuredSeconds: 600,
+    })
+    expect(calculateDailyFocus(upgraded.days['2026-08-17']).score).not.toBeNull()
+  })
+
+  it('upgrades a long measured session that an older build rejected for partial coverage', () => {
+    const session = measuredSession({
+      id: 'partial-coverage',
+      measuredSeconds: 4450,
+      actualSeconds: 7635,
+      efficiency: 83,
+    })
+    const oldRejected = {
+      ...session,
+      sessionEfficiency: null,
+      deepFocusMinutes: null,
+      measurementCoverage: 0.584,
+      focusMetricRejection: 'low_coverage',
+    }
+    const marked = addSessionToFocusLedger(emptyFocusLedger(), oldRejected)
+    expect(marked.days['2026-08-17'].sessions['partial-coverage'].status).toBe('unmeasured')
+
+    const upgraded = backfillFocusLedger(marked, [oldRejected])
+    expect(upgraded.days['2026-08-17'].sessions['partial-coverage']).toMatchObject({
+      measuredSeconds: 4450,
+      source: 'live_v1',
     })
     expect(calculateDailyFocus(upgraded.days['2026-08-17']).score).not.toBeNull()
   })

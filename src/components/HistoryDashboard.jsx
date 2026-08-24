@@ -656,7 +656,7 @@ function FocusScoreOverview({ ledger, sessions }) {
 
       {period.score == null ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.55, margin: '18px auto 4px', maxWidth: 440 }}>
-          Focus Score starts with the next session that has at least 5 measured minutes and 80% tracking coverage. Older sessions are not estimated.
+          Focus Score starts with the next session that has at least 5 measured minutes. Older sessions without raw measurements are not estimated.
         </p>
       ) : (
         <>

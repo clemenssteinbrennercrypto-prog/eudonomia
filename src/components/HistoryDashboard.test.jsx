@@ -40,7 +40,7 @@ describe('HistoryDashboard focus score runtime', () => {
     }]))
     const html = renderToString(React.createElement(HistoryDashboard, { onClose() {} })).replaceAll('<!-- -->', '')
     expect(html).toContain('Focus Score · v1')
-    expect(html).toContain('Older sessions are not estimated')
+    expect(html).toContain('Older sessions without raw measurements are not estimated')
   })
 
   it('renders a persisted v1 daily score and its drivers', () => {

@@ -8,7 +8,6 @@ export const ATTENTION_SCORING_VERSION = 1
 export const FOCUS_METRIC_V1 = Object.freeze({
   version: 1,
   minMeasuredSeconds: 5 * 60,
-  minCoverage: 0.80,
   calibrationSeconds: 20,
   fullDayMinutes: 120,
   calibrationReviewDays: 30,
@@ -209,6 +208,7 @@ export function deriveSessionFocusMetric(session) {
   const reject = (reason, coverage = null) => ({
     focusMetricVersion: FOCUS_METRIC_V1.version,
     sessionEfficiency: null,
+    deepFocusSeconds: null,
     deepFocusMinutes: null,
     measurementCoverage: coverage,
     focusMetricRejection: reason,
@@ -229,10 +229,6 @@ export function deriveSessionFocusMetric(session) {
   if (measuredSeconds < FOCUS_METRIC_V1.minMeasuredSeconds) {
     return reject('insufficient_duration', coverage)
   }
-  if (coverage < FOCUS_METRIC_V1.minCoverage) {
-    return reject('low_coverage', coverage)
-  }
-
   const rawEfficiency = scoreSum / measuredSeconds
   if (!Number.isFinite(rawEfficiency) || rawEfficiency < 0 || rawEfficiency > 100) {
     return reject('invalid_measurement', coverage)
@@ -241,6 +237,7 @@ export function deriveSessionFocusMetric(session) {
   return {
     focusMetricVersion: FOCUS_METRIC_V1.version,
     sessionEfficiency: clamp(Math.round(rawEfficiency), 1, 100),
+    deepFocusSeconds: phases.deepFocusSeconds,
     deepFocusMinutes: Math.round((phases.deepFocusSeconds / 60) * 10) / 10,
     measurementCoverage: Math.round(coverage * 1000) / 1000,
     focusMeasurementSource: measurement.focusMeasurementSource || 'live_v1',
@@ -253,10 +250,9 @@ export function withSessionFocusMetric(session) {
   return { ...session, ...(recovered || {}), ...deriveSessionFocusMetric(recovered ? { ...session, ...recovered } : session) }
 }
 
-// A session's headline "focus %" (fraction of TRACKED time above threshold)
-// says nothing about how much of the session was tracked at all, so a
-// session can read as a great result while still being silently excluded
-// from the (coverage-gated) daily score. Give that silence a reason.
+// Explain hard refusals. Coverage is reported as measurement quality, but it is
+// not a binary gate: once five real minutes exist, the metric scores only those
+// measured seconds and its volume term naturally withholds credit for gaps.
 export function describeFocusMetricRejection(reason, { measuredSeconds, measurementCoverage } = {}) {
   const measuredMinutes = Number.isFinite(measuredSeconds) ? Math.round(measuredSeconds / 60) : 0
   const coveragePct = Number.isFinite(measurementCoverage) ? Math.round(measurementCoverage * 100) : null
@@ -264,7 +260,7 @@ export function describeFocusMetricRejection(reason, { measuredSeconds, measurem
     case 'insufficient_duration':
       return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
     case 'low_coverage':
-      return `Camera tracking covered only ${coveragePct ?? '<80'}% of this session (sleep, lid close, lost permission, or a dropped feed all count) — the daily score needs at least ${Math.round(FOCUS_METRIC_V1.minCoverage * 100)}%.`
+      return `An older build excluded this session at ${coveragePct ?? 'low'}% camera coverage. Reload once so its measured time can be re-evaluated.`
     case 'legacy_scoring_version':
       return 'This session used an older scoring version, so it is not counted toward your daily score.'
     case 'invalid_measurement':
@@ -279,13 +275,18 @@ export function emptyFocusLedger() {
 }
 
 function validContribution(session) {
+  const deepFocusSeconds = Number.isFinite(session?.deepFocusSeconds)
+    ? session.deepFocusSeconds
+    : Number.isFinite(session?.deepFocusMinutes)
+      ? Math.min(session.measuredSeconds, session.deepFocusMinutes * 60)
+      : null
   if (
     session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION ||
     session?.focusMetricVersion !== FOCUS_METRIC_V1.version ||
     !Number.isFinite(session?.sessionEfficiency) ||
     !finiteNonNegative(session?.measuredSeconds) ||
     !finiteNonNegative(session?.scoreSum) ||
-    !finiteNonNegative(session?.deepFocusMinutes)
+    !finiteNonNegative(deepFocusSeconds)
   ) return null
 
   const day = localDayKey(session.startedAt ?? session.timestamp)
@@ -296,7 +297,7 @@ function validContribution(session) {
       version: FOCUS_METRIC_V1.version,
       measuredSeconds: session.measuredSeconds,
       scoreSum: session.scoreSum,
-      deepFocusSeconds: session.deepFocusMinutes * 60,
+      deepFocusSeconds,
       source: session.focusMeasurementSource || 'live_v1',
     },
   }

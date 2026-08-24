@@ -293,7 +293,7 @@ export default function HomeScreen({
 
             {todayFocus.score == null ? (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '13px 0 0' }}>
-                {todayRejectionNote ?? 'Starts after 5 measured minutes with at least 80% tracking coverage.'}
+                {todayRejectionNote ?? 'Starts after 5 measured minutes.'}
               </p>
             ) : (
               <>

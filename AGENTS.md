@@ -176,9 +176,11 @@ scoring or detection.**
    sessions may enter only through the explicit `legacy_timeline_v1` migration,
    which requires their saved five-second score timeline plus exact phase-second
    totals and records that provenance; an old focus percentage alone is never
-   enough. Legacy sessions without those raw measurements stay absent rather
-   than being guessed. Review V1 after 30 valid measured days and create V2 for
-   changed parameters instead of rewriting stored V1 days.
+   enough. Coverage is diagnostic, not an all-or-nothing gate: after five real
+   measured minutes, V1 scores only measured seconds and its volume term gives
+   no credit for gaps. Legacy sessions without raw measurements stay absent
+   rather than being guessed. Review V1 after 30 valid measured days and create
+   V2 for changed parameters instead of rewriting stored V1 days.
 
 ---
 
