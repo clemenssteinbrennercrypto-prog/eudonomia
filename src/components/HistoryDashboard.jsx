@@ -585,12 +585,12 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
   )
 }
 
-function FocusScoreOverview({ ledger }) {
+function FocusScoreOverview({ ledger, sessions }) {
   const [range, setRange] = useState('day')
   const [offset, setOffset] = useState(0)
   const period = useMemo(
-    () => buildFocusPeriod(ledger, { range, offset }),
-    [ledger, range, offset]
+    () => buildFocusPeriod(ledger, { range, offset, sessions }),
+    [ledger, sessions, range, offset]
   )
   const dayView = range === 'day'
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
@@ -1313,7 +1313,7 @@ export default function HistoryDashboard({ onClose }) {
           </div>
         ) : (
           <>
-            <FocusScoreOverview ledger={focusLedger} />
+            <FocusScoreOverview ledger={focusLedger} sessions={sessions} />
             <WeeklySummary sessions={sessions} />
             <FocusTrends sessions={sessions} />
             <PersonalCalibration sessions={sessions} />

@@ -158,10 +158,11 @@ describe('backfilling the ledger from already-stored sessions', () => {
     expect(ledger.days['2026-08-17'].sessions['present']).toBe(beforeValue)
   })
 
-  it('estimates nothing for a session that never tracked properly', () => {
+  it('marks a session that never tracked properly without estimating a score', () => {
     const tooShort = rawSession({ id: 'too-short', measuredSeconds: 100, actualSeconds: 120 })
     const ledger = backfillFocusLedger(emptyFocusLedger(), [tooShort])
-    expect(ledger.days).toEqual({})
+    expect(ledger.days['2026-08-17'].sessions['too-short']).toMatchObject({ status: 'unmeasured' })
+    expect(calculateDailyFocus(ledger.days['2026-08-17'])).toBeNull()
   })
 
   it('is a no-op over an already-complete ledger', () => {
@@ -184,7 +185,7 @@ describe('daily ledger and calendar periods', () => {
     expect(Object.keys(ledger.days['2026-08-17'].sessions)).toEqual(['b'])
   })
 
-  it('averages measured days and reports missing days only as coverage', () => {
+  it('scores elapsed no-activity days as zero without counting them as active', () => {
     let ledger = addSessionToFocusLedger(emptyFocusLedger(), measuredSession({ id: 'mon' }))
     ledger = addSessionToFocusLedger(ledger, measuredSession({
       id: 'wed',
@@ -196,9 +197,36 @@ describe('daily ledger and calendar periods', () => {
       now: new Date(2026, 7, 19, 18),
     })
     expect(period.days).toHaveLength(7)
+    expect(period.days[1]).toMatchObject({ score: 0, noActivity: true })
+    expect(period.days[3].score).toBeUndefined()
     expect(period.activeDays).toBe(2)
     expect(period.elapsedDays).toBe(3)
     expect(period.score).not.toBeNull()
+  })
+
+  it('keeps an unmeasured session distinct from a no-activity zero', () => {
+    const rejected = {
+      ...rawSession({ id: 'camera-failed', measuredSeconds: 0, actualSeconds: 600 }),
+      focusMetricVersion: FOCUS_METRIC_V1.version,
+      focusMetricRejection: 'low_coverage',
+    }
+    const ledger = addSessionToFocusLedger(emptyFocusLedger(), rejected)
+    const period = buildFocusPeriod(ledger, {
+      range: 'week',
+      now: new Date(2026, 7, 18, 18),
+      sessions: [rejected],
+    })
+    expect(period.days[0].score).toBeUndefined()
+    expect(period.days[1]).toMatchObject({ score: 0, noActivity: true })
+  })
+
+  it('returns zero for a day with no activity', () => {
+    const period = buildFocusPeriod(emptyFocusLedger(), {
+      range: 'day',
+      now: new Date(2026, 7, 19, 18),
+    })
+    expect(period.score).toBe(0)
+    expect(period.days[0]).toMatchObject({ score: 0, noActivity: true })
   })
 
   it('uses Monday as the calendar-week boundary', () => {

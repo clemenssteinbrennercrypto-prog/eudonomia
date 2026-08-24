@@ -191,8 +191,24 @@ function validContribution(session) {
   }
 }
 
+function sessionMarker(session) {
+  const day = localDayKey(session?.startedAt ?? session?.timestamp)
+  if (!day || !session?.id) return null
+  return {
+    day,
+    value: {
+      version: FOCUS_METRIC_V1.version,
+      status: 'unmeasured',
+      rejection: session?.focusMetricRejection || 'invalid_measurement',
+    },
+  }
+}
+
 export function addSessionToFocusLedger(ledger, session) {
-  const contribution = validContribution(session)
+  // Keep a marker even when a session cannot contribute a score. That lets the
+  // calendar distinguish "no activity" (0) from "activity existed, but was not
+  // measured reliably" (null) without turning a camera failure into a score.
+  const contribution = validContribution(session) || sessionMarker(session)
   if (!contribution) return ledger || emptyFocusLedger()
   const safe = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
   const previousDay = safe.days[contribution.day] || { sessions: {} }
@@ -327,7 +343,7 @@ function median(values) {
 }
 
 function currentStreak(days, now) {
-  const active = new Set(days.filter(day => day.score != null).map(day => day.key))
+  const active = new Set(days.filter(day => day.score > 0).map(day => day.key))
   let cursor = startOfDay(now)
   if (!active.has(localDayKey(cursor))) cursor = addDays(cursor, -1)
   let streak = 0
@@ -351,18 +367,38 @@ export function buildFocusPeriod(ledger, options = {}) {
   const safeNow = Number.isNaN(now.getTime()) ? new Date() : now
   const { start, endExclusive, safeOffset } = getPeriodWindow(range, options.offset, safeNow)
   const safeLedger = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
+  const sessionDays = new Set((options.sessions || [])
+    .map(session => localDayKey(session?.startedAt ?? session?.timestamp))
+    .filter(Boolean))
   const days = []
+  const todayKey = localDayKey(safeNow)
   for (let cursor = new Date(start); cursor < endExclusive; cursor = addDays(cursor, 1)) {
     const key = localDayKey(cursor)
+    const entry = safeLedger.days[key]
+    const calculated = calculateDailyFocus(entry)
+    const isFuture = key > todayKey
+    const noActivity = !entry && !sessionDays.has(key) && !isFuture
     days.push({
       key,
       date: new Date(cursor),
       label: cursor.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3),
-      ...calculateDailyFocus(safeLedger.days[key]),
+      ...(calculated || (noActivity ? {
+        score: 0,
+        rawScore: 0,
+        scoreSum: 0,
+        efficiency: null,
+        measuredSeconds: 0,
+        deepFocusMinutes: 0,
+        volumeScore: 0,
+        volumeQualification: 0,
+        sessionCount: 0,
+        noActivity: true,
+      } : {})),
     })
   }
 
   const scoredDays = days.filter(day => day.score != null)
+  const measuredDays = days.filter(day => day.score > 0 && day.sessionCount > 0)
   const rawScore = scoredDays.length
     ? scoredDays.reduce((sum, day) => sum + day.rawScore, 0) / scoredDays.length
     : null
@@ -398,11 +434,11 @@ export function buildFocusPeriod(ledger, options = {}) {
     efficiency: measuredSeconds > 0 ? Math.round(scoreSum / measuredSeconds) : null,
     measuredSeconds,
     deepFocusMinutes: Math.round(scoredDays.reduce((sum, day) => sum + day.deepFocusMinutes, 0) * 10) / 10,
-    activeDays: scoredDays.length,
+    activeDays: measuredDays.length,
     elapsedDays,
     streak: currentStreak(allDays, safeNow),
     baseline,
-    totalMeasuredDays: allDays.filter(day => day.score != null).length,
+    totalMeasuredDays: allDays.filter(day => day.score > 0).length,
     canGoForward: safeOffset < 0,
   }
 }

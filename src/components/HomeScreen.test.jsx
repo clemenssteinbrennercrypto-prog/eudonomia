@@ -42,10 +42,11 @@ afterEach(() => {
 })
 
 describe('HomeScreen Focus Score', () => {
-  it('shows the honest empty state before the first eligible v1 session', () => {
+  it('shows zero before any focus activity today', () => {
     const html = renderHome()
     expect(html).toContain('Today&#x27;s Focus Score')
-    expect(html).toContain('Starts after 5 measured minutes')
+    expect(html).toContain('>0</span>')
+    expect(html).toContain('Efficiency')
   })
 
   it('shows today’s score and its three drivers', () => {

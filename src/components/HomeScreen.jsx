@@ -102,7 +102,7 @@ export default function HomeScreen({
   const timing = useMemo(() => suggestNextSession(loadSessions()), [])
   const focusAppsConfig = useMemo(() => loadFocusAppsConfig(), [])
   const todayFocus = useMemo(
-    () => buildFocusPeriod(loadFocusLedger(), { range: 'day' }),
+    () => buildFocusPeriod(loadFocusLedger(), { range: 'day', sessions: loadSessions() }),
     []
   )
   const todayMeasuredMinutes = Math.round(todayFocus.measuredSeconds / 60)
@@ -299,7 +299,7 @@ export default function HomeScreen({
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 16 }}>
                   {[
-                    ['Efficiency', todayFocus.efficiency],
+                    ['Efficiency', todayFocus.efficiency ?? '--'],
                     ['Deep focus', `${Math.round(todayFocus.deepFocusMinutes)}m`],
                     ['Measured', `${todayMeasuredMinutes}m`],
                   ].map(([label, value]) => (
