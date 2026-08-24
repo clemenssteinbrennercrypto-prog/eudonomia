@@ -15,6 +15,7 @@ export const FOCUS_METRIC_V1 = Object.freeze({
   efficiencyExponent: 0.75,
   volumeExponent: 0.25,
   legacyTimelineSampleSeconds: 5,
+  minLegacyTimelineSamples: 12,
   minLegacyTimelineCoverage: 0.80,
   phaseWeights: Object.freeze({
     lock_in: 1.00,
@@ -115,13 +116,15 @@ export function recoverLegacyTimelineMeasurement(session) {
     ) continue
     samplesBySecond.set(sample.second, sample.score)
   }
-  const scores = [...samplesBySecond.values()]
-  if (scores.length === 0) return null
+  const samples = [...samplesBySecond.entries()].sort(([a], [b]) => a - b)
+  const scores = samples.map(([, score]) => score)
+  if (scores.length < FOCUS_METRIC_V1.minLegacyTimelineSamples) return null
 
-  const representedSeconds = Math.min(
-    phases.measuredSeconds,
-    scores.length * FOCUS_METRIC_V1.legacyTimelineSampleSeconds
-  )
+  // setInterval can skip ideal five-second boundaries while the per-second
+  // camera/phase accumulator continues. Validate that samples span the session,
+  // not that every ideal slot exists; density is not camera coverage.
+  const representedSeconds = Math.min(phases.measuredSeconds,
+    samples[samples.length - 1][0] - samples[0][0] + FOCUS_METRIC_V1.legacyTimelineSampleSeconds)
   const timelineCoverage = representedSeconds / phases.measuredSeconds
   if (timelineCoverage < FOCUS_METRIC_V1.minLegacyTimelineCoverage) return null
 

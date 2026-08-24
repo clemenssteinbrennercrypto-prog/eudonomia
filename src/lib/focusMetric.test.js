@@ -142,6 +142,16 @@ describe('session focus metric refusals', () => {
     legacy.timeline = legacy.timeline.slice(0, 20)
     expect(recoverLegacyTimelineMeasurement(legacy)).toBeNull()
   })
+
+  it('accepts skipped snapshot ticks when real samples still span the measured session', () => {
+    const legacy = legacyTimelineSession()
+    legacy.timeline = legacy.timeline.filter((_, index) => index % 3 === 0)
+    expect(legacy.timeline).toHaveLength(40)
+    expect(recoverLegacyTimelineMeasurement(legacy)).toMatchObject({
+      measuredSeconds: 600,
+      focusMeasurementSource: 'legacy_timeline_v1',
+    })
+  })
 })
 
 describe('daily focus formula', () => {
