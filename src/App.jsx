@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
-import HomeScreen from './components/HomeScreen'
+import SessionIntentScreen from './components/SessionIntentScreen'
 import LabDashboard from './components/LabDashboard'
 import AppShell from './components/AppShell'
 import WorkspaceSetup from './components/WorkspaceSetup'
@@ -265,7 +265,7 @@ export default function App() {
         />
       )}
       {screen === 'session-setup' && (
-        <HomeScreen
+        <SessionIntentScreen
           task={task}
           setTask={setTask}
           goal={goal}
@@ -276,13 +276,7 @@ export default function App() {
           setDuration={setDuration}
           tags={tags}
           setTags={setTags}
-          devices={devices}
-          focusModeEnabled={focusModeEnabled}
-          setFocusModeEnabled={setFocusModeEnabled}
           onStart={handleStart}
-          onShowHistory={() => setScreen('history')}
-          onShowSetup={() => setScreen('setup')}
-          onShowFocusApps={() => setScreen('focus-apps')}
         />
       )}
       {screen === 'focus-apps' && (

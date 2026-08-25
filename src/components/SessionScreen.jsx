@@ -1169,8 +1169,8 @@ export default function SessionScreen({
     const actualSeconds = Math.round((endedAt - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     // A session whose camera never delivered usable frames has no measurement:
     // focusScoreRef is still sitting at its 68 default. Reporting that as a score
-    // wrote a fabricated "68% focus" into history. Both consumers (HomeScreen,
-    // HistoryDashboard) already treat null as "no score", so say nothing instead
+    // wrote a fabricated "68% focus" into history. History and the Lab already
+    // treat null as "no score", so say nothing instead
     // of saying something false.
     const measuredSeconds = measuredSecondsRef.current
     const hasMeasurement = measuredSeconds > 0
