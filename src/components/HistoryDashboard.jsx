@@ -1266,10 +1266,9 @@ export default function HistoryDashboard({ onClose }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0,
+      position: 'relative', minHeight: 'calc(100vh - 64px)',
       background: 'var(--bg)',
       overflowY: 'auto',
-      zIndex: 200,
     }}>
       <div style={{
         maxWidth: 720,

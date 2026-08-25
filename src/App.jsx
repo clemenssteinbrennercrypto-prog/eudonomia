@@ -3,6 +3,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import HomeScreen from './components/HomeScreen'
+import LabDashboard from './components/LabDashboard'
+import AppShell from './components/AppShell'
 import WorkspaceSetup from './components/WorkspaceSetup'
 import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
@@ -179,7 +181,7 @@ function BuildIdentity() {
 export default function App() {
   // Public web stays marketing/download only. Native and local dev expose the app.
   const [flow, setFlow] = useState(getInitialFlow)
-  const [screen,   setScreen]   = useState('home')
+  const [screen,   setScreen]   = useState('lab')
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
   const [energyLevel, setEnergyLevel] = useState('medium')
@@ -231,7 +233,7 @@ export default function App() {
     setDuration(prefill?.duration ?? 30)
     setTags(prefill?.tags ?? [])
     setSessionData(null)
-    setScreen('home')
+    setScreen('session-setup')
   }
 
   if (flow === 'landing') {
@@ -246,23 +248,23 @@ export default function App() {
         <Onboarding onComplete={() => {
           setFlow('app')
           if (loadDevices().length === 0) setScreen('setup')
+          else setScreen('lab')
         }} />
       </>
     )
   }
 
-  return (
-    <>
-      {/* Hidden during a session: a reload tears down all in-memory session
-          state (scores, streaks, timers live in refs), so hitting it mid-session
-          silently destroys the run. There is no reason to reload while tracking,
-          and an update can always wait until the session ends. */}
-      {screen !== 'session' && <AppRefreshControl updateStatus={updateStatus} />}
-      <BuildIdentity />
-      {/* key={screen} remounts this on every change, replaying the enter
-          animation — a screen transition with no library. */}
-      <div key={screen} className="screen-enter">
-      {screen === 'home' && (
+  const content = (
+    <div key={screen} className="screen-enter">
+      {screen === 'lab' && (
+        <LabDashboard
+          focusModeEnabled={focusModeEnabled}
+          onSession={() => setScreen('session-setup')}
+          onProtection={() => setScreen('focus-apps')}
+          onAnalytics={() => setScreen('history')}
+        />
+      )}
+      {screen === 'session-setup' && (
         <HomeScreen
           task={task}
           setTask={setTask}
@@ -287,14 +289,14 @@ export default function App() {
         <FocusAppsScreen
           focusModeEnabled={focusModeEnabled}
           setFocusModeEnabled={setFocusModeEnabled}
-          onBack={() => setScreen('home')}
+          onBack={() => setScreen('lab')}
         />
       )}
       {screen === 'setup' && (
         <WorkspaceSetup
           devices={devices}
           setDevices={setDevices}
-          onContinue={() => setScreen('home')}
+          onContinue={() => setScreen('lab')}
         />
       )}
       {screen === 'session' && (
@@ -317,9 +319,35 @@ export default function App() {
         />
       )}
       {screen === 'history' && (
-        <HistoryDashboard onClose={() => setScreen('home')} />
+        <HistoryDashboard onClose={() => setScreen('lab')} />
       )}
-      </div>
+    </div>
+  )
+
+  const navigate = (destination) => {
+    if (destination === 'lab' || destination === 'session-setup' || destination === 'setup' || destination === 'history') {
+      setScreen(destination)
+    }
+  }
+
+  return (
+    <>
+      {/* Hidden during a session: a reload tears down all in-memory session
+          state (scores, streaks, timers live in refs), so hitting it mid-session
+          silently destroys the run. There is no reason to reload while tracking,
+          and an update can always wait until the session ends. */}
+      <BuildIdentity />
+      {screen === 'session'
+        ? content
+        : (
+          <AppShell
+            active={screen === 'focus-apps' ? 'lab' : screen}
+            onNavigate={navigate}
+            utility={<AppRefreshControl updateStatus={updateStatus} />}
+          >
+            {content}
+          </AppShell>
+        )}
     </>
   )
 }

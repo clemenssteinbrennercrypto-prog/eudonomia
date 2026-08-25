@@ -96,7 +96,6 @@ export default function HomeScreen({
   const [customVal, setCustomVal] = useState('')
   const isCustomActive = !DURATIONS.includes(duration)
   const streak = useMemo(() => computeStreak(), [])
-  const sessionCount = useMemo(() => loadSessions().length, [])
   // What your own history says about when you work best. Returns null until
   // there are enough sessions to say anything honest.
   const timing = useMemo(() => suggestNextSession(loadSessions()), [])
@@ -211,14 +210,6 @@ export default function HomeScreen({
         {/* Header row */}
         <div className="home-header">
           <h1 className="app-title">Eudaimonia</h1>
-          <div className="home-header-actions">
-            <button className="home-header-action" onClick={onShowSetup}>
-              Setup
-            </button>
-            <button className="home-header-action" onClick={onShowHistory}>
-              History{sessionCount > 0 ? ` (${sessionCount})` : ''}
-            </button>
-          </div>
           {streak >= 2 && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
               <span style={{
