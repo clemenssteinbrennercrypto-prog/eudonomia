@@ -47,15 +47,11 @@ export default function SessionIntentScreen({
     <main className="session-intent">
       <header className="session-intent-heading">
         <div>
-          <span className="session-intent-kicker">Session briefing · 01</span>
-          <h1>What will you finish?</h1>
-          <p>Define one concrete outcome. The session starts from intention, not a score.</p>
+          <span className="session-intent-kicker">Focus protocol · 01 / 03</span>
+          <h1>Session Planning</h1>
+          <p>Set a clear intention before the clock starts.</p>
         </div>
-        <div className="session-intent-progress" aria-label="Step 1 of 3">
-          <span className="is-active">Intent</span>
-          <span>Environment</span>
-          <span>Commitment</span>
-        </div>
+        <span className="session-intent-step">Intent</span>
       </header>
 
       <div className="session-intent-grid">
@@ -74,14 +70,13 @@ export default function SessionIntentScreen({
 
           <label className="session-intent-field">
             <span>Definition of done</span>
-            <textarea
+            <input
               value={goal}
-              onChange={event => setGoal(event.target.value.slice(0, 180))}
+              onChange={event => setGoal(event.target.value.slice(0, 120))}
               placeholder="What must exist when this session ends?"
-              maxLength={180}
-              rows={3}
+              maxLength={120}
             />
-            <small>{goal.length}/180</small>
+            <small>{goal.length}/120</small>
           </label>
 
           <fieldset className="session-intent-field">

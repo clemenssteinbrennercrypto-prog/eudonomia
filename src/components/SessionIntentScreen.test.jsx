@@ -29,7 +29,7 @@ beforeEach(() => {
 describe('SessionIntentScreen', () => {
   it('is an intent briefing and does not display a focus metric', () => {
     const html = renderIntent()
-    expect(html).toContain('What will you finish?')
+    expect(html).toContain('Session Planning')
     expect(html).toContain('Definition of done')
     expect(html).not.toContain('Focus Score')
     expect(html).toContain('disabled=""')
