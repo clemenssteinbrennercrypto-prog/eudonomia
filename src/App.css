@@ -33,6 +33,7 @@ button:focus-visible {
   --ultra-deep:   #16207A;  /* pressed / inset                              */
   --ultra-glow:   rgba(72, 108, 255, 0.45);
   --ultra-wash:   rgba(44, 70, 255, 0.10);
+  --accent:       var(--ultra); /* shared interactive accent                 */
 
   --text:           #E7ECFF;
   --text-secondary: #9EAAD9;
