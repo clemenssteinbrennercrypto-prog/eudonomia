@@ -8,7 +8,11 @@ import {
   loadSessions,
   saveSession,
 } from './storage'
-import { ATTENTION_SCORING_VERSION, FOCUS_METRIC_V1 } from './focusMetric'
+import {
+  ATTENTION_SCORING_VERSION,
+  FOCUS_METRIC_V1,
+  TIMER_THROTTLING_EVIDENCE_VERSION,
+} from './focusMetric'
 import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
 
 class MemoryStorage {
@@ -125,6 +129,10 @@ describe('focus ledger persistence', () => {
         phase: 'lock_in',
       })),
       focusPhases: { seconds: { arrival: 0, ramp: 0, lock_in: 300, fade: 0, recovery: 0, drift: 0 } },
+      timerThrottlingEvidence: {
+        version: TIMER_THROTTLING_EVIDENCE_VERSION,
+        intervals: [{ startSecond: 20, endSecond: 620 }],
+      },
       focusMetricVersion: FOCUS_METRIC_V1.version,
       sessionEfficiency: 78,
       deepFocusMinutes: 5,
@@ -156,11 +164,11 @@ describe('focus ledger persistence', () => {
       focusedSeconds: 600,
       sessionEfficiency: 78,
       deepFocusMinutes: 10,
-      focusMeasurementSource: 'timer_timeline_v2',
+      focusMeasurementSource: 'timer_timeline_v3',
     })
     expect(loadFocusLedger().days['2026-08-17'].sessions['timer-throttled']).toMatchObject({
       measuredSeconds: 600,
-      source: 'timer_timeline_v2',
+      source: 'timer_timeline_v3',
     })
   })
 

@@ -38,6 +38,10 @@ function partOfDay(hour) {
  *  to mean anything. A 20-second session is noise, not evidence. */
 export function isUsable(session) {
   if (!session) return false
+  // Calibration makes cross-session claims. A known tracking fault makes the
+  // whole session unreliable evidence even when an earlier partial span was
+  // valid enough to display in that session's own debrief.
+  if (session.trackingFaulted) return false
   if (!(session.actualSeconds > 120)) return false
   const measurement = sessionFocusMeasurement(session)
   return measurement?.measuredSeconds > 120 && Number.isFinite(session.timestamp)

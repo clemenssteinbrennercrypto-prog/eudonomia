@@ -53,12 +53,13 @@ describe('dashboard data', () => {
   it('renders unmeasured recent sessions without fabricating focus', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),
-      sessions: [{ id: 'legacy', task: 'Old work', actualSeconds: 1200 }],
+      sessions: [{ id: 'legacy', task: 'Old work', timestamp: NOW, actualSeconds: 1200 }],
       focusConfig: {}, focusModeEnabled: true, now: NOW,
     })
-    // Current ledger semantics reserve 0 for a day with no focus activity;
-    // null means activity existed but could not be measured reliably.
-    expect(result.period.score).toBe(0)
+    // The session proves there was activity, but no ledger measurement exists.
+    // Passing sessions through keeps Lab aligned with History: absent, not 0.
+    expect(result.period.score).toBeNull()
+    expect(result.period.days[0].noActivity).toBeUndefined()
     expect(result.recentSessions[0].efficiency).toBeNull()
   })
 

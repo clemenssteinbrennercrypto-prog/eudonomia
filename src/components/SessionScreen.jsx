@@ -28,21 +28,19 @@ import {
   CALIBRATION_SECS,
   FLOW_SCORE,
   FOCUSED_SCORE,
-  GOOD_STREAK_SCORE,
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
   classifyDownwardAttention,
-  classifyFocusPhase,
   classifyHorizontalAttention,
   computeThresholds,
   getCircadianFactor,
   headVariance,
-  isFocusedSecond,
 } from '../lib/attention'
-import { ATTENTION_SCORING_VERSION } from '../lib/focusMetric'
+import { ATTENTION_SCORING_VERSION, TIMER_THROTTLING_EVIDENCE_VERSION } from '../lib/focusMetric'
 import {
   ATTENTION_ACCUMULATION_VERSION,
+  accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
 
@@ -946,6 +944,8 @@ export default function SessionScreen({
   const focusPhaseRef        = useRef('arrival')
   const focusPhaseSecondsRef = useRef({ arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0 })
   const focusPhaseTransitionsRef = useRef([])
+  const backgroundedAtSecondRef = useRef(null)
+  const timerThrottlingIntervalsRef = useRef([])
   const phaseInterventionRef = useRef({
     gentleReminders: 0,
     preDriftNudges: 0,
@@ -1072,10 +1072,30 @@ export default function SessionScreen({
     setCameraEpoch(e => e + 1)
   }, [])
 
-  // Waking from sleep (or refocusing the window) is the moment to rebuild.
+  // Window focus is independent evidence that delayed callbacks came from
+  // backgrounding rather than a camera dropout. Persist these intervals so a
+  // future migration never has to infer the cause from timeline gaps alone.
   useEffect(() => {
+    const elapsedSecond = (now) => {
+      const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
+      return Math.max(0, (now - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
+    }
+    const onBackground = () => {
+      if (sessionEndedRef.current || isPausedRef.current || backgroundedAtSecondRef.current != null) return
+      backgroundedAtSecondRef.current = elapsedSecond(Date.now())
+    }
+    const closeBackgroundInterval = () => {
+      const startSecond = backgroundedAtSecondRef.current
+      if (startSecond == null) return
+      const endSecond = elapsedSecond(Date.now())
+      if (endSecond > startSecond) {
+        timerThrottlingIntervalsRef.current.push({ startSecond, endSecond })
+      }
+      backgroundedAtSecondRef.current = null
+    }
     const onWake = () => {
       if (document.visibilityState !== 'visible') return
+      closeBackgroundInterval()
       if (sessionEndedRef.current) return
       const lastFrame = lastFrameAtRef.current
       if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
@@ -1083,10 +1103,16 @@ export default function SessionScreen({
         restartCamera()
       }
     }
-    document.addEventListener('visibilitychange', onWake)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') onWake()
+      else onBackground()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', onBackground)
     window.addEventListener('focus', onWake)
     return () => {
-      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', onBackground)
       window.removeEventListener('focus', onWake)
     }
   }, [restartCamera])
@@ -1166,6 +1192,76 @@ export default function SessionScreen({
     })
   }, [])
 
+  const accumulateMeasurement = useCallback(({
+    sampleSeconds,
+    now,
+    elapsedSecs,
+    forceTimelineSample = false,
+  }) => {
+    const activityClassification = classifyGoalAwareActivity(
+      activityRef.current,
+      focusAppsConfigRef.current,
+      isActivityConnected(),
+      sessionIntentRef.current,
+      sessionContractRef.current
+    )
+    const result = accumulateMeasuredSpan({
+      measuredSeconds: measuredSecondsRef.current,
+      scoreSum: scoreSumRef.current,
+      focusedSeconds: focusedSecondsRef.current,
+      preDriftSeconds: preDriftSecondsRef.current,
+      currentStreak: currentStreakRef.current,
+      longestStreak: longestStreakRef.current,
+      goodStreakSeconds: goodStreakSecsRef.current,
+      currentPhase: focusPhaseRef.current,
+      phaseSeconds: focusPhaseSecondsRef.current,
+      lastTimelineBucket: lastTimelineBucketRef.current,
+    }, {
+      sampleSeconds,
+      elapsedSecs,
+      score: focusScoreRef.current,
+      msSinceDistraction: lastDistractionRef.current ? now - lastDistractionRef.current : Infinity,
+      preDriftActive: preDriftRiskRef.current.active,
+      inFlow: inFlowRef.current,
+      timelineIntervalSeconds: SCORE_UPDATE_SECS,
+      forceTimelineSample,
+      activity: {
+        kind: activityClassification.kind,
+        label: activityClassification.label,
+        basis: activityClassification.basis,
+      },
+    })
+    if (!result) return null
+
+    measuredSecondsRef.current = result.measuredSeconds
+    scoreSumRef.current = result.scoreSum
+    focusedSecondsRef.current = result.focusedSeconds
+    preDriftSecondsRef.current = result.preDriftSeconds
+    currentStreakRef.current = result.currentStreak
+    longestStreakRef.current = result.longestStreak
+    goodStreakSecsRef.current = result.goodStreakSeconds
+    focusPhaseSecondsRef.current = result.phaseSeconds
+    lastTimelineBucketRef.current = result.lastTimelineBucket
+
+    if (result.phaseTransition) {
+      focusPhaseTransitionsRef.current.push(result.phaseTransition)
+      focusPhaseRef.current = result.currentPhase
+      setFocusPhase(result.currentPhase)
+    }
+    if (result.timelineSample) timelineSnapshotsRef.current.push(result.timelineSample)
+
+    activityAlignmentRef.current = recordActivityAlignment(
+      activityAlignmentRef.current,
+      activityClassification,
+      elapsedSecs
+    )
+    setFocusScore(result.score)
+    scoreHistoryRef.current = [...scoreHistoryRef.current, result.score].slice(-60)
+    setScoreHistory(scoreHistoryRef.current)
+    setCurrentStreak(result.currentStreak)
+    return result
+  }, [])
+
   // ── End session ───────────────────────────────────────────────────────────
   const endSession = useCallback((completed = false) => {
     if (sessionEndedRef.current) return
@@ -1176,6 +1272,13 @@ export default function SessionScreen({
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
     const endedAt = Date.now()
     const actualSeconds = Math.round((endedAt - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
+    if (backgroundedAtSecondRef.current != null) {
+      const startSecond = backgroundedAtSecondRef.current
+      if (actualSeconds > startSecond) {
+        timerThrottlingIntervalsRef.current.push({ startSecond, endSecond: actualSeconds })
+      }
+      backgroundedAtSecondRef.current = null
+    }
     // A manual stop can land between timer callbacks. Flush that final real span
     // so background throttling cannot leave the last one-to-three seconds out.
     if (!isPausedRef.current && !cameraFaultRef.current) {
@@ -1186,17 +1289,12 @@ export default function SessionScreen({
         lastDeliveredFrameAt: lastDeliveredFrameAtRef.current,
       })
       if (finalSampleSeconds > 0) {
-        const finalRoundedScore = Math.round(focusScoreRef.current)
-        measuredSecondsRef.current += finalSampleSeconds
-        scoreSumRef.current += finalRoundedScore * finalSampleSeconds
-        focusPhaseSecondsRef.current[focusPhaseRef.current] =
-          (focusPhaseSecondsRef.current[focusPhaseRef.current] || 0) + finalSampleSeconds
-        if (preDriftRiskRef.current.active) preDriftSecondsRef.current += finalSampleSeconds
-        if (isFocusedSecond(finalRoundedScore)) {
-          focusedSecondsRef.current += finalSampleSeconds
-          currentStreakRef.current += finalSampleSeconds
-          longestStreakRef.current = Math.max(longestStreakRef.current, currentStreakRef.current)
-        }
+        accumulateMeasurement({
+          sampleSeconds: finalSampleSeconds,
+          now: endedAt,
+          elapsedSecs: actualSeconds,
+          forceTimelineSample: true,
+        })
       }
       statsSampleAtRef.current = endedAt
     }
@@ -1258,8 +1356,12 @@ export default function SessionScreen({
         final: focusPhaseRef.current,
         transitions: [...focusPhaseTransitionsRef.current],
       },
+      timerThrottlingEvidence: {
+        version: TIMER_THROTTLING_EVIDENCE_VERSION,
+        intervals: [...timerThrottlingIntervalsRef.current],
+      },
     })
-  }, [duration, energyLevel, onEnd, pushBlockingState, stopAmbient])
+  }, [accumulateMeasurement, duration, energyLevel, onEnd, pushBlockingState, stopAmbient])
 
   useEffect(() => {
     let cancelled = false
@@ -2203,6 +2305,7 @@ export default function SessionScreen({
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
     const tick = setInterval(() => {
+      if (sessionEndedRef.current) return
       const now = Date.now()
       const previousSampleAt = statsSampleAtRef.current
       statsSampleAtRef.current = now
@@ -2288,52 +2391,7 @@ export default function SessionScreen({
         return
       }
 
-      const focused = isFocusedSecond(focusScoreRef.current)
-      if (preDriftRiskRef.current.active) {
-        preDriftSecondsRef.current += sampleSeconds
-      }
-
-      if (focused) {
-        focusedSecondsRef.current += sampleSeconds
-        currentStreakRef.current  += sampleSeconds
-        if (currentStreakRef.current > longestStreakRef.current)
-          longestStreakRef.current = currentStreakRef.current
-      } else {
-        currentStreakRef.current = 0
-      }
-
-      const roundedScore = Math.round(focusScoreRef.current)
-      const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
-      // Unbroken run at/above the good-score bar. Counting anything lower lets a
-      // steadily mediocre session accumulate its way into Lock-in.
-      if (roundedScore >= GOOD_STREAK_SCORE) goodStreakSecsRef.current += sampleSeconds
-      else goodStreakSecsRef.current = 0
-      const nextFocusPhase = classifyFocusPhase({
-        elapsedSecs,
-        score: roundedScore,
-        goodStreakSecs: goodStreakSecsRef.current,
-        msSinceDistraction,
-        preDriftActive: preDriftRiskRef.current.active,
-        inFlow: inFlowRef.current,
-      })
-      measuredSecondsRef.current += sampleSeconds
-      scoreSumRef.current += roundedScore * sampleSeconds
-      focusPhaseSecondsRef.current[nextFocusPhase] =
-        (focusPhaseSecondsRef.current[nextFocusPhase] || 0) + sampleSeconds
-      if (nextFocusPhase !== focusPhaseRef.current) {
-        focusPhaseTransitionsRef.current.push({
-          second: elapsedSecs,
-          from: focusPhaseRef.current,
-          to: nextFocusPhase,
-        })
-        focusPhaseRef.current = nextFocusPhase
-        setFocusPhase(nextFocusPhase)
-      }
-      setFocusScore(roundedScore)
-      // Keep sparkline history (max 60 values, pushed once per second = last 60s)
-      scoreHistoryRef.current = [...scoreHistoryRef.current, roundedScore].slice(-60)
-      setScoreHistory(scoreHistoryRef.current)
-      setCurrentStreak(currentStreakRef.current)
+      accumulateMeasurement({ sampleSeconds, now, elapsedSecs })
       setDistractionCount(distractionEventsRef.current)
       setDetectionConf(confidenceRef.current)
       // gaze dot: map yaw (-45..+45) and pitch (-30..+30) to 0..1
@@ -2346,30 +2404,6 @@ export default function SessionScreen({
       } else {
         setGazePos(null)
       }
-
-      const timelineBucket = Math.floor(elapsedSecs / SCORE_UPDATE_SECS)
-      if (elapsedSecs > 0 && timelineBucket > lastTimelineBucketRef.current) {
-        lastTimelineBucketRef.current = timelineBucket
-        // Reuse the classification already computed for scoring this frame.
-        timelineSnapshotsRef.current.push({
-          second: elapsedSecs,
-          score: Math.round(focusScoreRef.current),
-          focused,
-          preDrift: preDriftRiskRef.current.active,
-          phase: nextFocusPhase,
-          activity: {
-            kind: activityClassification.kind,
-            label: activityClassification.label,
-            basis: activityClassification.basis,
-          },
-        })
-      }
-
-      activityAlignmentRef.current = recordActivityAlignment(
-        activityAlignmentRef.current,
-        activityClassification,
-        elapsedSecs
-      )
 
       // Break reminders at 25min (1500s), 50min (3000s), 90min (5400s)
       const breakMins = [25, 50, 90]
@@ -2402,7 +2436,7 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [restartCamera])
+  }, [accumulateMeasurement, restartCamera])
 
   useEffect(() => {
     if (timeLeft === 0) endSession(true)

@@ -54,11 +54,15 @@ describe('refuses to speak from thin data', () => {
   })
 
   it('does not treat an unmeasured camera gap as poor focus', () => {
-    const partial = session({ mins: 60, pct: 25, extra: { measuredSeconds: 1800, focusedSeconds: 900 } })
+    const partial = session({
+      mins: 60,
+      pct: 25,
+      extra: { measuredSeconds: 1800, focusedSeconds: 900, avgFocusScore: 50 },
+    })
     expect(timeOfDayFit([partial, partial, partial]).ranked[0].focusPct).toBe(50)
   })
 
-  it('keeps substantial valid measurement before a final camera fault', () => {
+  it('does not use a faulted session as cross-session calibration evidence', () => {
     const partial = session({
       mins: 30,
       extra: {
@@ -68,8 +72,11 @@ describe('refuses to speak from thin data', () => {
         focusedSeconds: 675,
       },
     })
-    expect(isUsable(partial)).toBe(true)
-    expect(timeOfDayFit([partial, partial, partial]).ranked[0].focusPct).toBe(75)
+    expect(isUsable(partial)).toBe(false)
+    expect(calibrate(Array.from({ length: MIN_SESSIONS }, () => partial))).toMatchObject({
+      ready: false,
+      needMore: MIN_SESSIONS,
+    })
   })
 
   it('refuses a long wall-clock session with zero measured seconds', () => {

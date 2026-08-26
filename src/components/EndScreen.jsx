@@ -423,7 +423,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     outputEvidence       = null,
     phaseInterventions   = null,
     focusMetricRejection = null,
-    measurementCoverage  = null,
   } = sessionData
 
   // The verdict — did the work match the intention? Runs once, after the fact,
@@ -682,7 +681,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
         </div>
 
         {focusMetricRejection && (() => {
-          const notice = describeFocusMetricRejection(focusMetricRejection, { measuredSeconds, measurementCoverage })
+          const notice = describeFocusMetricRejection(focusMetricRejection, { measuredSeconds })
           if (!notice) return null
           return (
             <div style={{

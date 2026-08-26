@@ -13,6 +13,14 @@ export function sessionFocusMeasurement(session) {
   // A present-but-zero measuredSeconds field explicitly means no measurement.
   // Falling back to wall time here would turn a camera failure into 0% focus.
   const hasMeasuredField = session.measuredSeconds != null
+  const hasMeasurementSummary = Number.isFinite(session.avgFocusScore) || Number.isFinite(session.finalScore)
+  const hasTimelineEvidence = Array.isArray(session.timeline) && session.timeline.some(sample =>
+    Number.isFinite(sample?.second) && Number.isFinite(sample?.score))
+  // Current-format records always write a summary and timeline. Requiring one
+  // of them stops a malformed object containing only two counters from
+  // rendering as measured, while pre-summary legacy records retain their
+  // explicit wall-time fallback below.
+  if (hasMeasuredField && !hasMeasurementSummary && !hasTimelineEvidence) return null
   const measuredSeconds = hasMeasuredField ? session.measuredSeconds : session.actualSeconds
   if (!Number.isFinite(measuredSeconds) || measuredSeconds <= 0) return null
   if (!Number.isFinite(session.actualSeconds) || session.actualSeconds <= 0) return null

@@ -98,12 +98,46 @@ function phaseTotals(phaseSeconds) {
   return { measuredSeconds, deepFocusSeconds }
 }
 
-export const TIMER_TIMELINE_RECOVERY_SOURCE = 'timer_timeline_v2'
+export const LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE = 'timer_timeline_v2'
+export const TIMER_TIMELINE_RECOVERY_SOURCE = 'timer_timeline_v3'
+export const TIMER_THROTTLING_EVIDENCE_VERSION = 1
+
+function isTimerRecoverySource(source) {
+  return source === TIMER_TIMELINE_RECOVERY_SOURCE || source === LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE
+}
+
+function throttlingEvidenceIntervals(session) {
+  const evidence = session?.timerThrottlingEvidence
+  if (evidence?.version !== TIMER_THROTTLING_EVIDENCE_VERSION || !Array.isArray(evidence.intervals)) return []
+  return evidence.intervals.filter(interval =>
+    finiteNonNegative(interval?.startSecond) &&
+    finiteNonNegative(interval?.endSecond) &&
+    interval.endSecond > interval.startSecond)
+}
+
+function hasValidThrottlingEvidenceRecord(session) {
+  return session?.timerThrottlingEvidence?.version === TIMER_THROTTLING_EVIDENCE_VERSION &&
+    Array.isArray(session.timerThrottlingEvidence.intervals)
+}
+
+function hasThrottlingEvidence(session, startSecond, endSecond) {
+  return throttlingEvidenceIntervals(session).some(interval =>
+    interval.startSecond <= startSecond + 1 && interval.endSecond >= endSecond - 1)
+}
+
+function isUnverifiedTimerRecovery(session) {
+  if (session?.focusMeasurementSource === LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE) return true
+  return session?.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE &&
+    (session?.focusMeasurementRecovery?.version !== 2 ||
+      session?.focusMeasurementRecovery?.throttlingEvidenceVersion !== TIMER_THROTTLING_EVIDENCE_VERSION ||
+      !hasValidThrottlingEvidenceRecord(session))
+}
 
 // Builds a versioned replacement only for the timer-throttling failure mode:
 // old per-callback counters cover far less time than a dense, session-spanning
-// timeline proves was sampled. This is intentionally strict. A camera outage
-// leaves a large timeline gap and is not filled with an inferred score.
+// timeline proves was sampled. A short camera outage and a delayed timer look
+// identical in timeline spacing, so any gap beyond the normal snapshot cadence
+// additionally needs independently recorded background/throttling evidence.
 export function recoverThrottledTimerMeasurement(session) {
   if (
     session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION ||
@@ -144,6 +178,21 @@ export function recoverThrottledTimerMeasurement(session) {
     if (samples[index].second - samples[index - 1].second > maxGap) return null
   }
 
+  const normalSnapshotGap = FOCUS_METRIC_V1.legacyTimelineSampleSeconds
+  const inferredSpans = []
+  if (samples[0].second - eligibleStart > normalSnapshotGap) {
+    inferredSpans.push([eligibleStart, samples[0].second])
+  }
+  for (let index = 1; index < samples.length; index += 1) {
+    if (samples[index].second - samples[index - 1].second > normalSnapshotGap) {
+      inferredSpans.push([samples[index - 1].second, samples[index].second])
+    }
+  }
+  if (eligibleEnd - samples[samples.length - 1].second > normalSnapshotGap) {
+    inferredSpans.push([samples[samples.length - 1].second, eligibleEnd])
+  }
+  if (inferredSpans.some(([start, end]) => !hasThrottlingEvidence(session, start, end))) return null
+
   const phaseSeconds = Object.fromEntries([...phases].map(phase => [phase, 0]))
   let measuredSeconds = 0
   let scoreSum = 0
@@ -153,7 +202,10 @@ export function recoverThrottledTimerMeasurement(session) {
   let longestFocusedStreak = 0
   for (let index = 0; index < samples.length; index += 1) {
     const sample = samples[index]
-    const start = Math.max(eligibleStart, sample.second)
+    // The first accepted sample represents the initial snapshot bucket too.
+    // Dropping that leading span made otherwise valid 95%-coverage sessions
+    // fail recovery for no measurement reason.
+    const start = index === 0 ? eligibleStart : Math.max(eligibleStart, sample.second)
     const end = Math.min(eligibleEnd, samples[index + 1]?.second ?? eligibleEnd)
     const seconds = Math.max(0, end - start)
     if (seconds <= 0) continue
@@ -193,7 +245,8 @@ export function recoverThrottledTimerMeasurement(session) {
     },
     focusMeasurementSource: TIMER_TIMELINE_RECOVERY_SOURCE,
     focusMeasurementRecovery: {
-      version: 1,
+      version: 2,
+      throttlingEvidenceVersion: TIMER_THROTTLING_EVIDENCE_VERSION,
       previousMeasuredSeconds: session.measuredSeconds,
       timelineSamples: samples.length,
       maximumGapSeconds: Math.max(0, ...samples.slice(1).map((sample, index) => sample.second - samples[index].second)),
@@ -293,7 +346,7 @@ export function buildFocusMetricDiagnostics(sessions, ledger) {
         scoreSpanSeconds: spanSeconds,
         recoveredFromLegacyTimeline: Boolean(recovered),
         recoveredFromThrottledTimer: Boolean(timerRecovered) ||
-          session?.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE,
+          isTimerRecoverySource(session?.focusMeasurementSource),
         currentDerivedRejection: derived.focusMetricRejection,
         currentMeasurementCoverage: derived.measurementCoverage,
         ledgerState: ledgerItem
@@ -326,6 +379,10 @@ export function deriveSessionFocusMetric(session) {
     measurementCoverage: coverage,
     focusMetricRejection: reason,
   })
+
+  if (isUnverifiedTimerRecovery(session)) {
+    return reject('unverified_timer_recovery')
+  }
 
   if (measurement?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
     return reject('legacy_scoring_version')
@@ -363,20 +420,30 @@ export function deriveSessionFocusMetric(session) {
 
 export function withSessionFocusMetric(session) {
   const recovered = recoverThrottledTimerMeasurement(session) || recoverLegacyTimelineMeasurement(session)
-  return { ...session, ...(recovered || {}), ...deriveSessionFocusMetric(recovered ? { ...session, ...recovered } : session) }
+  const measurement = recovered ? { ...session, ...recovered } : session
+  const invalidatedRecovery = isUnverifiedTimerRecovery(measurement)
+  return {
+    ...session,
+    ...(recovered || {}),
+    ...(invalidatedRecovery ? {
+      scoreMeasured: false,
+      avgFocusScore: null,
+      finalScore: null,
+    } : {}),
+    ...deriveSessionFocusMetric(measurement),
+  }
 }
 
 // Explain hard refusals. Coverage is reported as measurement quality, but it is
 // not a binary gate: once five real minutes exist, the metric scores only those
 // measured seconds and its volume term naturally withholds credit for gaps.
-export function describeFocusMetricRejection(reason, { measuredSeconds, measurementCoverage } = {}) {
+export function describeFocusMetricRejection(reason, { measuredSeconds } = {}) {
   const measuredMinutes = Number.isFinite(measuredSeconds) ? Math.round(measuredSeconds / 60) : 0
-  const coveragePct = Number.isFinite(measurementCoverage) ? Math.round(measurementCoverage * 100) : null
   switch (reason) {
     case 'insufficient_duration':
       return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
-    case 'low_coverage':
-      return `An older build excluded this session at ${coveragePct ?? 'low'}% camera coverage. Reload once so its measured time can be re-evaluated.`
+    case 'unverified_timer_recovery':
+      return 'An older build reconstructed timer gaps without proof that tracking continued, so this session is excluded rather than guessed.'
     case 'legacy_scoring_version':
       return 'This session used an older scoring version, so it is not counted toward your daily score.'
     case 'invalid_measurement':
@@ -474,9 +541,12 @@ export function backfillFocusLedger(ledger, sessions) {
     const day = localDayKey(session.startedAt ?? session.timestamp)
     const recorded = day ? next.days[day]?.sessions?.[session.id] : null
     const upgraded = withSessionFocusMetric(session)
+    const invalidatesTimerRecovery = isTimerRecoverySource(recorded?.source) &&
+      upgraded.focusMetricRejection === 'unverified_timer_recovery'
     if (
       recorded &&
       recorded.status !== 'unmeasured' &&
+      !invalidatesTimerRecovery &&
       !(upgraded.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE &&
         recorded.source !== TIMER_TIMELINE_RECOVERY_SOURCE)
     ) continue
@@ -634,7 +704,10 @@ export function buildFocusPeriod(ledger, options = {}) {
     })
   }
 
-  const scoredDays = days.filter(day => day.score != null)
+  // A rest day is calendar context, not a failed focus measurement. Keep its
+  // explicit zero in `days` for the chart, but never average it together with
+  // days that actually produced a score.
+  const scoredDays = days.filter(day => day.score != null && !day.noActivity)
   const measuredDays = days.filter(day => day.score > 0 && day.sessionCount > 0)
   const rawScore = scoredDays.length
     ? scoredDays.reduce((sum, day) => sum + day.rawScore, 0) / scoredDays.length

@@ -73,7 +73,11 @@ function outcomeLabel(session) {
 }
 
 export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, scoreRange = 'day', fieldRange = 'day', now = Date.now() }) {
-  const period = buildFocusPeriod(ledger, { range: scoreRange === 'week' ? 'week' : 'day', now })
+  const period = buildFocusPeriod(ledger, {
+    range: scoreRange === 'week' ? 'week' : 'day',
+    now,
+    sessions,
+  })
   const blockedCount = focusConfig?.distractionApps?.length || 0
   const blockedDomainCount = focusConfig?.distractionDomains?.length || 0
   const protection = !focusModeEnabled

@@ -15,6 +15,7 @@ function sessionAt(date, focusPct = 70, extra = {}) {
     timestamp: date.getTime(),
     actualSeconds,
     focusedSeconds: Math.round(actualSeconds * focusPct / 100),
+    avgFocusScore: focusPct,
     ...extra,
   }
 }
@@ -46,6 +47,7 @@ describe('session focus measurement', () => {
       sessionAt(NOW, 0, { measuredSeconds: 100, focusedSeconds: 101 }),
       sessionAt(NOW, 0, { actualSeconds: 100, measuredSeconds: 102, focusedSeconds: 50 }),
       sessionAt(NOW, 0, { measuredSeconds: 100, focusedSeconds: NaN }),
+      sessionAt(NOW, 50, { measuredSeconds: 100, focusedSeconds: 50, avgFocusScore: null }),
     ]) {
       expect(hasMeasuredFocus(invalid)).toBe(false)
       expect(sessionFocusPct(invalid)).toBeNull()

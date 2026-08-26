@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTENTION_SCORING_VERSION,
   FOCUS_METRIC_V1,
+  TIMER_THROTTLING_EVIDENCE_VERSION,
   addSessionToFocusLedger,
   backfillFocusLedger,
   buildFocusMetricDiagnostics,
@@ -93,6 +94,7 @@ function throttledTimerSession({
   measuredSeconds = 300,
   score = 78,
   sampleEvery = 10,
+  withThrottlingEvidence = true,
 } = {}) {
   const startedAt = new Date(2026, 7, 17, 9).getTime()
   return {
@@ -115,6 +117,12 @@ function throttledTimerSession({
       })
     ),
     focusPhases: { seconds: phaseSeconds(measuredSeconds, 'lock_in') },
+    ...(withThrottlingEvidence ? {
+      timerThrottlingEvidence: {
+        version: TIMER_THROTTLING_EVIDENCE_VERSION,
+        intervals: [{ startSecond: FOCUS_METRIC_V1.calibrationSeconds, endSecond: actualSeconds }],
+      },
+    } : {}),
   }
 }
 
@@ -212,14 +220,75 @@ describe('session focus metric refusals', () => {
       focusedSeconds: 600,
       scoreSum: 46_800,
       avgFocusScore: 78,
-      focusMeasurementSource: 'timer_timeline_v2',
+      focusMeasurementSource: 'timer_timeline_v3',
     })
     expect(recovered.focusPhases.seconds.lock_in).toBe(600)
     expect(deriveSessionFocusMetric(throttledTimerSession())).toMatchObject({
       sessionEfficiency: 78,
       deepFocusMinutes: 10,
       measurementCoverage: 1,
+      focusMeasurementSource: 'timer_timeline_v3',
+    })
+    const persisted = withSessionFocusMetric(throttledTimerSession())
+    expect(persisted.focusMeasurementRecovery).toMatchObject({
+      version: 2,
+      throttlingEvidenceVersion: TIMER_THROTTLING_EVIDENCE_VERSION,
+    })
+    expect(withSessionFocusMetric(persisted)).toMatchObject({
+      sessionEfficiency: 78,
+      focusMetricRejection: null,
+      focusMeasurementSource: 'timer_timeline_v3',
+    })
+  })
+
+  it('does not mistake a ten-second tracking dropout for timer throttling', () => {
+    const dropout = throttledTimerSession({ withThrottlingEvidence: false })
+    expect(recoverThrottledTimerMeasurement(dropout)).toBeNull()
+    expect(withSessionFocusMetric(dropout)).toMatchObject({
+      measuredSeconds: 300,
+      focusMeasurementSource: 'live_v1',
+      measurementCoverage: 0.5,
+    })
+  })
+
+  it('keeps a verified recovery valid when normal snapshot cadence needed no intervals', () => {
+    const session = throttledTimerSession({ sampleEvery: 5 })
+    session.timerThrottlingEvidence.intervals = []
+    const persisted = withSessionFocusMetric(session)
+    expect(persisted).toMatchObject({
+      focusMeasurementSource: 'timer_timeline_v3',
+      focusMetricRejection: null,
+    })
+    expect(withSessionFocusMetric(persisted)).toMatchObject({
+      sessionEfficiency: 78,
+      focusMetricRejection: null,
+    })
+  })
+
+  it('attributes the evidenced span before the first delayed sample', () => {
+    const session = throttledTimerSession({ sampleEvery: 5 })
+    session.timeline = session.timeline.map(sample => ({ ...sample, second: sample.second + 5 }))
+    expect(recoverThrottledTimerMeasurement(session)).toMatchObject({
+      measuredSeconds: 600,
+      scoreSum: 46_800,
+    })
+  })
+
+  it('invalidates a previously stored timer recovery that had no independent evidence', () => {
+    const oldRecovery = {
+      ...throttledTimerSession({ withThrottlingEvidence: false }),
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      measuredSeconds: 600,
+      scoreSum: 46_800,
+      focusedSeconds: 600,
+      focusPhases: { seconds: phaseSeconds(600, 'lock_in') },
       focusMeasurementSource: 'timer_timeline_v2',
+      focusMeasurementRecovery: { version: 1, previousMeasuredSeconds: 300 },
+    }
+    expect(withSessionFocusMetric(oldRecovery)).toMatchObject({
+      scoreMeasured: false,
+      sessionEfficiency: null,
+      focusMetricRejection: 'unverified_timer_recovery',
     })
   })
 
@@ -407,8 +476,39 @@ describe('backfilling the ledger from already-stored sessions', () => {
     ledger = backfillFocusLedger(ledger, [session])
     expect(ledger.days['2026-08-17'].sessions['replace-timer-count']).toMatchObject({
       measuredSeconds: 600,
-      source: 'timer_timeline_v2',
+      source: 'timer_timeline_v3',
     })
+  })
+
+  it('replaces an unverified recovered ledger value with an unmeasured marker', () => {
+    const session = {
+      ...throttledTimerSession({ id: 'unsafe-recovery', withThrottlingEvidence: false }),
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      measuredSeconds: 600,
+      scoreSum: 46_800,
+      focusedSeconds: 600,
+      focusPhases: { seconds: phaseSeconds(600, 'lock_in') },
+      focusMeasurementSource: 'timer_timeline_v2',
+      focusMeasurementRecovery: { version: 1, previousMeasuredSeconds: 300 },
+    }
+    const ledger = {
+      schemaVersion: 1,
+      days: {
+        '2026-08-17': {
+          sessions: {
+            'unsafe-recovery': {
+              version: 1,
+              measuredSeconds: 600,
+              scoreSum: 46_800,
+              deepFocusSeconds: 600,
+              source: 'timer_timeline_v2',
+            },
+          },
+        },
+      },
+    }
+    expect(backfillFocusLedger(ledger, [session]).days['2026-08-17'].sessions['unsafe-recovery'])
+      .toMatchObject({ status: 'unmeasured', rejection: 'unverified_timer_recovery' })
   })
 })
 
@@ -443,6 +543,21 @@ describe('daily ledger and calendar periods', () => {
     expect(period.score).not.toBeNull()
   })
 
+  it('does not average rest-day zeros into the score from a measured day', () => {
+    const monday = measuredSession({ id: 'only-session' })
+    const ledger = addSessionToFocusLedger(emptyFocusLedger(), monday)
+    const daily = calculateDailyFocus(ledger.days['2026-08-17'])
+    const week = buildFocusPeriod(ledger, {
+      range: 'week',
+      now: new Date(2026, 7, 23, 18),
+    })
+    expect(week.days.filter(day => day.noActivity)).toHaveLength(6)
+    expect(week.rawScore).toBeCloseTo(daily.rawScore)
+    expect(week.score).toBe(daily.score)
+    expect(week.measuredSeconds).toBe(daily.measuredSeconds)
+    expect(week.efficiency).toBe(daily.efficiency)
+  })
+
   it('keeps an unmeasured session distinct from a no-activity zero', () => {
     const rejected = {
       ...rawSession({ id: 'camera-failed', measuredSeconds: 0, actualSeconds: 600 }),
@@ -459,12 +574,13 @@ describe('daily ledger and calendar periods', () => {
     expect(period.days[1]).toMatchObject({ score: 0, noActivity: true })
   })
 
-  it('returns zero for a day with no activity', () => {
+  it('keeps a no-activity day visible without calling it a scored period', () => {
     const period = buildFocusPeriod(emptyFocusLedger(), {
       range: 'day',
       now: new Date(2026, 7, 19, 18),
     })
-    expect(period.score).toBe(0)
+    expect(period.score).toBeNull()
+    expect(period.rawScore).toBeNull()
     expect(period.days[0]).toMatchObject({ score: 0, noActivity: true })
   })
 
