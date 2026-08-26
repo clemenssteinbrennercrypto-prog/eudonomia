@@ -26,6 +26,7 @@
 // without reading both test blocks in sessionVerdict.test.js first.
 
 import { callModel, parseModelJson } from './modelClient'
+import { sessionFocusPct } from './historyTrend'
 
 /** Below this a session is noise, not evidence — same bar as calibration.js. */
 export const MIN_SESSION_SECONDS = 120
@@ -140,19 +141,16 @@ export function buildVerdictInput(session) {
   // happened, only of how long it lasted. Say nothing.
   if (observedSeconds < MIN_OBSERVED_SECONDS && !output) return null
 
-  // Focus is reported only when it was actually measured. A faulted camera
-  // means the number is absent, not zero (see AGENTS.md invariant 8).
-  const focusMeasured = session.trackingFaulted !== true
-    && session.scoreMeasured !== false
-    && Number.isFinite(session.focusedSeconds)
+  // Use the same validated denominator as history and the end screen. A fault
+  // at the very end does not erase earlier real measurement, while a session
+  // with no usable signal remains absent rather than becoming 0%.
+  const focusPct = sessionFocusPct(session)
 
   return {
     goal,
     plannedMinutes: nonNegative(session.plannedDuration),
     actualMinutes: Math.round(actualSeconds / 60),
-    focusPct: focusMeasured
-      ? Math.round((session.focusedSeconds / (session.measuredSeconds || actualSeconds)) * 100)
-      : null,
+    focusPct,
     observedMinutes: Math.round(observedSeconds / 60),
     activities,
     output,

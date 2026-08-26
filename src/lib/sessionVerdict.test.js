@@ -139,6 +139,24 @@ describe('it refuses rather than guessing', () => {
     expect(input.focusPct).toBe(50)
   })
 
+  it('keeps valid partial measurement when a later camera fault ended the session', () => {
+    const input = buildVerdictInput(sessionFixture({
+      trackingFaulted: true,
+      avgFocusScore: 75,
+      measuredSeconds: 1800,
+      focusedSeconds: 1350,
+    }))
+    expect(input.focusPct).toBe(75)
+  })
+
+  it('refuses a present zero measurement instead of dividing by wall time', () => {
+    const input = buildVerdictInput(sessionFixture({
+      measuredSeconds: 0,
+      focusedSeconds: 0,
+    }))
+    expect(input.focusPct).toBeNull()
+  })
+
   it('survives records written before these fields existed', () => {
     for (const junk of [null, undefined, 'text', 42, []]) {
       expect(buildVerdictInput(junk)).toBeNull()

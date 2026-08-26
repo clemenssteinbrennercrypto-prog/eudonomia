@@ -59,7 +59,7 @@ describe('dashboard data', () => {
     // Current ledger semantics reserve 0 for a day with no focus activity;
     // null means activity existed but could not be measured reliably.
     expect(result.period.score).toBe(0)
-    expect(result.recentSessions[0].focus).toBeNull()
+    expect(result.recentSessions[0].efficiency).toBeNull()
   })
 
   it('refuses a thin session focus value even when focusedSeconds exists', () => {
@@ -72,7 +72,32 @@ describe('dashboard data', () => {
       }],
       focusConfig: {}, focusModeEnabled: true, now: NOW,
     })
-    expect(result.recentSessions[0].focus).toBeNull()
+    expect(result.recentSessions[0].efficiency).toBeNull()
+  })
+
+  it('refuses an out-of-range efficiency instead of displaying it as measured', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [{
+        id: 'invalid', task: 'Broken record', actualSeconds: 1200,
+        sessionEfficiency: 101, focusMetricVersion: 1, focusMetricRejection: null,
+      }],
+      focusConfig: {}, focusModeEnabled: true, now: NOW,
+    })
+    expect(result.recentSessions[0].efficiency).toBeNull()
+  })
+
+  it('labels the recent-session metric as efficiency, not generic focus', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [{
+        id: 'valid', task: 'Measured work', actualSeconds: 1200,
+        sessionEfficiency: 78, focusMetricVersion: 1, focusMetricRejection: null,
+      }],
+      focusConfig: {}, focusModeEnabled: true, now: NOW,
+    })
+    expect(result.recentSessions[0]).toMatchObject({ efficiency: 78 })
+    expect(result.recentSessions[0]).not.toHaveProperty('focus')
   })
 
   it('does not report configured protection ready before native verification', () => {

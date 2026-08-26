@@ -152,6 +152,21 @@ describe('session focus metric refusals', () => {
     expect(deriveSessionFocusMetric(session).focusMetricRejection).toBe('invalid_measurement')
   })
 
+  it('keeps a genuinely zero efficiency at zero', () => {
+    expect(measuredSession({ efficiency: 0 })).toMatchObject({
+      sessionEfficiency: 0,
+      focusMetricRejection: null,
+    })
+  })
+
+  it('rejects more measured time than the session could contain', () => {
+    const impossible = rawSession({ measuredSeconds: 602, actualSeconds: 620 })
+    expect(deriveSessionFocusMetric(impossible)).toMatchObject({
+      sessionEfficiency: null,
+      focusMetricRejection: 'invalid_measurement',
+    })
+  })
+
   it('recovers pre-ledger sessions from real timeline and phase measurements', () => {
     const legacy = legacyTimelineSession()
     expect(recoverLegacyTimelineMeasurement(legacy)).toMatchObject({
@@ -296,6 +311,14 @@ describe('daily focus formula', () => {
     expect(calculateDailyFocus({
       sessions: {
         broken: { version: 1, measuredSeconds: 60, scoreSum: 60_000, deepFocusSeconds: 60 },
+      },
+    })).toBeNull()
+  })
+
+  it('refuses a structurally valid ledger fragment below the five-minute floor', () => {
+    expect(calculateDailyFocus({
+      sessions: {
+        thin: { version: 1, measuredSeconds: 299, scoreSum: 23_920, deepFocusSeconds: 299 },
       },
     })).toBeNull()
   })

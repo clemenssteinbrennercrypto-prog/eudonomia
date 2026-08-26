@@ -4,8 +4,11 @@ import { calibrate } from '../lib/calibration'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 import {
   HISTORY_TREND_RANGES,
+  aggregateFocusMeasurements,
   buildHistoryTrend,
   hasMeasuredFocus,
+  measuredSessionDayStreak,
+  sessionFocusMeasurement,
   sessionFocusPct,
 } from '../lib/historyTrend'
 import { FOCUS_METRIC_V1, buildFocusMetricDiagnostics, buildFocusPeriod, emptyFocusLedger } from '../lib/focusMetric'
@@ -18,21 +21,21 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
   const firstDay = new Date(year, month, 1).getDay() // 0=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-  // Build day → avg focus map
+  // Build day → time-weighted focus map. A five-minute session must not
+  // carry the same weight as a two-hour session on the same day.
   const dayMap = useMemo(() => {
     const map = {}
     for (const s of sessions) {
       const d = new Date(s.timestamp)
       if (d.getFullYear() !== year || d.getMonth() !== month) continue
       const key = d.getDate()
-      const pct = sessionFocusPct(s)
-      if (pct == null) continue
+      if (!sessionFocusMeasurement(s)) continue
       if (!map[key]) map[key] = []
-      map[key].push(pct)
+      map[key].push(s)
     }
     const result = {}
-    for (const [k, arr] of Object.entries(map)) {
-      result[k] = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+    for (const [k, daySessions] of Object.entries(map)) {
+      result[k] = aggregateFocusMeasurements(daySessions)?.focusPct
     }
     return result
   }, [sessions, year, month])
@@ -79,7 +82,7 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
             <div
               key={day}
               onClick={() => onDayClick(day === selectedDay ? null : day)}
-              title={avg !== undefined ? `${avg}% focus` : 'No sessions'}
+              title={avg !== undefined ? `${avg}% of measured time above threshold` : 'No measured sessions'}
               style={{
                 aspectRatio: '1',
                 borderRadius: 6,
@@ -98,7 +101,7 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
         })}
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(47,227,168,0.18)', display: 'inline-block' }}/> ≥70% focus</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(47,227,168,0.18)', display: 'inline-block' }}/> ≥70% above threshold</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(255,179,64,0.18)', display: 'inline-block' }}/> 45–70%</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(255,77,106,0.18)', display: 'inline-block' }}/> &lt;45%</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(122,152,255,0.06)', display: 'inline-block' }}/> none</span>
@@ -377,7 +380,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
       }}>
         <span>{fmt(session.actualSeconds)}</span>
         <span>{motivational(focusPct)}</span>
-        {session.sessionEfficiency != null && <span>{session.sessionEfficiency} efficiency</span>}
+        {session.sessionEfficiency != null && <span>{session.sessionEfficiency}% efficiency</span>}
         {session.deepFocusMinutes != null && <span>{fmt(Math.round(session.deepFocusMinutes * 60))} deep focus</span>}
         <span>{session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
         <span>{fmt(session.longestFocusedStreak)} streak</span>
@@ -429,7 +432,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
             {[
               { label: 'Total time', value: fmt(session.actualSeconds) },
               { label: 'Above threshold', value: focusPct == null ? '--' : `${focusPct}%`, color },
-              ...(session.sessionEfficiency != null ? [{ label: 'Efficiency', value: session.sessionEfficiency, color: focusColor(session.sessionEfficiency) }] : []),
+              ...(session.sessionEfficiency != null ? [{ label: 'Efficiency', value: `${session.sessionEfficiency}%`, color: focusColor(session.sessionEfficiency) }] : []),
               ...(session.deepFocusMinutes != null ? [{ label: 'Deep focus', value: fmt(Math.round(session.deepFocusMinutes * 60)) }] : []),
               ...(session.finalScore != null ? [{ label: 'Ending attention', value: session.finalScore, color }] : []),
               { label: 'Alerts', value: session.distractionEvents ?? 0 },
@@ -662,7 +665,7 @@ function FocusScoreOverview({ ledger, sessions }) {
         <>
           <div className="history-stats-grid" style={{ display: 'grid', gap: 10, marginTop: 22 }}>
             {[
-              { label: 'Efficiency', value: period.efficiency == null ? '--' : `${period.efficiency}` },
+              { label: 'Efficiency', value: period.efficiency == null ? '--' : `${period.efficiency}%` },
               { label: 'Measured', value: fmt(period.measuredSeconds) },
               { label: 'Deep focus', value: fmt(Math.round(period.deepFocusMinutes * 60)) },
               { label: 'Consistency', value: `${period.activeDays}/${period.elapsedDays}` },
@@ -722,32 +725,17 @@ function FocusScoreOverview({ ledger, sessions }) {
 }
 
 // ── CHANGE 3: Smarter overall stats ──────────────────────────────────────────
-function computeCurrentStreak(sessions) {
-  // Count consecutive days (backwards from today) that have at least 1 session
-  if (!sessions.length) return 0
-  const today = new Date(); today.setHours(0,0,0,0)
-  let streak = 0
-  let cursor = new Date(today)
-  const daySet = new Set(sessions.map(s => new Date(s.timestamp).toDateString()))
-  while (daySet.has(cursor.toDateString())) {
-    streak++
-    cursor.setDate(cursor.getDate() - 1)
-  }
-  return streak
-}
-
 function OverallStats({ sessions }) {
   const stats = useMemo(() => {
     if (!sessions.length) return null
     const measuredSessions = sessions.filter(hasMeasuredFocus)
+    const aggregate = aggregateFocusMeasurements(measuredSessions)
     // 1. Total focused seconds (not actual seconds)
-    const totalFocusTime = measuredSessions.reduce((a, s) => a + (s.focusedSeconds ?? 0), 0)
-    // 2. Rolling avg focus %
-    const avgFocus = measuredSessions.length
-      ? Math.round(measuredSessions.reduce((a, s) => a + sessionFocusPct(s), 0) / measuredSessions.length)
-      : null
-    // 3. Current day streak
-    const currentStreak = computeCurrentStreak(sessions)
+    const totalFocusTime = aggregate?.focusedSeconds ?? 0
+    // 2. Rolling focus %, weighted by measured time
+    const avgFocus = aggregate?.focusPct ?? null
+    // 3. Current measured day streak. Unmeasured sessions cannot sustain it.
+    const currentStreak = measuredSessionDayStreak(measuredSessions)
     // 4. Best single session focus %
     const bestSession = measuredSessions.reduce((best, s) => {
       const pct = sessionFocusPct(s) ?? 0
@@ -768,7 +756,7 @@ function OverallStats({ sessions }) {
       className="history-stats-grid"
     >
       {[
-        { label: 'Total focus time',  value: fmt(stats.totalFocusTime) },
+        { label: 'Total above threshold', value: fmt(stats.totalFocusTime) },
         { label: 'Avg above threshold', value: stats.avgFocus == null ? '--' : `${stats.avgFocus}%`, color: focusColor(stats.avgFocus) },
         { label: 'Current streak',    value: `${stats.currentStreak}d` },
         { label: 'Best session',      value: stats.bestPct == null ? '--' : `${stats.bestPct}%`,    color: focusColor(stats.bestPct) },
@@ -985,7 +973,7 @@ function FocusTrends({ sessions }) {
               const h = filled ? Math.max(4, Math.round((bucket.avgFocus / 100) * MAX_H)) : 4
               const color = filled ? focusColor(bucket.avgFocus) : 'var(--line)'
               const tooltip = filled
-                ? `${bucket.dateLabel} — ${bucket.avgFocus}% avg, ${bucket.count} session${bucket.count !== 1 ? 's' : ''}`
+                ? `${bucket.dateLabel} — ${bucket.avgFocus}% of measured time above threshold, ${bucket.count} session${bucket.count !== 1 ? 's' : ''}`
                 : `${bucket.dateLabel} — ${bucket.count ? `${bucket.count} unmeasured session${bucket.count !== 1 ? 's' : ''}` : 'no sessions'}`
               const showLabel = i % labelEvery === 0 || i === buckets.length - 1
               return (
@@ -1063,10 +1051,9 @@ function WeeklySummary({ sessions }) {
   const stats = useMemo(() => {
     const weekSessions = getThisWeekSessions(sessions)
     const measured = weekSessions.filter(hasMeasuredFocus)
-    const avgFocus = measured.length
-      ? Math.round(measured.reduce((sum, session) => sum + sessionFocusPct(session), 0) / measured.length)
-      : null
-    const totalFocusedTime = measured.reduce((sum, session) => sum + (session.focusedSeconds || 0), 0)
+    const aggregate = aggregateFocusMeasurements(measured)
+    const avgFocus = aggregate?.focusPct ?? null
+    const totalFocusedTime = aggregate?.focusedSeconds ?? 0
     const outcomes = { yes: 0, partly: 0, no: 0, unset: 0 }
     for (const session of weekSessions) {
       outcomes[normalizedOutcome(session) || 'unset'] += 1
@@ -1282,7 +1269,7 @@ export default function HistoryDashboard({ onClose }) {
               Session History
             </h1>
             <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
-              {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.filter(hasMeasuredFocus).reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} measured focused
+              {sessions.length} session{sessions.length !== 1 ? 's' : ''} · {fmt(sessions.filter(hasMeasuredFocus).reduce((a, s) => a + (s.focusedSeconds ?? 0), 0))} above threshold
             </p>
           </div>
           <button

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildHistoryTrend, hasMeasuredFocus, sessionFocusPct } from './historyTrend'
+import {
+  aggregateFocusMeasurements,
+  buildHistoryTrend,
+  hasMeasuredFocus,
+  measuredSessionDayStreak,
+  sessionFocusPct,
+} from './historyTrend'
 
 const NOW = new Date(2026, 7, 10, 12, 0, 0)
 
@@ -31,6 +37,50 @@ describe('session focus measurement', () => {
       focusedSeconds: 900,
     })
     expect(sessionFocusPct(partial)).toBe(50)
+  })
+
+  it('refuses zero, negative, overflowing, and non-finite measurements', () => {
+    for (const invalid of [
+      sessionAt(NOW, 0, { measuredSeconds: 0, focusedSeconds: 0 }),
+      sessionAt(NOW, 0, { measuredSeconds: 100, focusedSeconds: -1 }),
+      sessionAt(NOW, 0, { measuredSeconds: 100, focusedSeconds: 101 }),
+      sessionAt(NOW, 0, { actualSeconds: 100, measuredSeconds: 102, focusedSeconds: 50 }),
+      sessionAt(NOW, 0, { measuredSeconds: 100, focusedSeconds: NaN }),
+    ]) {
+      expect(hasMeasuredFocus(invalid)).toBe(false)
+      expect(sessionFocusPct(invalid)).toBeNull()
+    }
+  })
+
+  it('weights aggregate focus by measured time rather than session count', () => {
+    const fiveMinutesPerfect = sessionAt(NOW, 100, {
+      actualSeconds: 300, measuredSeconds: 300, focusedSeconds: 300,
+    })
+    const ninetyFiveMinutesDrift = sessionAt(NOW, 0, {
+      actualSeconds: 5700, measuredSeconds: 5700, focusedSeconds: 0,
+    })
+    expect(aggregateFocusMeasurements([fiveMinutesPerfect, ninetyFiveMinutesDrift])).toEqual({
+      focusedSeconds: 300,
+      measuredSeconds: 6000,
+      sessionCount: 2,
+      focusPct: 5,
+    })
+  })
+
+  it('keeps yesterday\'s measured streak alive while today is still pending', () => {
+    const monday = new Date(2026, 7, 17, 12)
+    const tuesday = new Date(2026, 7, 18, 12)
+    const wednesday = new Date(2026, 7, 19, 9)
+    expect(measuredSessionDayStreak([
+      sessionAt(monday),
+      sessionAt(tuesday),
+      sessionAt(wednesday, 0, { measuredSeconds: 0, focusedSeconds: 0 }),
+    ], wednesday)).toBe(2)
+  })
+
+  it('refuses malformed aggregate and streak inputs without throwing', () => {
+    expect(aggregateFocusMeasurements('not sessions')).toMatchObject({ sessionCount: 0, focusPct: null })
+    expect(measuredSessionDayStreak({}, 'not a date')).toBe(0)
   })
 })
 
@@ -86,5 +136,14 @@ describe('history trend ranges', () => {
     })
     const trend = buildHistoryTrend([sessionAt(NOW, 80), faulted], { range: 'week', now: NOW })
     expect(trend.buckets[0]).toMatchObject({ count: 2, avgFocus: 80 })
+  })
+
+  it('uses the same time-weighted percentage within a trend bucket', () => {
+    const short = sessionAt(NOW, 100, { actualSeconds: 300, measuredSeconds: 300, focusedSeconds: 300 })
+    const long = sessionAt(NOW, 0, { actualSeconds: 5700, measuredSeconds: 5700, focusedSeconds: 0 })
+    expect(buildHistoryTrend([short, long], { range: 'week', now: NOW }).buckets[0]).toMatchObject({
+      avgFocus: 5,
+      count: 2,
+    })
   })
 })

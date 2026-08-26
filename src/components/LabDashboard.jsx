@@ -93,7 +93,7 @@ export default function LabDashboard({ focusModeEnabled, onSession, onProtection
         </div>
 
         <div className="lab-metric-rail">
-          <Metric label="Measured focus" value={period.score == null ? null : measuredMinutes} suffix="min" />
+          <Metric label="Measured time" value={period.score == null ? null : measuredMinutes} suffix="min" />
           <Metric label="Deep focus" value={period.score == null ? null : Math.round(period.deepFocusMinutes)} suffix="min" />
           <Metric label="Efficiency" value={period.efficiency} suffix="%" />
           <Metric label="Consistency" value={period.streak} suffix="day streak" />
@@ -140,7 +140,7 @@ export default function LabDashboard({ focusModeEnabled, onSession, onProtection
                 <div className="lab-session-row" key={session.id}>
                   <strong>{session.task}</strong>
                   <span>{session.durationMinutes} min</span>
-                  <span>{session.focus == null ? 'Not measured' : `${Math.round(session.focus)} focus`}</span>
+                  <span>{session.efficiency == null ? 'Not measured' : `${Math.round(session.efficiency)}% efficiency`}</span>
                   <em className={`is-${session.outcome.toLowerCase()}`}>{session.outcome}</em>
                 </div>
               ))}

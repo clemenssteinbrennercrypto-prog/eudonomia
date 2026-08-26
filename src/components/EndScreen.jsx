@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { updateSession, loadSessions, loadContractSettings } from '../lib/storage'
 import { summarizeSessionAlignment } from '../lib/sessionIntent'
 import { deriveVerdict } from '../lib/sessionVerdict'
-import { sessionFocusPct } from '../lib/historyTrend'
+import { sessionFocusMeasurement, sessionFocusPct } from '../lib/historyTrend'
 import { describeFocusMetricRejection } from '../lib/focusMetric'
 
 function fmt(seconds) {
@@ -422,10 +422,6 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     activityAlignment    = null,
     outputEvidence       = null,
     phaseInterventions   = null,
-    avgFocusScore        = null,
-    finalScore           = null,
-    scoreMeasured        = true,
-    trackingFaulted      = false,
     focusMetricRejection = null,
     measurementCoverage  = null,
   } = sessionData
@@ -457,14 +453,9 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     return () => { cancelled = true }
   }, [sessionData])
 
-  const hasFocusMeasurement = scoreMeasured !== false &&
-    (avgFocusScore != null || finalScore != null || (!trackingFaulted && timeline.length > 0))
-  const focusDenominator = Number.isFinite(measuredSeconds) && measuredSeconds > 0
-    ? measuredSeconds
-    : actualSeconds
-  const focusPct = hasFocusMeasurement && focusDenominator > 0
-    ? Math.round((focusedSeconds / focusDenominator) * 100)
-    : null
+  const focusMeasurement = sessionFocusMeasurement(sessionData)
+  const focusDenominator = focusMeasurement?.measuredSeconds ?? 0
+  const focusPct = sessionFocusPct(sessionData)
   const [selectedOutcome, setSelectedOutcome] = useState(goalOutcome || outcomeFromLegacy(goalAchieved))
   const [actualCompleted, setActualCompleted] = useState(completedText || '')
   const [blocker, setBlocker] = useState(blockerText || '')
@@ -683,10 +674,10 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <span className="stat-value" style={{ color: 'var(--bad)' }}>
-              {Math.round(Math.max(0, focusDenominator - focusedSeconds) / 60)}m
+            <span className="stat-value" style={{ color: focusPct == null ? 'var(--text-muted)' : 'var(--bad)' }}>
+              {focusPct == null ? '--' : `${Math.round(Math.max(0, focusDenominator - focusedSeconds) / 60)}m`}
             </span>
-            <span className="stat-label">distracted time</span>
+            <span className="stat-label">{focusPct == null ? 'distraction not measured' : 'time below threshold'}</span>
           </div>
         </div>
 

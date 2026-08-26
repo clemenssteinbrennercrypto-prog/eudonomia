@@ -5,19 +5,71 @@ export const HISTORY_TREND_RANGES = [
   { value: 'all', label: 'All' },
 ]
 
+export function sessionFocusMeasurement(session) {
+  if (!session || session.scoreMeasured === false) return null
+  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return null
+  if (!Number.isFinite(session.focusedSeconds) || session.focusedSeconds < 0) return null
+
+  // A present-but-zero measuredSeconds field explicitly means no measurement.
+  // Falling back to wall time here would turn a camera failure into 0% focus.
+  const hasMeasuredField = session.measuredSeconds != null
+  const measuredSeconds = hasMeasuredField ? session.measuredSeconds : session.actualSeconds
+  if (!Number.isFinite(measuredSeconds) || measuredSeconds <= 0) return null
+  if (!Number.isFinite(session.actualSeconds) || session.actualSeconds <= 0) return null
+  if (measuredSeconds > session.actualSeconds + 1) return null
+  if (session.focusedSeconds > measuredSeconds) return null
+  return { focusedSeconds: session.focusedSeconds, measuredSeconds }
+}
+
 export function hasMeasuredFocus(session) {
-  if (!session || session.scoreMeasured === false) return false
-  if (session.trackingFaulted && session.avgFocusScore == null && session.finalScore == null) return false
-  return session.actualSeconds > 0 && session.focusedSeconds != null
+  return sessionFocusMeasurement(session) != null
 }
 
 export function sessionFocusPct(session) {
-  const measuredDenominator = Number.isFinite(session?.measuredSeconds) && session.measuredSeconds > 0
-    ? session.measuredSeconds
-    : session?.actualSeconds
-  return hasMeasuredFocus(session)
-    ? Math.round((session.focusedSeconds / measuredDenominator) * 100)
+  const measurement = sessionFocusMeasurement(session)
+  return measurement
+    ? Math.round((measurement.focusedSeconds / measurement.measuredSeconds) * 100)
     : null
+}
+
+export function aggregateFocusMeasurements(sessions) {
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const totals = safeSessions.reduce((sum, session) => {
+    const measurement = sessionFocusMeasurement(session)
+    if (!measurement) return sum
+    return {
+      focusedSeconds: sum.focusedSeconds + measurement.focusedSeconds,
+      measuredSeconds: sum.measuredSeconds + measurement.measuredSeconds,
+      sessionCount: sum.sessionCount + 1,
+    }
+  }, { focusedSeconds: 0, measuredSeconds: 0, sessionCount: 0 })
+  return {
+    ...totals,
+    focusPct: totals.measuredSeconds > 0
+      ? Math.round((totals.focusedSeconds / totals.measuredSeconds) * 100)
+      : null,
+  }
+}
+
+export function measuredSessionDayStreak(sessions, now = Date.now()) {
+  const current = new Date(now)
+  if (Number.isNaN(current.getTime())) return 0
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const activeDays = new Set(safeSessions
+    .filter(hasMeasuredFocus)
+    .map(session => {
+      const date = new Date(session.timestamp)
+      return Number.isNaN(date.getTime()) ? null : dayKey(date)
+    })
+    .filter(Boolean))
+  let cursor = startOfDay(current)
+  if (!activeDays.has(dayKey(cursor))) cursor = addDays(cursor, -1)
+  let streak = 0
+  while (activeDays.has(dayKey(cursor))) {
+    streak += 1
+    cursor = addDays(cursor, -1)
+  }
+  return streak
 }
 
 function startOfDay(value) {
@@ -136,8 +188,8 @@ function createBuckets(start, endExclusive, unit) {
       dateLabel,
       avgFocus: null,
       count: 0,
-      _focusTotal: 0,
-      _measuredCount: 0,
+      _focusedSeconds: 0,
+      _measuredSeconds: 0,
     })
     cursor = isDay ? addDays(cursor, 1) : addMonths(cursor, 1)
   }
@@ -163,18 +215,18 @@ export function buildHistoryTrend(sessions, options = {}) {
     const bucket = byKey.get(unit === 'day' ? dayKey(date) : monthKey(date))
     if (!bucket) continue
     bucket.count += 1
-    const pct = sessionFocusPct(session)
-    if (pct == null) continue
-    bucket._focusTotal += pct
-    bucket._measuredCount += 1
+    const measurement = sessionFocusMeasurement(session)
+    if (!measurement) continue
+    bucket._focusedSeconds += measurement.focusedSeconds
+    bucket._measuredSeconds += measurement.measuredSeconds
   }
 
   for (const bucket of buckets) {
-    if (bucket._measuredCount > 0) {
-      bucket.avgFocus = Math.round(bucket._focusTotal / bucket._measuredCount)
+    if (bucket._measuredSeconds > 0) {
+      bucket.avgFocus = Math.round((bucket._focusedSeconds / bucket._measuredSeconds) * 100)
     }
-    delete bucket._focusTotal
-    delete bucket._measuredCount
+    delete bucket._focusedSeconds
+    delete bucket._measuredSeconds
   }
 
   const visibleEnd = unit === 'day'

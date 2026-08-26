@@ -96,8 +96,9 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     id: session.id,
     task: session.task || 'Untitled session',
     durationMinutes: Math.max(0, Math.round((session.actualSeconds || 0) / 60)),
-    focus: session?.focusMetricVersion === FOCUS_METRIC_V1.version &&
-      session?.focusMetricRejection == null && Number.isFinite(session?.sessionEfficiency)
+    efficiency: session?.focusMetricVersion === FOCUS_METRIC_V1.version &&
+      session?.focusMetricRejection == null && Number.isFinite(session?.sessionEfficiency) &&
+      session.sessionEfficiency >= 0 && session.sessionEfficiency <= 100
       ? session.sessionEfficiency
       : null,
     outcome: outcomeLabel(session),

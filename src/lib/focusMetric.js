@@ -338,6 +338,9 @@ export function deriveSessionFocusMetric(session) {
   }
 
   const eligibleSeconds = Math.max(0, actualSeconds - FOCUS_METRIC_V1.calibrationSeconds)
+  if (measuredSeconds > eligibleSeconds + 1) {
+    return reject('invalid_measurement')
+  }
   const coverage = eligibleSeconds > 0 ? clamp(measuredSeconds / eligibleSeconds, 0, 1) : 0
   if (measuredSeconds < FOCUS_METRIC_V1.minMeasuredSeconds) {
     return reject('insufficient_duration', coverage)
@@ -349,7 +352,7 @@ export function deriveSessionFocusMetric(session) {
 
   return {
     focusMetricVersion: FOCUS_METRIC_V1.version,
-    sessionEfficiency: clamp(Math.round(rawEfficiency), 1, 100),
+    sessionEfficiency: clamp(Math.round(rawEfficiency), 0, 100),
     deepFocusSeconds: phases.deepFocusSeconds,
     deepFocusMinutes: Math.round((phases.deepFocusSeconds / 60) * 10) / 10,
     measurementCoverage: Math.round(coverage * 1000) / 1000,
@@ -396,10 +399,16 @@ function validContribution(session) {
   if (
     session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION ||
     session?.focusMetricVersion !== FOCUS_METRIC_V1.version ||
+    session?.focusMetricRejection != null ||
     !Number.isFinite(session?.sessionEfficiency) ||
+    session.sessionEfficiency < 0 ||
+    session.sessionEfficiency > 100 ||
     !finiteNonNegative(session?.measuredSeconds) ||
+    session.measuredSeconds < FOCUS_METRIC_V1.minMeasuredSeconds ||
     !finiteNonNegative(session?.scoreSum) ||
-    !finiteNonNegative(deepFocusSeconds)
+    session.scoreSum > session.measuredSeconds * 100 ||
+    !finiteNonNegative(deepFocusSeconds) ||
+    deepFocusSeconds > session.measuredSeconds
   ) return null
 
   const day = localDayKey(session.startedAt ?? session.timestamp)
@@ -496,7 +505,7 @@ export function calculateDailyFocus(dayEntry) {
     .filter(item =>
       item?.version === FOCUS_METRIC_V1.version &&
       finiteNonNegative(item.measuredSeconds) &&
-      item.measuredSeconds > 0 &&
+      item.measuredSeconds >= FOCUS_METRIC_V1.minMeasuredSeconds &&
       finiteNonNegative(item.scoreSum) &&
       item.scoreSum <= item.measuredSeconds * 100 &&
       finiteNonNegative(item.deepFocusSeconds) &&

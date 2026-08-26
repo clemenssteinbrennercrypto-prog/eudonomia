@@ -58,6 +58,24 @@ describe('refuses to speak from thin data', () => {
     expect(timeOfDayFit([partial, partial, partial]).ranked[0].focusPct).toBe(50)
   })
 
+  it('keeps substantial valid measurement before a final camera fault', () => {
+    const partial = session({
+      mins: 30,
+      extra: {
+        trackingFaulted: true,
+        avgFocusScore: 75,
+        measuredSeconds: 900,
+        focusedSeconds: 675,
+      },
+    })
+    expect(isUsable(partial)).toBe(true)
+    expect(timeOfDayFit([partial, partial, partial]).ranked[0].focusPct).toBe(75)
+  })
+
+  it('refuses a long wall-clock session with zero measured seconds', () => {
+    expect(isUsable(session({ mins: 60, extra: { measuredSeconds: 0, focusedSeconds: 0 } }))).toBe(false)
+  })
+
   it('does not rank times of day from one session each', () => {
     const spread = [
       session({ hour: 7 }), session({ hour: 10 }), session({ hour: 13 }),

@@ -10,7 +10,7 @@
 // becomes a horoscope. Every claim carries the sample it rests on, and no claim
 // is made below the thresholds below.
 
-import { sessionFocusPct } from './historyTrend'
+import { sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
 
 /** Nothing at all is claimed under this many usable sessions. */
 export const MIN_SESSIONS = 8
@@ -38,10 +38,9 @@ function partOfDay(hour) {
  *  to mean anything. A 20-second session is noise, not evidence. */
 export function isUsable(session) {
   if (!session) return false
-  if (session.trackingFaulted) return false
-  if (session.scoreMeasured === false) return false
   if (!(session.actualSeconds > 120)) return false
-  return Number.isFinite(session.focusedSeconds) && Number.isFinite(session.timestamp)
+  const measurement = sessionFocusMeasurement(session)
+  return measurement?.measuredSeconds > 120 && Number.isFinite(session.timestamp)
 }
 
 export function focusPct(session) {
