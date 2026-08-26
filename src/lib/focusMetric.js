@@ -98,12 +98,12 @@ function phaseTotals(phaseSeconds) {
   return { measuredSeconds, deepFocusSeconds }
 }
 
-export const LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE = 'timer_timeline_v2'
+export const LEGACY_TIMER_RECOVERY_SOURCE = 'timer_timeline_v2'
 export const TIMER_TIMELINE_RECOVERY_SOURCE = 'timer_timeline_v3'
 export const TIMER_THROTTLING_EVIDENCE_VERSION = 1
 
 function isTimerRecoverySource(source) {
-  return source === TIMER_TIMELINE_RECOVERY_SOURCE || source === LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE
+  return source === TIMER_TIMELINE_RECOVERY_SOURCE || source === LEGACY_TIMER_RECOVERY_SOURCE
 }
 
 function throttlingEvidenceIntervals(session) {
@@ -115,22 +115,9 @@ function throttlingEvidenceIntervals(session) {
     interval.endSecond > interval.startSecond)
 }
 
-function hasValidThrottlingEvidenceRecord(session) {
-  return session?.timerThrottlingEvidence?.version === TIMER_THROTTLING_EVIDENCE_VERSION &&
-    Array.isArray(session.timerThrottlingEvidence.intervals)
-}
-
 function hasThrottlingEvidence(session, startSecond, endSecond) {
   return throttlingEvidenceIntervals(session).some(interval =>
     interval.startSecond <= startSecond + 1 && interval.endSecond >= endSecond - 1)
-}
-
-function isUnverifiedTimerRecovery(session) {
-  if (session?.focusMeasurementSource === LEGACY_UNVERIFIED_TIMER_RECOVERY_SOURCE) return true
-  return session?.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE &&
-    (session?.focusMeasurementRecovery?.version !== 2 ||
-      session?.focusMeasurementRecovery?.throttlingEvidenceVersion !== TIMER_THROTTLING_EVIDENCE_VERSION ||
-      !hasValidThrottlingEvidenceRecord(session))
 }
 
 // Builds a versioned replacement only for the timer-throttling failure mode:
@@ -380,10 +367,6 @@ export function deriveSessionFocusMetric(session) {
     focusMetricRejection: reason,
   })
 
-  if (isUnverifiedTimerRecovery(session)) {
-    return reject('unverified_timer_recovery')
-  }
-
   if (measurement?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
     return reject('legacy_scoring_version')
   }
@@ -421,16 +404,22 @@ export function deriveSessionFocusMetric(session) {
 export function withSessionFocusMetric(session) {
   const recovered = recoverThrottledTimerMeasurement(session) || recoverLegacyTimelineMeasurement(session)
   const measurement = recovered ? { ...session, ...recovered } : session
-  const invalidatedRecovery = isUnverifiedTimerRecovery(measurement)
+  const derived = deriveSessionFocusMetric(measurement)
+  // V2 recovery was already persisted by released builds. Its original
+  // accumulator values no longer exist, so deleting the stored contribution
+  // changes history without giving us a more truthful replacement. Keep that
+  // versioned snapshot, while all new recovery uses V3 and requires independent
+  // evidence for gaps beyond the normal timeline cadence.
+  const restoresHistoricalRecovery = measurement?.focusMeasurementSource === LEGACY_TIMER_RECOVERY_SOURCE &&
+    derived.focusMetricRejection == null
   return {
     ...session,
     ...(recovered || {}),
-    ...(invalidatedRecovery ? {
-      scoreMeasured: false,
-      avgFocusScore: null,
-      finalScore: null,
+    ...(restoresHistoricalRecovery ? {
+      scoreMeasured: true,
+      avgFocusScore: Math.round(measurement.scoreSum / measurement.measuredSeconds),
     } : {}),
-    ...deriveSessionFocusMetric(measurement),
+    ...derived,
   }
 }
 
@@ -442,8 +431,6 @@ export function describeFocusMetricRejection(reason, { measuredSeconds } = {}) {
   switch (reason) {
     case 'insufficient_duration':
       return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
-    case 'unverified_timer_recovery':
-      return 'An older build reconstructed timer gaps without proof that tracking continued, so this session is excluded rather than guessed.'
     case 'legacy_scoring_version':
       return 'This session used an older scoring version, so it is not counted toward your daily score.'
     case 'invalid_measurement':
@@ -541,12 +528,9 @@ export function backfillFocusLedger(ledger, sessions) {
     const day = localDayKey(session.startedAt ?? session.timestamp)
     const recorded = day ? next.days[day]?.sessions?.[session.id] : null
     const upgraded = withSessionFocusMetric(session)
-    const invalidatesTimerRecovery = isTimerRecoverySource(recorded?.source) &&
-      upgraded.focusMetricRejection === 'unverified_timer_recovery'
     if (
       recorded &&
       recorded.status !== 'unmeasured' &&
-      !invalidatesTimerRecovery &&
       !(upgraded.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE &&
         recorded.source !== TIMER_TIMELINE_RECOVERY_SOURCE)
     ) continue

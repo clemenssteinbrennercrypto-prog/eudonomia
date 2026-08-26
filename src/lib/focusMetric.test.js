@@ -274,7 +274,7 @@ describe('session focus metric refusals', () => {
     })
   })
 
-  it('invalidates a previously stored timer recovery that had no independent evidence', () => {
+  it('keeps an already-persisted V2 recovery in history', () => {
     const oldRecovery = {
       ...throttledTimerSession({ withThrottlingEvidence: false }),
       attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
@@ -286,9 +286,10 @@ describe('session focus metric refusals', () => {
       focusMeasurementRecovery: { version: 1, previousMeasuredSeconds: 300 },
     }
     expect(withSessionFocusMetric(oldRecovery)).toMatchObject({
-      scoreMeasured: false,
-      sessionEfficiency: null,
-      focusMetricRejection: 'unverified_timer_recovery',
+      scoreMeasured: true,
+      avgFocusScore: 78,
+      sessionEfficiency: 78,
+      focusMetricRejection: null,
     })
   })
 
@@ -480,7 +481,7 @@ describe('backfilling the ledger from already-stored sessions', () => {
     })
   })
 
-  it('replaces an unverified recovered ledger value with an unmeasured marker', () => {
+  it('restores a previously invalidated V2 contribution to the ledger', () => {
     const session = {
       ...throttledTimerSession({ id: 'unsafe-recovery', withThrottlingEvidence: false }),
       attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
@@ -498,21 +499,102 @@ describe('backfilling the ledger from already-stored sessions', () => {
           sessions: {
             'unsafe-recovery': {
               version: 1,
-              measuredSeconds: 600,
-              scoreSum: 46_800,
-              deepFocusSeconds: 600,
-              source: 'timer_timeline_v2',
+              status: 'unmeasured',
+              rejection: 'unverified_timer_recovery',
             },
           },
         },
       },
     }
     expect(backfillFocusLedger(ledger, [session]).days['2026-08-17'].sessions['unsafe-recovery'])
-      .toMatchObject({ status: 'unmeasured', rejection: 'unverified_timer_recovery' })
+      .toMatchObject({
+        measuredSeconds: 600,
+        scoreSum: 46_800,
+        deepFocusSeconds: 600,
+        source: 'timer_timeline_v2',
+      })
+  })
+
+  it('restores today\'s stored V2 session before building the daily score', () => {
+    const day = '2026-08-26'
+    const historical = {
+      id: 'historical-103-minutes',
+      startedAt: new Date(2026, 7, 26, 9).getTime(),
+      timestamp: new Date(2026, 7, 26, 10, 44).getTime(),
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      actualSeconds: 6206,
+      measuredSeconds: 6186,
+      scoreSum: 487_208,
+      focusedSeconds: 6186,
+      scoreMeasured: false,
+      focusPhases: {
+        seconds: { lock_in: 3276, ramp: 1595, arrival: 30, recovery: 165, fade: 1120, drift: 0 },
+      },
+      focusMeasurementSource: 'timer_timeline_v2',
+      focusMeasurementRecovery: { version: 1, previousMeasuredSeconds: 3251 },
+      focusMetricRejection: 'unverified_timer_recovery',
+    }
+    const ledger = {
+      schemaVersion: 1,
+      days: {
+        [day]: {
+          sessions: {
+            [historical.id]: { version: 1, status: 'unmeasured', rejection: 'unverified_timer_recovery' },
+            current: {
+              version: 1,
+              measuredSeconds: 5216.63900000001,
+              scoreSum: 412431.7649999996,
+              deepFocusSeconds: 4777.058200000002,
+              source: 'live_v1',
+            },
+          },
+        },
+      },
+    }
+
+    const restored = backfillFocusLedger(ledger, [historical])
+    expect(restored.days[day].sessions[historical.id]).toMatchObject({
+      measuredSeconds: 6186,
+      scoreSum: 487_208,
+      deepFocusSeconds: 4769,
+      source: 'timer_timeline_v2',
+    })
+    expect(buildFocusPeriod(restored, {
+      range: 'day',
+      now: new Date(2026, 7, 26, 18),
+      sessions: [historical],
+    })).toMatchObject({ score: 77, efficiency: 79, measuredSeconds: 11402.63900000001 })
   })
 })
 
 describe('daily ledger and calendar periods', () => {
+  it('includes the stored 103-minute session and rounds the combined day normally', () => {
+    const day = {
+      sessions: {
+        historical: {
+          version: FOCUS_METRIC_V1.version,
+          measuredSeconds: 6186,
+          scoreSum: 487_208,
+          deepFocusSeconds: 4769,
+          source: 'timer_timeline_v2',
+        },
+        current: {
+          version: FOCUS_METRIC_V1.version,
+          measuredSeconds: 5216.63900000001,
+          scoreSum: 412431.7649999996,
+          deepFocusSeconds: 4777.058200000002,
+          source: 'live_v1',
+        },
+      },
+    }
+    const result = calculateDailyFocus(day)
+    expect(result.sessionCount).toBe(2)
+    expect(result.rawScore).toBeCloseTo(77.49678099697056)
+    expect(result.score).toBe(77)
+    expect(result.efficiency).toBe(79)
+  })
+
   it('is idempotent per session and removes only the requested contribution', () => {
     const first = measuredSession({ id: 'a' })
     const second = measuredSession({ id: 'b', efficiency: 60 })
