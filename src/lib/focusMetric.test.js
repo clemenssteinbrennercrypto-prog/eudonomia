@@ -10,8 +10,11 @@ import {
   deriveSessionFocusMetric,
   emptyFocusLedger,
   recoverLegacyTimelineMeasurement,
+  recoverThrottledTimerMeasurement,
   removeSessionFromFocusLedger,
+  withSessionFocusMetric,
 } from './focusMetric'
+import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
 
 function phaseSeconds(total, phase = 'lock_in') {
   return { arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0, [phase]: total }
@@ -79,6 +82,37 @@ function legacyTimelineSession({
     timeline: Array.from(
       { length: Math.floor(measuredSeconds / FOCUS_METRIC_V1.legacyTimelineSampleSeconds) },
       (_, index) => ({ second: 20 + (index + 1) * 5, score, focused: score >= 40 })
+    ),
+    focusPhases: { seconds: phaseSeconds(measuredSeconds, 'lock_in') },
+  }
+}
+
+function throttledTimerSession({
+  id = 'throttled-timer',
+  actualSeconds = 620,
+  measuredSeconds = 300,
+  score = 78,
+  sampleEvery = 10,
+} = {}) {
+  const startedAt = new Date(2026, 7, 17, 9).getTime()
+  return {
+    id,
+    startedAt,
+    timestamp: startedAt + actualSeconds * 1000,
+    attentionScoringVersion: ATTENTION_SCORING_VERSION,
+    actualSeconds,
+    measuredSeconds,
+    scoreSum: measuredSeconds * score,
+    focusedSeconds: measuredSeconds,
+    scoreMeasured: true,
+    timeline: Array.from(
+      { length: Math.floor((actualSeconds - FOCUS_METRIC_V1.calibrationSeconds) / sampleEvery) },
+      (_, index) => ({
+        second: FOCUS_METRIC_V1.calibrationSeconds + index * sampleEvery,
+        score,
+        focused: true,
+        phase: 'lock_in',
+      })
     ),
     focusPhases: { seconds: phaseSeconds(measuredSeconds, 'lock_in') },
   }
@@ -153,6 +187,44 @@ describe('session focus metric refusals', () => {
       measuredSeconds: 600,
       focusMeasurementSource: 'legacy_timeline_v1',
     })
+  })
+
+  it('recovers a timer-throttled session from dense samples spanning real time', () => {
+    const recovered = recoverThrottledTimerMeasurement(throttledTimerSession())
+    expect(recovered).toMatchObject({
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      measuredSeconds: 600,
+      focusedSeconds: 600,
+      scoreSum: 46_800,
+      avgFocusScore: 78,
+      focusMeasurementSource: 'timer_timeline_v2',
+    })
+    expect(recovered.focusPhases.seconds.lock_in).toBe(600)
+    expect(deriveSessionFocusMetric(throttledTimerSession())).toMatchObject({
+      sessionEfficiency: 78,
+      deepFocusMinutes: 10,
+      measurementCoverage: 1,
+      focusMeasurementSource: 'timer_timeline_v2',
+    })
+  })
+
+  it('refuses to fill an old session across a real timeline outage', () => {
+    const session = throttledTimerSession()
+    session.timeline = session.timeline.filter(sample => sample.second < 200 || sample.second > 300)
+    expect(recoverThrottledTimerMeasurement(session)).toBeNull()
+    expect(withSessionFocusMetric(session)).toMatchObject({
+      measuredSeconds: 300,
+      measurementCoverage: 0.5,
+      focusMeasurementSource: 'live_v1',
+    })
+  })
+
+  it('does not reinterpret sessions already written by the wall-clock accumulator', () => {
+    const session = {
+      ...throttledTimerSession(),
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+    }
+    expect(recoverThrottledTimerMeasurement(session)).toBeNull()
   })
 })
 
@@ -299,6 +371,21 @@ describe('backfilling the ledger from already-stored sessions', () => {
       source: 'live_v1',
     })
     expect(calculateDailyFocus(upgraded.days['2026-08-17']).score).not.toBeNull()
+  })
+
+  it('replaces an existing undercounted ledger contribution after timer recovery', () => {
+    const session = throttledTimerSession({ id: 'replace-timer-count' })
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), withSessionFocusMetric({
+      ...session,
+      timeline: [],
+    }))
+    expect(ledger.days['2026-08-17'].sessions['replace-timer-count'].measuredSeconds).toBe(300)
+
+    ledger = backfillFocusLedger(ledger, [session])
+    expect(ledger.days['2026-08-17'].sessions['replace-timer-count']).toMatchObject({
+      measuredSeconds: 600,
+      source: 'timer_timeline_v2',
+    })
   })
 })
 

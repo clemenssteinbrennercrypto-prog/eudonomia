@@ -3,6 +3,8 @@
 // produced. Keep every estimated product constant together so a later review
 // can create V2 without silently rewriting V1 history.
 
+import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
+
 export const ATTENTION_SCORING_VERSION = 1
 
 export const FOCUS_METRIC_V1 = Object.freeze({
@@ -16,6 +18,8 @@ export const FOCUS_METRIC_V1 = Object.freeze({
   legacyTimelineSampleSeconds: 5,
   minLegacyTimelineSamples: 12,
   minLegacyTimelineCoverage: 0.80,
+  timerTimelineMigrationMaxGapSeconds: 15,
+  timerTimelineMigrationMinCoverage: 0.95,
   phaseWeights: Object.freeze({
     lock_in: 1.00,
     ramp: 0.75,
@@ -94,6 +98,109 @@ function phaseTotals(phaseSeconds) {
   return { measuredSeconds, deepFocusSeconds }
 }
 
+export const TIMER_TIMELINE_RECOVERY_SOURCE = 'timer_timeline_v2'
+
+// Builds a versioned replacement only for the timer-throttling failure mode:
+// old per-callback counters cover far less time than a dense, session-spanning
+// timeline proves was sampled. This is intentionally strict. A camera outage
+// leaves a large timeline gap and is not filled with an inferred score.
+export function recoverThrottledTimerMeasurement(session) {
+  if (
+    session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION ||
+    session?.attentionAccumulationVersion === ATTENTION_ACCUMULATION_VERSION ||
+    !finiteNonNegative(session?.actualSeconds) ||
+    !finiteNonNegative(session?.measuredSeconds) ||
+    session?.scoreMeasured === false
+  ) return null
+
+  const eligibleStart = FOCUS_METRIC_V1.calibrationSeconds
+  const eligibleEnd = session.actualSeconds
+  const eligibleSeconds = eligibleEnd - eligibleStart
+  if (eligibleSeconds <= 0 || session.measuredSeconds / eligibleSeconds >= 0.9) return null
+  if (!Array.isArray(session.timeline)) return null
+
+  const phases = new Set(Object.keys(FOCUS_METRIC_V1.phaseWeights))
+  const samplesBySecond = new Map()
+  for (const sample of session.timeline) {
+    if (
+      !finiteNonNegative(sample?.second) ||
+      !Number.isFinite(sample?.score) ||
+      sample.score < 0 ||
+      sample.score > 100 ||
+      typeof sample.focused !== 'boolean' ||
+      !phases.has(sample.phase)
+    ) continue
+    samplesBySecond.set(sample.second, sample)
+  }
+  const samples = [...samplesBySecond.values()].sort((a, b) => a.second - b.second)
+  if (samples.length < FOCUS_METRIC_V1.minLegacyTimelineSamples) return null
+
+  const maxGap = FOCUS_METRIC_V1.timerTimelineMigrationMaxGapSeconds
+  if (
+    samples[0].second > eligibleStart + maxGap ||
+    samples[samples.length - 1].second < eligibleEnd - maxGap
+  ) return null
+  for (let index = 1; index < samples.length; index += 1) {
+    if (samples[index].second - samples[index - 1].second > maxGap) return null
+  }
+
+  const phaseSeconds = Object.fromEntries([...phases].map(phase => [phase, 0]))
+  let measuredSeconds = 0
+  let scoreSum = 0
+  let focusedSeconds = 0
+  let preDriftSeconds = 0
+  let currentFocusedStreak = 0
+  let longestFocusedStreak = 0
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = samples[index]
+    const start = Math.max(eligibleStart, sample.second)
+    const end = Math.min(eligibleEnd, samples[index + 1]?.second ?? eligibleEnd)
+    const seconds = Math.max(0, end - start)
+    if (seconds <= 0) continue
+    measuredSeconds += seconds
+    scoreSum += sample.score * seconds
+    phaseSeconds[sample.phase] += seconds
+    if (sample.preDrift === true) preDriftSeconds += seconds
+    if (sample.focused) {
+      focusedSeconds += seconds
+      currentFocusedStreak += seconds
+      longestFocusedStreak = Math.max(longestFocusedStreak, currentFocusedStreak)
+    } else {
+      currentFocusedStreak = 0
+    }
+  }
+
+  const coverage = measuredSeconds / eligibleSeconds
+  if (coverage < FOCUS_METRIC_V1.timerTimelineMigrationMinCoverage) return null
+  const dominant = Object.entries(phaseSeconds).sort((a, b) => b[1] - a[1])[0]?.[0] || 'arrival'
+  return {
+    attentionScoringVersion: ATTENTION_SCORING_VERSION,
+    attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+    actualSeconds: session.actualSeconds,
+    measuredSeconds,
+    scoreSum,
+    focusedSeconds,
+    preDriftSeconds,
+    longestFocusedStreak,
+    peakFocusStreak: longestFocusedStreak,
+    avgFocusScore: measuredSeconds > 0 ? Math.round(scoreSum / measuredSeconds) : null,
+    scoreMeasured: measuredSeconds > 0,
+    focusPhases: {
+      ...(session.focusPhases || {}),
+      seconds: phaseSeconds,
+      dominant,
+      final: samples[samples.length - 1].phase,
+    },
+    focusMeasurementSource: TIMER_TIMELINE_RECOVERY_SOURCE,
+    focusMeasurementRecovery: {
+      version: 1,
+      previousMeasuredSeconds: session.measuredSeconds,
+      timelineSamples: samples.length,
+      maximumGapSeconds: Math.max(0, ...samples.slice(1).map((sample, index) => sample.second - samples[index].second)),
+    },
+  }
+}
+
 // Sessions written before the daily ledger still contain genuine camera
 // measurements: one score snapshot every five seconds plus exact per-phase
 // second totals. Recover those measurements with explicit provenance instead
@@ -158,6 +265,7 @@ export function buildFocusMetricDiagnostics(sessions, ledger) {
         ? seconds[seconds.length - 1] - seconds[0] + FOCUS_METRIC_V1.legacyTimelineSampleSeconds
         : 0
       const recovered = recoverLegacyTimelineMeasurement(session)
+      const timerRecovered = recoverThrottledTimerMeasurement(session)
       const derived = deriveSessionFocusMetric(session)
       const day = localDayKey(session?.startedAt ?? session?.timestamp)
       const ledgerItem = day && session?.id ? safeLedger.days[day]?.sessions?.[session.id] : null
@@ -165,6 +273,7 @@ export function buildFocusMetricDiagnostics(sessions, ledger) {
         index,
         actualSeconds: Number.isFinite(session?.actualSeconds) ? session.actualSeconds : null,
         storedAttentionScoringVersion: session?.attentionScoringVersion ?? null,
+        storedAttentionAccumulationVersion: session?.attentionAccumulationVersion ?? null,
         storedFocusMetricVersion: session?.focusMetricVersion ?? null,
         storedMeasuredSeconds: Number.isFinite(session?.measuredSeconds) ? session.measuredSeconds : null,
         storedScoreSum: Number.isFinite(session?.scoreSum) ? session.scoreSum : null,
@@ -183,6 +292,8 @@ export function buildFocusMetricDiagnostics(sessions, ledger) {
         lastScoreSecond: seconds[seconds.length - 1] ?? null,
         scoreSpanSeconds: spanSeconds,
         recoveredFromLegacyTimeline: Boolean(recovered),
+        recoveredFromThrottledTimer: Boolean(timerRecovered) ||
+          session?.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE,
         currentDerivedRejection: derived.focusMetricRejection,
         currentMeasurementCoverage: derived.measurementCoverage,
         ledgerState: ledgerItem
@@ -194,6 +305,8 @@ export function buildFocusMetricDiagnostics(sessions, ledger) {
 }
 
 function measurementForMetric(session) {
+  const timerRecovered = recoverThrottledTimerMeasurement(session)
+  if (timerRecovered) return timerRecovered
   if (session?.attentionScoringVersion === ATTENTION_SCORING_VERSION) return session
   return recoverLegacyTimelineMeasurement(session) || session
 }
@@ -246,7 +359,7 @@ export function deriveSessionFocusMetric(session) {
 }
 
 export function withSessionFocusMetric(session) {
-  const recovered = recoverLegacyTimelineMeasurement(session)
+  const recovered = recoverThrottledTimerMeasurement(session) || recoverLegacyTimelineMeasurement(session)
   return { ...session, ...(recovered || {}), ...deriveSessionFocusMetric(recovered ? { ...session, ...recovered } : session) }
 }
 
@@ -351,8 +464,14 @@ export function backfillFocusLedger(ledger, sessions) {
     if (!session?.id) continue
     const day = localDayKey(session.startedAt ?? session.timestamp)
     const recorded = day ? next.days[day]?.sessions?.[session.id] : null
-    if (recorded && recorded.status !== 'unmeasured') continue
-    next = addSessionToFocusLedger(next, withSessionFocusMetric(session))
+    const upgraded = withSessionFocusMetric(session)
+    if (
+      recorded &&
+      recorded.status !== 'unmeasured' &&
+      !(upgraded.focusMeasurementSource === TIMER_TIMELINE_RECOVERY_SOURCE &&
+        recorded.source !== TIMER_TIMELINE_RECOVERY_SOURCE)
+    ) continue
+    next = addSessionToFocusLedger(next, upgraded)
   }
   return next
 }

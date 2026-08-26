@@ -41,6 +41,10 @@ import {
   isFocusedSecond,
 } from '../lib/attention'
 import { ATTENTION_SCORING_VERSION } from '../lib/focusMetric'
+import {
+  ATTENTION_ACCUMULATION_VERSION,
+  measuredSpanSeconds,
+} from '../lib/attentionSampling'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -882,6 +886,7 @@ export default function SessionScreen({
   const scoreHistoryRef        = useRef([68]) // last 60 score values for sparkline
   const focusScoreRef          = useRef(68)
   const lastFrameAtRef         = useRef(0)     // last time the camera pipeline delivered a frame
+  const lastDeliveredFrameAtRef = useRef(0)    // real frame only; camera restart grace must never count as measurement
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
@@ -922,12 +927,14 @@ export default function SessionScreen({
   const focusedSecondsRef    = useRef(0)
   const measuredSecondsRef   = useRef(0)
   const scoreSumRef          = useRef(0)
+  const statsSampleAtRef     = useRef(startTimeRef.current)
   const distractionEventsRef = useRef(0)
   const preDriftEventsRef    = useRef(0)
   const preDriftSecondsRef   = useRef(0)
   const longestStreakRef     = useRef(0)
   const currentStreakRef     = useRef(0)
   const timelineSnapshotsRef = useRef([])
+  const lastTimelineBucketRef = useRef(0)
   const distractionLogRef    = useRef([]) // [{second, reason}]
   const activityAlignmentRef = useRef(emptyActivityAlignmentSummary())
   // Latest output evidence from the companion's watched folder. Polled rather
@@ -1101,6 +1108,7 @@ export default function SessionScreen({
     if (sessionEndedRef.current || isPausedRef.current) return
     isPausedRef.current = true
     pausedAtRef.current = Date.now()
+    statsSampleAtRef.current = pausedAtRef.current
     setIsPaused(true)
     await pushBlockingState(false, 'paused')
   }, [pushBlockingState])
@@ -1112,6 +1120,7 @@ export default function SessionScreen({
       pausedTotalRef.current += Date.now() - pausedAtRef.current
       pausedAtRef.current = null
     }
+    statsSampleAtRef.current = Date.now()
     setIsPaused(false)
     await pushBlockingState(true, 'active')
   }, [pushBlockingState])
@@ -1167,6 +1176,30 @@ export default function SessionScreen({
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
     const endedAt = Date.now()
     const actualSeconds = Math.round((endedAt - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
+    // A manual stop can land between timer callbacks. Flush that final real span
+    // so background throttling cannot leave the last one-to-three seconds out.
+    if (!isPausedRef.current && !cameraFaultRef.current) {
+      const calibrationEndAt = startTimeRef.current + pausedTotalRef.current + CALIBRATION_SECS * 1000
+      const finalSampleSeconds = measuredSpanSeconds({
+        previousAt: Math.max(statsSampleAtRef.current, calibrationEndAt),
+        now: endedAt,
+        lastDeliveredFrameAt: lastDeliveredFrameAtRef.current,
+      })
+      if (finalSampleSeconds > 0) {
+        const finalRoundedScore = Math.round(focusScoreRef.current)
+        measuredSecondsRef.current += finalSampleSeconds
+        scoreSumRef.current += finalRoundedScore * finalSampleSeconds
+        focusPhaseSecondsRef.current[focusPhaseRef.current] =
+          (focusPhaseSecondsRef.current[focusPhaseRef.current] || 0) + finalSampleSeconds
+        if (preDriftRiskRef.current.active) preDriftSecondsRef.current += finalSampleSeconds
+        if (isFocusedSecond(finalRoundedScore)) {
+          focusedSecondsRef.current += finalSampleSeconds
+          currentStreakRef.current += finalSampleSeconds
+          longestStreakRef.current = Math.max(longestStreakRef.current, currentStreakRef.current)
+        }
+      }
+      statsSampleAtRef.current = endedAt
+    }
     // A session whose camera never delivered usable frames has no measurement:
     // focusScoreRef is still sitting at its 68 default. Reporting that as a score
     // wrote a fabricated "68% focus" into history. History and the Lab already
@@ -1185,6 +1218,7 @@ export default function SessionScreen({
       startedAt:            startTimeRef.current,
       endedAt,
       attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
       plannedDuration:      duration,
       energyLevel,
       actualSeconds,
@@ -1353,12 +1387,14 @@ export default function SessionScreen({
   const handleFaceResults = useCallback((results) => {
     // Frame heartbeat: proof that the camera pipeline is actually delivering.
     // Recorded before the pause/end guard so a paused session isn't judged stalled.
-    lastFrameAtRef.current = Date.now()
+    const deliveredAt = Date.now()
+    lastFrameAtRef.current = deliveredAt
+    lastDeliveredFrameAtRef.current = deliveredAt
     if (sessionEndedRef.current || isPausedRef.current) return
 
     const lmArray        = results.multiFaceLandmarks
     const hasFace        = lmArray?.length > 0
-    const now            = Date.now()
+    const now            = deliveredAt
     const sessionElapsed = (now - startTimeRef.current - pausedTotalRef.current) / 1000
     const calibrating    = sessionElapsed < CALIBRATION_SECS
 
@@ -2167,15 +2203,14 @@ export default function SessionScreen({
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
     const tick = setInterval(() => {
+      const now = Date.now()
+      const previousSampleAt = statsSampleAtRef.current
+      statsSampleAtRef.current = now
       if (isPausedRef.current) return
 
-      setTimeLeft((prev) => {
-        if (prev <= 1) { clearInterval(tick); return 0 }
-        return prev - 1
-      })
-
-      const now = Date.now()
-      const elapsedSecs = Math.round((now - startTimeRef.current - pausedTotalRef.current) / 1000)
+      const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
+      const elapsedSecs = Math.round(elapsedExact)
+      setTimeLeft(Math.max(0, Math.ceil(totalSeconds - elapsedExact)))
       const calibrating = elapsedSecs < CALIBRATION_SECS
 
       // ── Camera health ────────────────────────────────────────────────────
@@ -2236,14 +2271,31 @@ export default function SessionScreen({
       })
       setCalibProgress(1)
 
+      // setInterval is throttled when this WebView sits behind the app the user
+      // is actually working in. Count the real span represented by this wake-up,
+      // but only while a genuinely delivered camera frame is still fresh. Long
+      // sleep/camera gaps remain absent rather than inheriting a stale score.
+      const calibrationEndAt = startTimeRef.current + pausedTotalRef.current + CALIBRATION_SECS * 1000
+      const sampleSeconds = measuredSpanSeconds({
+        previousAt: Math.max(previousSampleAt, calibrationEndAt),
+        now,
+        lastDeliveredFrameAt: lastDeliveredFrameAtRef.current,
+      })
+      if (sampleSeconds <= 0) {
+        goodStreakSecsRef.current = 0
+        currentStreakRef.current = 0
+        setCurrentStreak(0)
+        return
+      }
+
       const focused = isFocusedSecond(focusScoreRef.current)
       if (preDriftRiskRef.current.active) {
-        preDriftSecondsRef.current += 1
+        preDriftSecondsRef.current += sampleSeconds
       }
 
       if (focused) {
-        focusedSecondsRef.current += 1
-        currentStreakRef.current  += 1
+        focusedSecondsRef.current += sampleSeconds
+        currentStreakRef.current  += sampleSeconds
         if (currentStreakRef.current > longestStreakRef.current)
           longestStreakRef.current = currentStreakRef.current
       } else {
@@ -2254,7 +2306,7 @@ export default function SessionScreen({
       const msSinceDistraction = lastDistractionRef.current ? now - lastDistractionRef.current : Infinity
       // Unbroken run at/above the good-score bar. Counting anything lower lets a
       // steadily mediocre session accumulate its way into Lock-in.
-      if (roundedScore >= GOOD_STREAK_SCORE) goodStreakSecsRef.current += 1
+      if (roundedScore >= GOOD_STREAK_SCORE) goodStreakSecsRef.current += sampleSeconds
       else goodStreakSecsRef.current = 0
       const nextFocusPhase = classifyFocusPhase({
         elapsedSecs,
@@ -2264,9 +2316,10 @@ export default function SessionScreen({
         preDriftActive: preDriftRiskRef.current.active,
         inFlow: inFlowRef.current,
       })
-      measuredSecondsRef.current += 1
-      scoreSumRef.current += roundedScore
-      focusPhaseSecondsRef.current[nextFocusPhase] = (focusPhaseSecondsRef.current[nextFocusPhase] || 0) + 1
+      measuredSecondsRef.current += sampleSeconds
+      scoreSumRef.current += roundedScore * sampleSeconds
+      focusPhaseSecondsRef.current[nextFocusPhase] =
+        (focusPhaseSecondsRef.current[nextFocusPhase] || 0) + sampleSeconds
       if (nextFocusPhase !== focusPhaseRef.current) {
         focusPhaseTransitionsRef.current.push({
           second: elapsedSecs,
@@ -2294,7 +2347,9 @@ export default function SessionScreen({
         setGazePos(null)
       }
 
-      if (elapsedSecs > 0 && elapsedSecs % SCORE_UPDATE_SECS === 0) {
+      const timelineBucket = Math.floor(elapsedSecs / SCORE_UPDATE_SECS)
+      if (elapsedSecs > 0 && timelineBucket > lastTimelineBucketRef.current) {
+        lastTimelineBucketRef.current = timelineBucket
         // Reuse the classification already computed for scoring this frame.
         timelineSnapshotsRef.current.push({
           second: elapsedSecs,

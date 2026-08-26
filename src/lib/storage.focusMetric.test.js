@@ -9,6 +9,7 @@ import {
   saveSession,
 } from './storage'
 import { ATTENTION_SCORING_VERSION, FOCUS_METRIC_V1 } from './focusMetric'
+import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -102,6 +103,64 @@ describe('focus ledger persistence', () => {
     expect(loadFocusLedger().days['2026-08-17'].sessions['legacy-timeline']).toMatchObject({
       source: 'legacy_timeline_v1',
       measuredSeconds,
+    })
+  })
+
+  it('persists corrected wall-clock totals and replaces the stale ledger entry', () => {
+    const startedAt = new Date(2026, 7, 17, 9).getTime()
+    const throttled = {
+      id: 'timer-throttled',
+      startedAt,
+      timestamp: startedAt + 620_000,
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      actualSeconds: 620,
+      measuredSeconds: 300,
+      scoreSum: 23_400,
+      focusedSeconds: 300,
+      scoreMeasured: true,
+      timeline: Array.from({ length: 60 }, (_, index) => ({
+        second: 20 + index * 10,
+        score: 78,
+        focused: true,
+        phase: 'lock_in',
+      })),
+      focusPhases: { seconds: { arrival: 0, ramp: 0, lock_in: 300, fade: 0, recovery: 0, drift: 0 } },
+      focusMetricVersion: FOCUS_METRIC_V1.version,
+      sessionEfficiency: 78,
+      deepFocusMinutes: 5,
+      focusMeasurementSource: 'live_v1',
+    }
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([throttled]))
+    localStorage.setItem(FOCUS_LEDGER_KEY, JSON.stringify({
+      schemaVersion: 1,
+      days: {
+        '2026-08-17': {
+          sessions: {
+            'timer-throttled': {
+              version: 1,
+              measuredSeconds: 300,
+              scoreSum: 23_400,
+              deepFocusSeconds: 300,
+              source: 'live_v1',
+            },
+          },
+        },
+      },
+    }))
+
+    backfillFocusLedgerFromSessions()
+
+    expect(loadSessions()[0]).toMatchObject({
+      attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      measuredSeconds: 600,
+      focusedSeconds: 600,
+      sessionEfficiency: 78,
+      deepFocusMinutes: 10,
+      focusMeasurementSource: 'timer_timeline_v2',
+    })
+    expect(loadFocusLedger().days['2026-08-17'].sessions['timer-throttled']).toMatchObject({
+      measuredSeconds: 600,
+      source: 'timer_timeline_v2',
     })
   })
 
