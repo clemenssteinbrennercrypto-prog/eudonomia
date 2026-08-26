@@ -167,6 +167,15 @@ describe('it refuses rather than guessing', () => {
   })
 })
 
+describe('unlimited sessions', () => {
+  it('does not fabricate a zero-minute plan for the judge', () => {
+    const input = buildVerdictInput(sessionFixture({ plannedDuration: null }))
+    expect(input.plannedMinutes).toBeNull()
+    expect(buildVerdictPrompt(input)).toContain('No time limit was set; the session ran 60 min.')
+    expect(buildVerdictPrompt(input)).not.toContain('Planned 0 min')
+  })
+})
+
 describe('normalizeVerdict is a hard boundary', () => {
   const valid = { matched: 'partly', headline: 'You wrote, but not the chapter.', reason: 'r', suggestion: 's', confidence: 'high' }
 

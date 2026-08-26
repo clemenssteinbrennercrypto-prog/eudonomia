@@ -4,6 +4,7 @@ import { summarizeSessionAlignment } from '../lib/sessionIntent'
 import { deriveVerdict } from '../lib/sessionVerdict'
 import { sessionFocusMeasurement, sessionFocusPct } from '../lib/historyTrend'
 import { describeFocusMetricRejection } from '../lib/focusMetric'
+import { durationFromSession } from '../lib/sessionDuration'
 
 function fmt(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -1087,7 +1088,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               task,
               goal,
               energyLevel,
-              duration: Object.hasOwn(sessionData, 'plannedDuration') ? plannedDuration : 30,
+              duration: durationFromSession(sessionData),
               tags,
             })}
             style={{

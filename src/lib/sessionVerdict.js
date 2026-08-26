@@ -148,7 +148,9 @@ export function buildVerdictInput(session) {
 
   return {
     goal,
-    plannedMinutes: nonNegative(session.plannedDuration),
+    plannedMinutes: session.plannedDuration == null
+      ? null
+      : nonNegative(session.plannedDuration),
     actualMinutes: Math.round(actualSeconds / 60),
     focusPct,
     observedMinutes: Math.round(observedSeconds / 60),
@@ -164,7 +166,9 @@ export function buildVerdictPrompt(input) {
     'matched what they set out to do.',
     '',
     `Their stated goal: "${input.goal}"`,
-    `Planned ${input.plannedMinutes} min, ran ${input.actualMinutes} min.`,
+    input.plannedMinutes == null
+      ? `No time limit was set; the session ran ${input.actualMinutes} min.`
+      : `Planned ${input.plannedMinutes} min, ran ${input.actualMinutes} min.`,
   ]
 
   if (input.focusPct != null) {

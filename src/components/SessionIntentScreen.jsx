@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { loadSessions } from '../lib/storage'
 import { buildRecentSessionSetups, normalizeSessionTags, QUICK_SESSION_TAGS } from '../lib/sessionSetups'
 import { countWords, limitWords, SESSION_PLAN_WORD_LIMIT } from '../lib/sessionPlan'
+import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuration'
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -25,7 +26,7 @@ export default function SessionIntentScreen({
   const normalizedTags = normalizeSessionTags(tags)
   const canStart = task.trim().length > 0
   const planWordCount = countWords(goal)
-  const hasTimeLimit = Number.isFinite(duration) && duration > 0
+  const hasTimeLimit = isTimed(duration)
 
   const toggleTag = (tag) => {
     setTags(previous => previous.includes(tag)
@@ -44,6 +45,7 @@ export default function SessionIntentScreen({
     setTask(setup.task)
     setGoal(setup.goal)
     setDuration(setup.duration)
+    setCustomDurationOpen(isCustomDuration(setup.duration, DURATIONS))
     setEnergyLevel(setup.energyLevel)
     setTags(setup.tags)
   }
@@ -74,8 +76,8 @@ export default function SessionIntentScreen({
           </label>
 
           <div className="session-intent-field session-plan-field">
-            <span>Definition of plan <em>optional</em></span>
-            <button type="button" className="session-plan-preview" onClick={() => setPlanOpen(true)}>
+            <span id="session-plan-field-label">Definition of plan <em>optional</em></span>
+            <button type="button" className="session-plan-preview" aria-labelledby="session-plan-field-label" onClick={() => setPlanOpen(true)}>
               <span>{goal.trim() || 'Define what you will do and what “done” looks like.'}</span>
               <strong>{goal.trim() ? 'Edit plan' : 'Add plan'} ↗</strong>
             </button>

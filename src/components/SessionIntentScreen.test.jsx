@@ -32,6 +32,7 @@ describe('SessionIntentScreen', () => {
     expect(html).toContain('Session Planning')
     expect(html).toContain('Definition of plan')
     expect(html).toContain('1000 words')
+    expect(html).toContain('aria-labelledby="session-plan-field-label"')
     expect(html).not.toContain('Focus Score')
     expect(html).toContain('disabled=""')
   })

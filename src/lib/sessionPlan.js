@@ -7,6 +7,10 @@ export function countWords(value) {
 
 export function limitWords(value, limit = SESSION_PLAN_WORD_LIMIT) {
   const text = String(value || '')
-  if (countWords(text) <= limit) return text
-  return text.trim().split(/\s+/u).slice(0, limit).join(' ')
+  const words = [...text.matchAll(/\S+/gu)]
+  if (words.length <= limit) return text
+  const finalWord = words[Math.max(0, limit - 1)]
+  return finalWord
+    ? text.slice(0, finalWord.index + finalWord[0].length)
+    : ''
 }

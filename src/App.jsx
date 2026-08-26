@@ -14,6 +14,7 @@ import { backfillFocusLedgerFromSessions, loadFocusModeEnabled, saveFocusModeEna
 import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 import { withSessionFocusMetric } from './lib/focusMetric'
+import { durationFromSetup } from './lib/sessionDuration'
 
 const isNativeRuntime = () => Boolean(window.__TAURI__?.core?.invoke)
 
@@ -230,7 +231,7 @@ export default function App() {
     setTask(prefill?.task ?? '')
     setGoal(prefill?.goal ?? '')
     setEnergyLevel(prefill?.energyLevel ?? 'medium')
-    setDuration(prefill && Object.hasOwn(prefill, 'duration') ? prefill.duration : 30)
+    setDuration(durationFromSetup(prefill))
     setTags(prefill?.tags ?? [])
     setSessionData(null)
     setScreen('session-setup')

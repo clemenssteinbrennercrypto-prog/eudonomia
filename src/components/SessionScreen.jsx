@@ -39,6 +39,12 @@ import {
 } from '../lib/attention'
 import { ATTENTION_SCORING_VERSION, TIMER_THROTTLING_EVIDENCE_VERSION } from '../lib/focusMetric'
 import {
+  blockingLeaseSeconds,
+  hasTimeLimit as isTimed,
+  sessionTimerSeconds,
+  shouldAutoEndSession,
+} from '../lib/sessionDuration'
+import {
   ATTENTION_ACCUMULATION_VERSION,
   accumulateMeasuredSpan,
   measuredSpanSeconds,
@@ -804,7 +810,7 @@ export default function SessionScreen({
   focusModeEnabled = true,
   onEnd,
 }) {
-  const hasTimeLimit = Number.isFinite(duration) && duration > 0
+  const hasTimeLimit = isTimed(duration)
   const totalSeconds = hasTimeLimit ? duration * 60 : null
   const sessionIntent = useMemo(
     () => deriveSessionIntent({ task, goal, energyLevel, tags }),
@@ -1124,7 +1130,7 @@ export default function SessionScreen({
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
     // if the WebView dies, native blocking still clears itself shortly after.
-    const leaseSeconds = hasTimeLimit ? Math.max(0, timeLeftRef.current) : 90
+    const leaseSeconds = blockingLeaseSeconds(duration, timeLeftRef.current)
     const endTs = active ? Date.now() + leaseSeconds * 1000 : 0
     if (active) lastActivePushAtRef.current = Date.now()
     const companionSession = await pushCompanionSession({
@@ -1135,7 +1141,7 @@ export default function SessionScreen({
     })
     applyCompanionSession(companionSession)
     return companionSession
-  }, [applyCompanionSession, hasTimeLimit])
+  }, [applyCompanionSession, duration])
 
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
@@ -2320,9 +2326,7 @@ export default function SessionScreen({
 
       const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
       const elapsedSecs = Math.round(elapsedExact)
-      setTimeLeft(hasTimeLimit
-        ? Math.max(0, Math.ceil(totalSeconds - elapsedExact))
-        : Math.max(0, Math.floor(elapsedExact)))
+      setTimeLeft(sessionTimerSeconds(duration, elapsedExact))
       const calibrating = elapsedSecs < CALIBRATION_SECS
 
       // ── Camera health ────────────────────────────────────────────────────
@@ -2445,11 +2449,11 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [accumulateMeasurement, hasTimeLimit, restartCamera, totalSeconds])
+  }, [accumulateMeasurement, duration, restartCamera])
 
   useEffect(() => {
-    if (hasTimeLimit && timeLeft === 0) endSession(true)
-  }, [hasTimeLimit, timeLeft, endSession])
+    if (shouldAutoEndSession(duration, timeLeft)) endSession(true)
+  }, [duration, timeLeft, endSession])
 
   // ── Start ambient on mount if pref set ───────────────────────────────────
   useEffect(() => {
@@ -2817,7 +2821,7 @@ export default function SessionScreen({
         <div className="session-plan-backdrop" role="presentation" onMouseDown={event => {
           if (event.target === event.currentTarget) setShowSessionPlan(false)
         }}>
-          <section className="session-plan-dialog session-plan-dialog--read" role="dialog" aria-modal="true" aria-labelledby="live-session-plan-title">
+          <section className="session-plan-dialog" role="dialog" aria-modal="true" aria-labelledby="live-session-plan-title">
             <header>
               <div><span>Session reference</span><h2 id="live-session-plan-title">{task}</h2></div>
               <button type="button" aria-label="Close session plan" onClick={() => setShowSessionPlan(false)}>×</button>

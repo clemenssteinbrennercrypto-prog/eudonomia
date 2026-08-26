@@ -13,4 +13,8 @@ describe('session plan word limit', () => {
     expect(countWords(limited)).toBe(SESSION_PLAN_WORD_LIMIT)
     expect(limited.endsWith('word999')).toBe(true)
   })
+
+  it('preserves paragraphs and spacing when trimming excess words', () => {
+    expect(limitWords('first  item\n\nsecond item\nthird', 4)).toBe('first  item\n\nsecond item')
+  })
 })

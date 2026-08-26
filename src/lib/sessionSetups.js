@@ -1,3 +1,5 @@
+import { limitWords } from './sessionPlan'
+
 export const QUICK_SESSION_TAGS = ['Deep work', 'Reading', 'Writing', 'Coding', 'Study', 'Meeting']
 
 const cleanText = (value, maxLength) => String(value || '').trim().slice(0, maxLength)
@@ -27,7 +29,7 @@ export function buildRecentSessionSetups(sessions, limit = 4) {
     const task = cleanText(session?.task, 80)
     if (!task) continue
 
-    const goal = cleanText(session?.goal, 8000)
+    const goal = limitWords(session?.goal).trim()
     const tags = normalizeSessionTags(session?.tags)
     const storedDuration = Object.hasOwn(session || {}, 'plannedDuration')
       ? session.plannedDuration
