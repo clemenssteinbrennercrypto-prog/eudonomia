@@ -1491,7 +1491,7 @@ body {
 
 .session-intent-field > input {
   height: 48px;
-  padding: 0 52px 0 14px;
+  padding: 0 14px;
   font-size: 15px;
   font-weight: 560;
   letter-spacing: -.01em;
@@ -1510,9 +1510,10 @@ body {
 .session-custom-tag input:focus { border-color: var(--accent); }
 
 .session-intent-field small {
-  position: absolute;
-  right: 0;
-  bottom: 17px;
+  position: static;
+  display: block;
+  margin-top: 7px;
+  text-align: right;
   color: var(--text-muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -1528,7 +1529,7 @@ body {
 .session-plan-preview > span { max-width: 62ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .session-plan-preview strong { color: var(--accent); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .session-plan-preview:hover, .session-plan-preview:focus-visible { border-color: var(--accent); outline: none; }
-.session-plan-field small { bottom: 14px; right: 14px; }
+.session-plan-field small { padding-right: 2px; }
 
 .session-intent-tags { display: flex; flex-wrap: wrap; gap: 8px; }
 .session-intent-tags button,
@@ -1601,8 +1602,8 @@ body {
 .session-start-duration { margin-left: auto; font-size: 10px; letter-spacing: .08em; opacity: .72; }
 .session-intent-start:disabled { border-color: var(--line); background: var(--surface); color: var(--text-muted); opacity: .55; cursor: default; }
 
-.session-plan-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 28px; background: rgba(4, 7, 20, .76); backdrop-filter: blur(10px); }
-.session-plan-dialog { width: min(680px, 100%); max-height: min(720px, calc(100vh - 56px)); display: flex; flex-direction: column; padding: 24px; border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); border-radius: 14px; background: var(--surface); box-shadow: 0 28px 90px rgba(0, 0, 0, .52); }
+.session-plan-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 28px; background: rgba(4, 7, 20, .76); backdrop-filter: blur(10px); animation: sessionPlanBackdropIn .28s ease-out both; }
+.session-plan-dialog { width: min(680px, 100%); max-height: min(720px, calc(100vh - 56px)); display: flex; flex-direction: column; padding: 24px; border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); border-radius: 14px; background: var(--surface); box-shadow: 0 28px 90px rgba(0, 0, 0, .52); animation: sessionPlanDialogIn .32s cubic-bezier(.22, 1, .36, 1) both; }
 .session-plan-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 18px; }
 .session-plan-dialog header span { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .session-plan-dialog h2 { margin: 6px 0 0; color: var(--text); font-size: 23px; line-height: 1.2; }
@@ -1610,10 +1611,17 @@ body {
 .session-plan-dialog textarea { width: 100%; min-height: 300px; max-height: 55vh; box-sizing: border-box; resize: vertical; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; outline: none; background: color-mix(in srgb, var(--bg) 58%, transparent); color: var(--text); font: inherit; font-size: 15px; line-height: 1.65; }
 .session-plan-dialog textarea:focus { border-color: var(--accent); }
 .session-plan-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 16px; color: var(--text-muted); font-size: 11px; }
-.session-plan-dialog footer button { min-height: 38px; padding: 0 18px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--bg); font: inherit; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.session-plan-dialog footer button { min-height: 38px; padding: 0 18px; border: 1px solid #fff; border-radius: 7px; background: #fff; color: var(--bg); font: inherit; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; transition: background .2s ease, transform .2s ease; }
+.session-plan-dialog footer button:hover { background: #eef1ff; transform: translateY(-1px); }
 .session-plan-content { min-height: 160px; max-height: 55vh; overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--bg) 42%, transparent); color: var(--text-secondary); font-size: 15px; line-height: 1.7; white-space: pre-wrap; }
-.live-session-plan-button { margin-top: 14px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent); font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.live-session-plan-button { margin-top: 15px; padding: 9px 15px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.07); color: #fff; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; cursor: pointer; transition: background .28s ease, border-color .28s ease, transform .28s ease; }
+.live-session-plan-button:hover { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.12); transform: translateY(-1px); }
 .live-session-plan-button span { margin-right: 5px; }
+.session-plan-backdrop--live { animation-duration: .48s; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+.session-plan-dialog--live { animation-duration: .56s; }
+
+@keyframes sessionPlanBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sessionPlanDialogIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 .session-recent-setups { padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 54%, transparent); }
 .session-recent-heading { padding-bottom: 19px; border-bottom: 1px solid var(--line); }
@@ -1664,7 +1672,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .session-intent-tags button,
   .session-intent-options button,
-  .session-recent-setups strong { transition: none; }
+  .session-recent-setups strong,
+  .session-plan-backdrop,
+  .session-plan-dialog,
+  .live-session-plan-button { animation: none; transition: none; }
 }
 .lab-text-action { border: 0; background: transparent; color: var(--ultra-bright); font-size: 10px; font-weight: 700; cursor: pointer; }
 .lab-session-list { margin-top: 18px; border-top: 1px solid var(--line); }

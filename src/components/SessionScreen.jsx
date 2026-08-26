@@ -2818,10 +2818,10 @@ export default function SessionScreen({
         </div>
       </div>
       {showSessionPlan && (
-        <div className="session-plan-backdrop" role="presentation" onMouseDown={event => {
+        <div className="session-plan-backdrop session-plan-backdrop--live" role="presentation" onMouseDown={event => {
           if (event.target === event.currentTarget) setShowSessionPlan(false)
         }}>
-          <section className="session-plan-dialog" role="dialog" aria-modal="true" aria-labelledby="live-session-plan-title">
+          <section className="session-plan-dialog session-plan-dialog--live" role="dialog" aria-modal="true" aria-labelledby="live-session-plan-title">
             <header>
               <div><span>Session reference</span><h2 id="live-session-plan-title">{task}</h2></div>
               <button type="button" aria-label="Close session plan" onClick={() => setShowSessionPlan(false)}>×</button>
