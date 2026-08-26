@@ -30,9 +30,18 @@ describe('SessionIntentScreen', () => {
   it('is an intent briefing and does not display a focus metric', () => {
     const html = renderIntent()
     expect(html).toContain('Session Planning')
-    expect(html).toContain('Definition of done')
+    expect(html).toContain('Definition of plan')
+    expect(html).toContain('1000 words')
     expect(html).not.toContain('Focus Score')
     expect(html).toContain('disabled=""')
+  })
+
+  it('offers custom and unlimited sessions with an unmistakable start action', () => {
+    const html = renderIntent({ task: 'Current task', duration: null })
+    expect(html).toContain('Custom')
+    expect(html).toContain('No limit')
+    expect(html).toContain('Start focus session')
+    expect(html).toContain('▶')
   })
 
   it('reuses honest fields from recent session history', () => {

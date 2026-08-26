@@ -230,7 +230,7 @@ export default function App() {
     setTask(prefill?.task ?? '')
     setGoal(prefill?.goal ?? '')
     setEnergyLevel(prefill?.energyLevel ?? 'medium')
-    setDuration(prefill?.duration ?? 30)
+    setDuration(prefill && Object.hasOwn(prefill, 'duration') ? prefill.duration : 30)
     setTags(prefill?.tags ?? [])
     setSessionData(null)
     setScreen('session-setup')

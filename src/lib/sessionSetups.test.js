@@ -6,6 +6,20 @@ describe('normalizeSessionTags', () => {
     expect(normalizeSessionTags([' Coding ', 'coding', '', 'Deep work'])).toEqual(['Coding', 'Deep work'])
   })
 
+  it('preserves an explicitly unlimited session setup', () => {
+    expect(buildRecentSessionSetups([{
+      task: 'Open-ended research',
+      goal: 'Follow the evidence',
+      plannedDuration: null,
+    }])).toEqual([{
+      task: 'Open-ended research',
+      goal: 'Follow the evidence',
+      duration: null,
+      energyLevel: 'medium',
+      tags: [],
+    }])
+  })
+
   it('refuses non-array values', () => {
     expect(normalizeSessionTags('Coding')).toEqual([])
   })

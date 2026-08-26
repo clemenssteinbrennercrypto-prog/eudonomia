@@ -491,6 +491,7 @@ function FocusRing({
   calibProgress = 0,
   focusedThreshold = 65,
   alertThreshold = 38,
+  countUp = false,
 }) {
   const size   = 220
   const radius = 96
@@ -546,6 +547,7 @@ function FocusRing({
         gap: 0,
       }}>
         <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? 'var(--text-muted)' : '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
+        {countUp && <span style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>No time limit</span>}
       </div>
     </div>
   )
@@ -802,7 +804,8 @@ export default function SessionScreen({
   focusModeEnabled = true,
   onEnd,
 }) {
-  const totalSeconds = duration * 60
+  const hasTimeLimit = Number.isFinite(duration) && duration > 0
+  const totalSeconds = hasTimeLimit ? duration * 60 : null
   const sessionIntent = useMemo(
     () => deriveSessionIntent({ task, goal, energyLevel, tags }),
     [task, goal, energyLevel, tags]
@@ -818,7 +821,8 @@ export default function SessionScreen({
   } = computeThresholds(devices)
   const alertDelayMs = devices.length >= 1 ? 120_000 : 90_000
 
-  const [timeLeft,        setTimeLeft]        = useState(totalSeconds)
+  const [timeLeft,        setTimeLeft]        = useState(totalSeconds ?? 0)
+  const [showSessionPlan, setShowSessionPlan] = useState(false)
   const [showOverlay,     setShowOverlay]     = useState(false)
   const [alertReason,     setAlertReason]     = useState('default')
   const [attentionStatus, setAttentionStatus] = useState('focused')
@@ -861,7 +865,7 @@ export default function SessionScreen({
   const isPausedRef     = useRef(false)
   const pausedAtRef     = useRef(null) // timestamp when paused
   const pausedTotalRef  = useRef(0)    // total ms spent paused
-  const timeLeftRef     = useRef(totalSeconds)
+  const timeLeftRef     = useRef(totalSeconds ?? 0)
   const companionSessionHadActiveRef = useRef(false)
   const lastActivePushAtRef    = useRef(0)   // when we last told the companion this session is active
 
@@ -983,7 +987,7 @@ export default function SessionScreen({
   // ── Ambient sound refs ────────────────────────────────────────────────────
   const ambientRef = useRef(null) // { source, gain }
 
-  const progress = (totalSeconds - timeLeft) / totalSeconds
+  const progress = hasTimeLimit ? (totalSeconds - timeLeft) / totalSeconds : 0
 
   // ── Ambient sound control ─────────────────────────────────────────────────
   const stopAmbient = useCallback(() => {
@@ -1118,7 +1122,10 @@ export default function SessionScreen({
   }, [restartCamera])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
-    const endTs = active ? Date.now() + Math.max(0, timeLeftRef.current) * 1000 : 0
+    // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
+    // if the WebView dies, native blocking still clears itself shortly after.
+    const leaseSeconds = hasTimeLimit ? Math.max(0, timeLeftRef.current) : 90
+    const endTs = active ? Date.now() + leaseSeconds * 1000 : 0
     if (active) lastActivePushAtRef.current = Date.now()
     const companionSession = await pushCompanionSession({
       active,
@@ -1128,7 +1135,7 @@ export default function SessionScreen({
     })
     applyCompanionSession(companionSession)
     return companionSession
-  }, [applyCompanionSession])
+  }, [applyCompanionSession, hasTimeLimit])
 
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
@@ -2313,7 +2320,9 @@ export default function SessionScreen({
 
       const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
       const elapsedSecs = Math.round(elapsedExact)
-      setTimeLeft(Math.max(0, Math.ceil(totalSeconds - elapsedExact)))
+      setTimeLeft(hasTimeLimit
+        ? Math.max(0, Math.ceil(totalSeconds - elapsedExact))
+        : Math.max(0, Math.floor(elapsedExact)))
       const calibrating = elapsedSecs < CALIBRATION_SECS
 
       // ── Camera health ────────────────────────────────────────────────────
@@ -2436,11 +2445,11 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [accumulateMeasurement, restartCamera])
+  }, [accumulateMeasurement, hasTimeLimit, restartCamera, totalSeconds])
 
   useEffect(() => {
-    if (timeLeft === 0) endSession(true)
-  }, [timeLeft, endSession])
+    if (hasTimeLimit && timeLeft === 0) endSession(true)
+  }, [hasTimeLimit, timeLeft, endSession])
 
   // ── Start ambient on mount if pref set ───────────────────────────────────
   useEffect(() => {
@@ -2576,9 +2585,9 @@ export default function SessionScreen({
           </p>
         </div>
       )}
-      <div className="progress-track">
+      {hasTimeLimit && <div className="progress-track">
         <div className="progress-fill" style={{ width: `${progress * 100}%` }} />
-      </div>
+      </div>}
 
       {/* Milestone celebration pill */}
       {milestone && (
@@ -2667,7 +2676,14 @@ export default function SessionScreen({
           calibProgress={calibProgress}
           focusedThreshold={1}
           alertThreshold={1}
+          countUp={!hasTimeLimit}
         />
+
+        {goal.trim() && (
+          <button className="live-session-plan-button" type="button" onClick={() => setShowSessionPlan(true)}>
+            <span aria-hidden="true">≡</span> Session plan
+          </button>
+        )}
 
         <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', width: '100%' }}>
           <ActivityPill
@@ -2797,6 +2813,20 @@ export default function SessionScreen({
           </span>
         </div>
       </div>
+      {showSessionPlan && (
+        <div className="session-plan-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) setShowSessionPlan(false)
+        }}>
+          <section className="session-plan-dialog session-plan-dialog--read" role="dialog" aria-modal="true" aria-labelledby="live-session-plan-title">
+            <header>
+              <div><span>Session reference</span><h2 id="live-session-plan-title">{task}</h2></div>
+              <button type="button" aria-label="Close session plan" onClick={() => setShowSessionPlan(false)}>×</button>
+            </header>
+            <div className="session-plan-content">{goal}</div>
+            <footer><span>Keep this open as long as you need.</span><button type="button" onClick={() => setShowSessionPlan(false)}>Back to session</button></footer>
+          </section>
+        </div>
+      )}
 
       {/* Audio controls */}
       {/* clears the fixed build-identity badge in the bottom-left corner */}

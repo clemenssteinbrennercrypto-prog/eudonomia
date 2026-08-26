@@ -27,12 +27,16 @@ export function buildRecentSessionSetups(sessions, limit = 4) {
     const task = cleanText(session?.task, 80)
     if (!task) continue
 
-    const goal = cleanText(session?.goal, 180)
+    const goal = cleanText(session?.goal, 8000)
     const tags = normalizeSessionTags(session?.tags)
-    const storedDuration = session?.plannedDuration ?? session?.duration
-    const duration = Number.isFinite(Number(storedDuration))
-      ? Math.min(180, Math.max(1, Math.round(Number(storedDuration))))
-      : 30
+    const storedDuration = Object.hasOwn(session || {}, 'plannedDuration')
+      ? session.plannedDuration
+      : session?.duration
+    const duration = storedDuration == null
+      ? null
+      : Number.isFinite(Number(storedDuration))
+        ? Math.min(720, Math.max(1, Math.round(Number(storedDuration))))
+        : 30
     const energyLevel = ['fresh', 'medium', 'tired'].includes(session?.energyLevel)
       ? session.energyLevel
       : 'medium'

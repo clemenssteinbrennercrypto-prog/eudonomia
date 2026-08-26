@@ -1083,7 +1083,13 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
             View History
           </button>
           <button
-            onClick={() => onRestart({ task, goal, energyLevel, duration: plannedDuration || 30, tags })}
+            onClick={() => onRestart({
+              task,
+              goal,
+              energyLevel,
+              duration: Object.hasOwn(sessionData, 'plannedDuration') ? plannedDuration : 30,
+              tags,
+            })}
             style={{
               padding: '14px 28px',
               fontSize: 15, fontWeight: 600,
