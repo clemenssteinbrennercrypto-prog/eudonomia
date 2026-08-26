@@ -1294,21 +1294,23 @@ body {
 }
 
 .attention-field {
-  height: 88px;
+  position: relative;
+  height: 62px;
   display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 0;
+  align-items: end;
+  gap: 1px;
+  padding: 5px 0 6px;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent, black 1.5%, black 98.5%, transparent);
+  border-bottom: 1px solid rgba(122, 152, 255, 0.2);
+  background: repeating-linear-gradient(90deg, transparent 0, transparent calc(12.5% - 1px), rgba(122, 152, 255, 0.055) 12.5%);
 }
 
 .attention-bin {
   flex: 1 1 0;
-  min-width: 1px;
+  min-width: 0;
   height: var(--attention-height);
   max-height: 100%;
-  border-radius: 1px;
+  border-radius: 0.5px 0.5px 0 0;
   background: var(--line);
   transform-origin: center;
   animation: attentionReveal 700ms var(--ease-out) both;
@@ -1319,6 +1321,24 @@ body {
 .attention-bin.is-no-signal { height: 24%; background: rgba(255, 77, 106, 0.45); }
 .attention-bin.is-inactive { height: 10%; background: rgba(122, 152, 255, 0.08); }
 .attention-bin.is-future { height: 10%; background: rgba(122, 152, 255, 0.025); }
+
+.attention-timeline { min-width: 0; }
+.attention-axis {
+  position: relative;
+  height: 25px;
+  margin-top: 1px;
+  font-family: var(--font-mono, var(--mono));
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(160, 178, 255, 0.58);
+}
+.attention-axis span { position: absolute; top: 0; padding-top: 9px; white-space: nowrap; transform: translateX(-50%); }
+.attention-axis span:first-child { transform: none; }
+.attention-axis span:last-child { transform: translateX(-100%); }
+.attention-axis i { position: absolute; top: 0; left: 50%; width: 1px; height: 5px; background: rgba(122, 152, 255, 0.28); }
+.attention-axis span:first-child i { left: 0; }
+.attention-axis span:last-child i { left: 100%; }
 
 .attention-legend { display: flex; flex-wrap: wrap; gap: 18px; }
 .attention-empty { margin: -8px 0 0; color: var(--text-muted); font-size: 11px; }

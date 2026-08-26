@@ -27,6 +27,8 @@ describe('dashboard data', () => {
     ], { range: 'day', now: NOW, bins: 24 })
 
     const states = new Set(bins.map(bin => bin.state))
+    expect(bins[0].timestamp).toBe(new Date(2026, 7, 25, 0, 0, 0).getTime())
+    expect(bins[1].timestamp - bins[0].timestamp).toBe(60 * 60 * 1000)
     expect(states).toContain('strong')
     expect(states).toContain('focused')
     expect(states).toContain('drift')

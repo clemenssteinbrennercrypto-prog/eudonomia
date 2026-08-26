@@ -55,13 +55,13 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
 
   return buckets.map((bucket, index) => {
     const bucketStart = start + (index / safeBins) * width
-    if (bucketStart >= now) return { index, state: 'future', score: null }
+    if (bucketStart >= now) return { index, timestamp: bucketStart, state: 'future', score: null }
     if (bucket.scores.length === 0) {
-      return { index, state: bucket.active ? 'no-signal' : 'inactive', score: null }
+      return { index, timestamp: bucketStart, state: bucket.active ? 'no-signal' : 'inactive', score: null }
     }
     const score = Math.round(bucket.scores.reduce((sum, value) => sum + value, 0) / bucket.scores.length)
     const state = score >= FLOW_SCORE ? 'strong' : score >= FOCUSED_SCORE ? 'focused' : 'drift'
-    return { index, state, score }
+    return { index, timestamp: bucketStart, state, score }
   })
 }
 

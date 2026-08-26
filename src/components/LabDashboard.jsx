@@ -26,16 +26,49 @@ function Metric({ label, value, suffix }) {
 }
 
 function AttentionField({ bins }) {
+  const start = bins[0]?.timestamp
+  const interval = bins.length > 1 ? bins[1].timestamp - start : 0
+  const end = bins.at(-1)?.timestamp + interval
+  const rangeDays = Math.round((end - start) / (24 * 60 * 60 * 1000))
+  const range = rangeDays <= 1 ? 'day' : rangeDays <= 7 ? 'week' : 'month'
+  const tickCount = range === 'day' ? 5 : range === 'week' ? 8 : 6
+  const formatTick = (timestamp, index) => {
+    const date = new Date(timestamp)
+    if (range === 'day') {
+      if (index === tickCount - 1) return '24:00'
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    }
+    if (range === 'week') {
+      return date.toLocaleDateString([], { weekday: 'short', day: '2-digit' })
+    }
+    return date.toLocaleDateString([], { day: '2-digit', month: 'short' })
+  }
+  const ticks = Number.isFinite(start) && Number.isFinite(end)
+    ? Array.from({ length: tickCount }, (_, index) => ({
+      position: index / (tickCount - 1),
+      timestamp: start + ((end - start) * index) / (tickCount - 1),
+    }))
+    : []
+
   return (
-    <div className="attention-field" role="img" aria-label="Attention field derived from measured focus samples">
-      {bins.map(bin => (
-        <i
-          key={bin.index}
-          className={`attention-bin is-${bin.state}`}
-          style={{ '--attention-height': bin.score == null ? '18%' : `${Math.max(18, bin.score)}%` }}
-          title={bin.score == null ? bin.state : `Focus ${bin.score}`}
-        />
-      ))}
+    <div className="attention-timeline">
+      <div className="attention-field" role="img" aria-label={`Attention field over ${range === 'day' ? 'today' : `this ${range}`}`}>
+        {bins.map(bin => (
+          <i
+            key={bin.index}
+            className={`attention-bin is-${bin.state}`}
+            style={{ '--attention-height': bin.score == null ? '18%' : `${Math.max(18, bin.score)}%` }}
+            title={bin.score == null ? bin.state : `Focus ${bin.score}`}
+          />
+        ))}
+      </div>
+      <div className="attention-axis" aria-hidden="true">
+        {ticks.map((tick, index) => (
+          <span key={tick.timestamp} style={{ left: `${tick.position * 100}%` }}>
+            <i />{formatTick(tick.timestamp, index)}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
