@@ -17,6 +17,10 @@ export default function SessionIntentScreen({
   setEnergyLevel,
   tags,
   setTags,
+  workspaces = [],
+  activeWorkspaceId = null,
+  onWorkspaceChange,
+  onEditWorkspaces,
   onStart,
 }) {
   const [customTag, setCustomTag] = useState('')
@@ -60,6 +64,17 @@ export default function SessionIntentScreen({
         </div>
         <span className="session-intent-step">Intent</span>
       </header>
+
+      <div className="session-workspace-selector">
+        <div>
+          <span>Active workspace</span>
+          <small>Spatial context used by focus tracking</small>
+        </div>
+        <select value={activeWorkspaceId || ''} onChange={event => onWorkspaceChange?.(event.target.value)}>
+          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
+        </select>
+        <button type="button" onClick={onEditWorkspaces}>Manage</button>
+      </div>
 
       <div className="session-intent-grid">
         <section className="session-intent-form" aria-label="Session intent">

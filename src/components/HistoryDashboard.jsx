@@ -345,6 +345,7 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
           </p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {relativeTime(session.timestamp) || `${fmtDate(session.timestamp)} · ${fmtTime(session.timestamp)}`}
+            {session.workspace?.name ? ` · ${session.workspace.name}` : ''}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1202,12 +1203,14 @@ export default function HistoryDashboard({ onClose }) {
   }
 
   const handleExportCSV = () => {
-    const header = ['timestamp', 'task', 'goal', 'intendedOutput', 'successCriteria', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'timeAboveThresholdPct', 'focusEfficiency', 'deepFocusMinutes', 'focusMetricVersion', 'focusMeasurementSource', 'distractionEvents', 'longestStreakSeconds']
+    const header = ['timestamp', 'task', 'workspace', 'workspaceRevision', 'goal', 'intendedOutput', 'successCriteria', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'timeAboveThresholdPct', 'focusEfficiency', 'deepFocusMinutes', 'focusMetricVersion', 'focusMeasurementSource', 'distractionEvents', 'longestStreakSeconds']
     const rows = sessions.map(s => {
       const focusPct = sessionFocusPct(s)
       return [
         new Date(s.timestamp).toISOString(),
         `"${(s.task || '').replace(/"/g, '""')}"`,
+        `"${(s.workspace?.name || '').replace(/"/g, '""')}"`,
+        s.workspace?.revision ?? '',
         `"${(s.goal || '').replace(/"/g, '""')}"`,
         `"${(s.intendedOutput || '').replace(/"/g, '""')}"`,
         `"${(s.successCriteria || '').replace(/"/g, '""')}"`,

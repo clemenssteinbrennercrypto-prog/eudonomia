@@ -5,13 +5,19 @@ import Onboarding from './components/Onboarding'
 import SessionIntentScreen from './components/SessionIntentScreen'
 import LabDashboard from './components/LabDashboard'
 import AppShell from './components/AppShell'
-import WorkspaceSetup from './components/WorkspaceSetup'
+import WorkspaceManager from './components/WorkspaceManager'
 import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import HistoryDashboard from './components/HistoryDashboard'
 import { backfillFocusLedgerFromSessions, loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
-import { normalizeWorkspaceObjects } from './lib/workspaceObjects'
+import {
+  getActiveWorkspace,
+  loadWorkspaceState,
+  saveWorkspaceState,
+  workspaceDevices,
+  workspaceSnapshot,
+} from './lib/workspaceStore'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
 import { withSessionFocusMetric } from './lib/focusMetric'
 import { durationFromSetup } from './lib/sessionDuration'
@@ -33,19 +39,6 @@ function getInitialFlow() {
   }
   if (!isNativeRuntime() && !import.meta.env.DEV) return 'landing'
   return localStorage.getItem('eudaimonia_onboarded') === 'true' ? 'app' : 'onboarding'
-}
-
-// ── Persist helpers ───────────────────────────────────────────────────────────
-function loadDevices() {
-  try {
-    const raw = JSON.parse(localStorage.getItem('eudaimonia_devices') || '[]')
-    // Migrate: discard old format entries that have `position` string instead of col/row
-    return normalizeWorkspaceObjects(raw)
-  } catch { return [] }
-}
-function saveDevices(devices) {
-  try { localStorage.setItem('eudaimonia_devices', JSON.stringify(normalizeWorkspaceObjects(devices))) }
-  catch {}
 }
 
 function AppRefreshControl({ updateStatus }) {
@@ -182,14 +175,14 @@ function BuildIdentity() {
 export default function App() {
   // Public web stays marketing/download only. Native and local dev expose the app.
   const [flow, setFlow] = useState(getInitialFlow)
-  const [screen,   setScreen]   = useState('lab')
+  const [screen,   setScreen]   = useState(() => getActiveWorkspace(loadWorkspaceState()) ? 'lab' : 'setup')
   const [task,     setTask]     = useState('')
   const [goal,     setGoal]     = useState('')
   const [energyLevel, setEnergyLevel] = useState('medium')
   const [duration, setDuration] = useState(30)
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
-  const [devices,  setDevicesRaw] = useState(loadDevices)
+  const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const updateStatus = useAppUpdateStatus()
 
@@ -202,13 +195,13 @@ export default function App() {
     backfillFocusLedgerFromSessions()
   }
 
-  const setDevices = useCallback((val) => {
-    setDevicesRaw(prev => {
-      const next = typeof val === 'function' ? val(prev) : val
-      const normalized = normalizeWorkspaceObjects(next)
-      saveDevices(normalized)
-      return normalized
-    })
+  const activeWorkspace = getActiveWorkspace(workspaceState)
+  const devices = workspaceDevices(activeWorkspace)
+
+  const setWorkspaceState = useCallback((next) => {
+    const result = saveWorkspaceState(next)
+    if (result.ok) setWorkspaceStateRaw(result.state)
+    return result
   }, [])
 
   const setFocusModeEnabled = useCallback((val) => {
@@ -218,14 +211,21 @@ export default function App() {
     })
   }, [])
 
-  const handleStart = () => setScreen('session')
+  const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
 
   const handleEnd = useCallback((data) => {
-    const enriched = withSessionFocusMetric({ ...data, task, goal, energyLevel, tags })
+    const enriched = withSessionFocusMetric({
+      ...data,
+      task,
+      goal,
+      energyLevel,
+      tags,
+      workspace: workspaceSnapshot(activeWorkspace),
+    })
     const saved = saveSession(enriched)
     setSessionData(saved)
     setScreen('end')
-  }, [task, goal, energyLevel, tags])
+  }, [task, goal, energyLevel, tags, activeWorkspace])
 
   const handleRestart = (prefill = null) => {
     setTask(prefill?.task ?? '')
@@ -248,7 +248,7 @@ export default function App() {
         <BuildIdentity />
         <Onboarding onComplete={() => {
           setFlow('app')
-          if (loadDevices().length === 0) setScreen('setup')
+          if (!getActiveWorkspace(loadWorkspaceState())) setScreen('setup')
           else setScreen('lab')
         }} />
       </>
@@ -277,6 +277,10 @@ export default function App() {
           setDuration={setDuration}
           tags={tags}
           setTags={setTags}
+          workspaces={workspaceState.workspaces}
+          activeWorkspaceId={workspaceState.activeWorkspaceId}
+          onWorkspaceChange={(id) => setWorkspaceState({ ...workspaceState, activeWorkspaceId: id })}
+          onEditWorkspaces={() => setScreen('setup')}
           onStart={handleStart}
         />
       )}
@@ -288,9 +292,9 @@ export default function App() {
         />
       )}
       {screen === 'setup' && (
-        <WorkspaceSetup
-          devices={devices}
-          setDevices={setDevices}
+        <WorkspaceManager
+          state={workspaceState}
+          onChange={setWorkspaceState}
           onContinue={() => setScreen('lab')}
         />
       )}
@@ -302,6 +306,7 @@ export default function App() {
           tags={tags}
           duration={duration}
           devices={devices}
+          workspace={activeWorkspace}
           focusModeEnabled={focusModeEnabled}
           onEnd={handleEnd}
         />

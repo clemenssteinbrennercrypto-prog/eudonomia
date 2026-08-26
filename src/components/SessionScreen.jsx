@@ -31,6 +31,7 @@ import {
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
+  classifyCalibratedWorkspace,
   classifyDownwardAttention,
   classifyHorizontalAttention,
   computeThresholds,
@@ -807,6 +808,7 @@ export default function SessionScreen({
   tags = [],
   duration,
   devices = [],
+  workspace = null,
   focusModeEnabled = true,
   onEnd,
 }) {
@@ -972,6 +974,8 @@ export default function SessionScreen({
   const irisHNeutralRef     = useRef(0)
   const irisVNeutralRef     = useRef(0)
   const irisCalibSamplesRef = useRef([]) // { h, v } while looking at the screen
+  const workspacePoseSamplesRef = useRef([]) // daily neutral for relative workspace anchors
+  const workspaceNeutralRef = useRef({ yawSigned: 0, pitchDeg: 0, irisH: 0 })
   const lastRecalibTimeRef  = useRef(0)    // timestamp of last EAR re-calibration
 
   // ── Detection confidence ref ──────────────────────────────────────────────
@@ -1664,12 +1668,33 @@ export default function SessionScreen({
       (now - lowConfSinceRef.current) >= UNCERTAIN_HOLD_MS
 
     const eyesRolledUp   = hasFace && irisV > 0.25
-    const downwardContext = hasFace
-      ? classifyDownwardAttention(devices, pitchDeg, adjustedYawSigned)
-      : { kind: 'none' }
-    const horizontalContext = hasFace
-      ? classifyHorizontalAttention(devices, adjustedYawSigned)
-      : { kind: 'center' }
+    const calibratedTarget = hasFace && !calibrating
+      ? classifyCalibratedWorkspace(
+          workspace,
+          { yawSigned, pitchDeg: pitchDeg - pitchUpDeg, irisH },
+          workspaceNeutralRef.current,
+        )
+      : null
+    const calibratedRole = calibratedTarget?.role
+    const calibratedDownward = calibratedRole === 'reference_material' ||
+      calibratedRole === 'writing_surface' || calibratedRole === 'input_area'
+    const calibratedDistraction = calibratedRole === 'distraction_device' || calibratedTarget?.object?.type === 'phone'
+    const downwardContext = calibratedDistraction
+      ? { kind: 'distraction', object: calibratedTarget.object, role: calibratedRole }
+      : calibratedDownward
+        ? { kind: 'productive', object: calibratedTarget.object, role: calibratedRole }
+        : hasFace
+          ? classifyDownwardAttention(devices, pitchDeg, adjustedYawSigned)
+          : { kind: 'none' }
+    const calibratedScreen = calibratedRole === 'primary_screen' || calibratedRole === 'secondary_screen'
+    const calibratedCol = calibratedTarget?.object?.col ?? 0.5
+    const horizontalContext = calibratedScreen && calibratedRole === 'secondary_screen'
+      ? { kind: calibratedCol < 0.5 ? 'productive_left' : 'productive_right' }
+      : calibratedScreen
+        ? { kind: 'center' }
+        : hasFace
+          ? classifyHorizontalAttention(devices, adjustedYawSigned)
+          : { kind: 'center' }
     const productiveDownward = downwardContext.kind === 'productive'
     const unknownPhoneDownward = downwardContext.kind === 'unknown_phone'
     const productiveHorizontal = horizontalContext.kind === 'productive_left' ||
@@ -1828,6 +1853,7 @@ export default function SessionScreen({
       if (hasFace && avgEar > 0.20) {
         earCalibSamplesRef.current.push(avgEar)
         irisCalibSamplesRef.current.push({ h: irisH, v: irisV })
+        workspacePoseSamplesRef.current.push({ yawSigned, pitchDeg: pitchDeg - pitchUpDeg, irisH })
       }
       if (earCalibSamplesRef.current.length > 0) {
         const sum = earCalibSamplesRef.current.reduce((a, b) => a + b, 0)
@@ -1837,6 +1863,14 @@ export default function SessionScreen({
         const s = irisCalibSamplesRef.current
         irisHNeutralRef.current = s.reduce((a, b) => a + b.h, 0) / s.length
         irisVNeutralRef.current = s.reduce((a, b) => a + b.v, 0) / s.length
+      }
+      if (workspacePoseSamplesRef.current.length > 0) {
+        const s = workspacePoseSamplesRef.current
+        workspaceNeutralRef.current = {
+          yawSigned: s.reduce((sum, sample) => sum + sample.yawSigned, 0) / s.length,
+          pitchDeg: s.reduce((sum, sample) => sum + sample.pitchDeg, 0) / s.length,
+          irisH: s.reduce((sum, sample) => sum + sample.irisH, 0) / s.length,
+        }
       }
       focusScoreRef.current = 68
       return
@@ -2252,7 +2286,7 @@ export default function SessionScreen({
     }
 
     // (detection confidence + trust gate are computed earlier, before scoring)
-  }, [alertDelayMs, devices, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
+  }, [alertDelayMs, devices, workspace, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {

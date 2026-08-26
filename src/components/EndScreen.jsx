@@ -544,6 +544,7 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
           {actualSeconds > 0 && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
               Started at {new Date(Date.now() - actualSeconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              {sessionData.workspace?.name ? ` · ${sessionData.workspace.name}` : ''}
             </p>
           )}
           <h1 className="end-headline">{motivational(focusPct, distractionEvents, actualSeconds)}</h1>

@@ -202,6 +202,31 @@ export function classifyHorizontalAttention(devices = [], yawSigned = 0) {
   return { kind: 'center' }
 }
 
+// Calibration identifies a configured object; it never changes score bands or
+// penalties. Anchors are relative to the primary screen and translated by the
+// current session's neutral pose, so everyday seating drift is not mistaken for
+// a new workspace.
+export function classifyCalibratedWorkspace(workspace, signal, neutral = {}) {
+  const targets = workspace?.calibration?.targets
+  if (!targets || !signal || !workspace?.objects?.length) return null
+  const yawNeutral = Number(neutral.yawSigned) || 0
+  const pitchNeutral = Number(neutral.pitchDeg) || 0
+  const irisNeutral = Number(neutral.irisH) || 0
+  let best = null
+  for (const object of workspace.objects) {
+    const target = targets[object.id]
+    if (!target || target.quality < 0.35 || target.sampleCount < 20) continue
+    const yawDistance = Math.abs(signal.yawSigned - (yawNeutral + target.deltaYaw)) / 12
+    const pitchDistance = Math.abs(signal.pitchDeg - (pitchNeutral + target.deltaPitch)) / 10
+    const irisDistance = Math.abs(signal.irisH - (irisNeutral + target.deltaIrisH)) / 0.12
+    const distance = Math.sqrt(yawDistance ** 2 + pitchDistance ** 2 + irisDistance ** 2)
+    if (!best || distance < best.distance) {
+      best = { object, role: object.role || defaultRoleForType(object.type), distance }
+    }
+  }
+  return best && best.distance <= 1.5 ? best : null
+}
+
 // ── Landmark geometry ────────────────────────────────────────────────────────
 export function dist2d(a, b) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)

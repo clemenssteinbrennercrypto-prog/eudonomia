@@ -10,6 +10,7 @@ import {
   analyzeFrame,
   isFocusedSecond,
   classifyFocusPhase,
+  classifyCalibratedWorkspace,
   classifyHorizontalAttention,
   computeThresholds,
   getCircadianFactor,
@@ -191,6 +192,34 @@ describe('computeThresholds', () => {
       const t = computeThresholds(devices)
       expect(t.workZonePitchMax).toBeGreaterThan(t.workZonePitchMin)
     }
+  })
+})
+
+describe('calibrated workspace targets', () => {
+  const workspace = {
+    objects: [
+      { id: 'main', type: 'monitor', role: 'primary_screen' },
+      { id: 'left', type: 'monitor', role: 'secondary_screen' },
+    ],
+    calibration: { targets: {
+      main: { deltaYaw: 0, deltaPitch: 0, deltaIrisH: 0, quality: 1, sampleCount: 30 },
+      left: { deltaYaw: 24, deltaPitch: 2, deltaIrisH: -0.05, quality: 1, sampleCount: 30 },
+    } },
+  }
+
+  it('translates relative targets through the fresh session neutral', () => {
+    const result = classifyCalibratedWorkspace(
+      workspace,
+      { yawSigned: 29, pitchDeg: 5, irisH: -0.03 },
+      { yawSigned: 5, pitchDeg: 3, irisH: 0.02 },
+    )
+    expect(result.object.id).toBe('left')
+  })
+
+  it('refuses weak or distant targets instead of guessing', () => {
+    expect(classifyCalibratedWorkspace(workspace, { yawSigned: -50, pitchDeg: 45, irisH: .4 })).toBeNull()
+    workspace.calibration.targets.left.quality = .2
+    expect(classifyCalibratedWorkspace(workspace, { yawSigned: 0, pitchDeg: 0, irisH: 0 })?.object.id).toBe('main')
   })
 })
 
