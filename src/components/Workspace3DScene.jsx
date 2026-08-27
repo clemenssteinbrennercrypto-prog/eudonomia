@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
@@ -42,6 +42,36 @@ function screenPanel(width = 1.25, height = .72) {
   return group
 }
 
+function cameraLabel() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 384
+  canvas.height = 96
+  const context = canvas.getContext('2d')
+  context.fillStyle = 'rgba(7,11,26,.92)'
+  context.beginPath()
+  if (typeof context.roundRect === 'function') context.roundRect(4, 4, 376, 88, 34)
+  else context.rect(4, 4, 376, 88)
+  context.fill()
+  context.strokeStyle = '#7a98ff'
+  context.lineWidth = 4
+  context.stroke()
+  context.fillStyle = '#e8edff'
+  context.font = '700 27px -apple-system, BlinkMacSystemFont, sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText('TRACKING CAMERA', 192, 49)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
+  const sprite = new THREE.Sprite(spriteMaterial)
+  sprite.position.set(0, .78, 0)
+  sprite.scale.set(1.5, .375, 1)
+  sprite.renderOrder = 100
+  sprite.userData.labelTexture = texture
+  sprite.userData.dimensionInvariant = true
+  return sprite
+}
+
 function deviceModel(type) {
   const group = new THREE.Group()
   if (type === 'monitor') {
@@ -58,8 +88,25 @@ function deviceModel(type) {
     const lens = mesh(new THREE.CylinderGeometry(.075, .075, .035, 24), COLORS.bright, { y: .15, z: .105 })
     lens.rotation.x = Math.PI / 2
     lens.material.emissive = new THREE.Color(COLORS.ultra)
-    lens.material.emissiveIntensity = .8
-    group.add(body, lens, box(.16, .05, .14, COLORS.edge, { y: .025 }))
+    lens.material.emissiveIntensity = 1.6
+    lens.material.depthTest = false
+    lens.renderOrder = 90
+    const beaconMaterial = new THREE.MeshBasicMaterial({ color: COLORS.bright, transparent: true, opacity: .82, depthTest: false })
+    const beacon = new THREE.Mesh(new THREE.TorusGeometry(.25, .018, 10, 40), beaconMaterial)
+    beacon.position.set(0, .15, .13)
+    beacon.renderOrder = 90
+    beacon.userData.dimensionInvariant = true
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(.34, .009, 8, 40), beaconMaterial.clone())
+    halo.position.set(0, .15, .125)
+    halo.material.opacity = .38
+    halo.renderOrder = 89
+    halo.userData.dimensionInvariant = true
+    const label = cameraLabel()
+    group.add(body, lens, beacon, halo, label, box(.16, .05, .14, COLORS.edge, { y: .025 }))
+    for (const item of [beacon, halo, label]) {
+      item.userData.basePosition = item.position.clone()
+      item.userData.baseScale = item.scale.clone()
+    }
   } else if (type === 'phone' || type === 'ipad') {
     const w = type === 'ipad' ? .66 : .32, d = type === 'ipad' ? .86 : .62
     group.add(box(w, .055, d, COLORS.panel, { y: .04 }))
@@ -102,18 +149,27 @@ function scenePosition(object) {
 export default function Workspace3DScene({ objects, selectedId, view, onSelect, onMove }) {
   const hostRef = useRef(null)
   const runtimeRef = useRef(null)
+  const [sceneError, setSceneError] = useState('')
   const callbacksRef = useRef({ onSelect, onMove })
   callbacksRef.current = { onSelect, onMove }
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    let renderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+    } catch (error) {
+      console.error('[Workspace3DScene] WebGL unavailable', error)
+      setSceneError('3D preview is unavailable on this device. Your workspace settings are still editable.')
+      return
+    }
+    setSceneError('')
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(COLORS.ink)
     scene.fog = new THREE.FogExp2(COLORS.ink, .055)
     const camera = new THREE.PerspectiveCamera(38, 1, .1, 100)
     camera.position.set(6.4, 5.4, 7.2)
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -207,9 +263,14 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
       controls.enabled = true
       renderer.domElement.releasePointerCapture?.(event.pointerId)
     }
+    const contextLost = event => {
+      event.preventDefault()
+      setSceneError('The 3D preview stopped responding. Your workspace settings are still editable.')
+    }
     renderer.domElement.addEventListener('pointerdown', pointerDown)
     renderer.domElement.addEventListener('pointermove', pointerMove)
     renderer.domElement.addEventListener('pointerup', pointerUp)
+    renderer.domElement.addEventListener('webglcontextlost', contextLost)
 
     const resize = () => {
       const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight)
@@ -238,13 +299,14 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
       renderer.domElement.removeEventListener('pointerdown', pointerDown)
       renderer.domElement.removeEventListener('pointermove', pointerMove)
       renderer.domElement.removeEventListener('pointerup', pointerUp)
+      renderer.domElement.removeEventListener('webglcontextlost', contextLost)
       controls.dispose()
       renderer.dispose()
       renderer.domElement.remove()
       scene.traverse(item => {
         item.geometry?.dispose?.()
-        if (Array.isArray(item.material)) item.material.forEach(entry => entry.dispose?.())
-        else item.material?.dispose?.()
+        if (Array.isArray(item.material)) item.material.forEach(entry => { entry.map?.dispose?.(); entry.dispose?.() })
+        else { item.material?.map?.dispose?.(); item.material?.dispose?.() }
       })
       runtimeRef.current = null
     }
@@ -257,7 +319,7 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
     for (const [id, group] of runtime.objectGroups) {
       if (liveIds.has(id)) continue
       runtime.scene.remove(group)
-      group.traverse(child => { child.geometry?.dispose?.(); child.material?.dispose?.() })
+      group.traverse(child => { child.geometry?.dispose?.(); child.material?.map?.dispose?.(); child.material?.dispose?.() })
       runtime.objectGroups.delete(id)
     }
     for (const object of objects) {
@@ -273,7 +335,27 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
       group.position.set(position.x, position.y, position.z)
       group.rotation.y = THREE.MathUtils.degToRad(-(object.scene?.rotation || 0))
       const scale = object.scene?.scale || 1
-      group.scale.setScalar(scale)
+      const dimensions = object.dimensions || {}
+      group.scale.set(
+        scale * (dimensions.width || 1),
+        scale * (dimensions.height || 1),
+        scale * (dimensions.depth || 1),
+      )
+      group.traverse(child => {
+        if (!child.userData.dimensionInvariant) return
+        const basePosition = child.userData.basePosition
+        const baseScale = child.userData.baseScale
+        child.position.set(
+          basePosition.x / (dimensions.width || 1),
+          basePosition.y / (dimensions.height || 1),
+          basePosition.z / (dimensions.depth || 1),
+        )
+        child.scale.set(
+          baseScale.x / (dimensions.width || 1),
+          baseScale.y / (dimensions.height || 1),
+          baseScale.z / (dimensions.depth || 1),
+        )
+      })
       group.traverse(child => {
         if (!child.isMesh || !child.material?.emissive) return
         if (object.id === selectedId) {
@@ -299,5 +381,7 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
     runtime.setDesiredCamera(positions[view] || positions.iso)
   }, [view])
 
-  return <div ref={hostRef} className="workspace-3d-host" aria-label="Interactive 3D workspace editor" />
+  return <div ref={hostRef} className="workspace-3d-host" aria-label="Interactive 3D workspace editor">
+    {sceneError && <div className="workspace-3d-error" role="status">{sceneError}</div>}
+  </div>
 }

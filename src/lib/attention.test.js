@@ -221,6 +221,23 @@ describe('calibrated workspace targets', () => {
     workspace.calibration.targets.left.quality = .2
     expect(classifyCalibratedWorkspace(workspace, { yawSigned: 0, pitchDeg: 0, irisH: 0 })?.object.id).toBe('main')
   })
+
+  it('uses configured width and height to size the calibrated gaze target', () => {
+    const focusedWorkspace = {
+      objects: [workspace.objects[0]],
+      calibration: { targets: { main: workspace.calibration.targets.main } },
+    }
+    const wideSignal = { yawSigned: 19, pitchDeg: 0, irisH: 0 }
+    const tallSignal = { yawSigned: 0, pitchDeg: 16, irisH: 0 }
+    expect(classifyCalibratedWorkspace(focusedWorkspace, wideSignal)).toBeNull()
+    expect(classifyCalibratedWorkspace(focusedWorkspace, tallSignal)).toBeNull()
+    const wideWorkspace = {
+      ...focusedWorkspace,
+      objects: [{ ...workspace.objects[0], dimensions: { width: 2, height: 2, depth: 1 } }],
+    }
+    expect(classifyCalibratedWorkspace(wideWorkspace, wideSignal)?.object.id).toBe('main')
+    expect(classifyCalibratedWorkspace(wideWorkspace, tallSignal)?.object.id).toBe('main')
+  })
 })
 
 // ── Frame maths ──────────────────────────────────────────────────────────────

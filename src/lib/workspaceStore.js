@@ -16,6 +16,10 @@ function finite(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback
 }
 
+function dimension(value) {
+  return Math.max(0.4, Math.min(2.8, finite(value, 1)))
+}
+
 export function sceneFromLegacy(object = {}) {
   return {
     x: Math.max(-1, Math.min(1, finite(object.col, 0.5) * 2 - 1)),
@@ -43,6 +47,11 @@ export function normalizeWorkspaceItem(object, index = 0) {
     id: String(object.id || `${legacy.type}_${index}`),
     role: object.role || defaultRoleForType(legacy.type),
     scene,
+    dimensions: {
+      width: dimension(object.dimensions?.width),
+      height: dimension(object.dimensions?.height),
+      depth: dimension(object.dimensions?.depth),
+    },
     calibrationTarget: object.calibrationTarget !== false,
   }
 }

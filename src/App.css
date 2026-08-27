@@ -1845,3 +1845,12 @@ html {
     color: #111111 !important;
   }
 }
+
+.workspace-palette>button.is-camera{margin-bottom:12px;border:1px solid #405bc7;background:linear-gradient(135deg,#172768,#0d1538);color:#e8edff;box-shadow:0 0 22px rgba(44,70,255,.18)}
+.workspace-palette>button.is-camera span{color:#9bb0ff;filter:drop-shadow(0 0 6px rgba(122,152,255,.65))}
+.workspace-dimensions-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:24px 0 12px;padding-top:18px;border-top:1px solid #17214d;color:#8fa0d5;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.workspace-dimensions-heading button{padding:4px 7px;border:1px solid #27366f;background:transparent;color:#7181b5;font-size:9px}
+.workspace-properties label.workspace-dimension-control{margin-bottom:12px}
+.workspace-dimension-control>span{display:flex;justify-content:space-between;gap:8px}
+.workspace-dimension-control output{color:#b8c5f2;font-variant-numeric:tabular-nums;text-transform:none}
+.workspace-3d-error{position:absolute;inset:0;display:grid;place-items:center;padding:2rem;color:#b8c5f2;background:#070b1a;text-align:center;line-height:1.5}

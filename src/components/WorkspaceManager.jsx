@@ -13,6 +13,7 @@ import {
 } from '../lib/workspaceStore'
 
 const Workspace3DScene = lazy(() => import('./Workspace3DScene'))
+const PALETTE_OBJECT_TYPES = [...WORKSPACE_OBJECT_TYPES].sort((a, b) => Number(b.id === 'camera') - Number(a.id === 'camera'))
 
 const TEMPLATE_OBJECTS = {
   laptop: [
@@ -79,6 +80,12 @@ function Editor({ initial, onSave, onCancel }) {
     }) }
     return invalidateObjectCalibration(next, selectedId, selected?.type === 'camera' || selected?.role === 'primary_screen')
   })
+  const updateDimension = (axis, value) => setDraft(current => ({
+    ...current,
+    objects: current.objects.map(object => object.id === selectedId
+      ? { ...object, dimensions: { width: 1, height: 1, depth: 1, ...object.dimensions, [axis]: Number(value) } }
+      : object),
+  }))
   const updateRole = role => {
     let next = {
       ...draft,
@@ -122,7 +129,7 @@ function Editor({ initial, onSave, onCancel }) {
       <div className="workspace-actions"><button className="secondary" onClick={onCancel}>Cancel</button><button onClick={() => { if (!hasPrimary || !hasCamera) return setError('Add one primary screen and a camera before saving.'); onSave(draft) }}>Save workspace</button></div>
     </header>
     <div className="workspace-editor-body">
-      <aside className="workspace-palette"><h3>Objects</h3>{WORKSPACE_OBJECT_TYPES.map(type => <button key={type.id} onClick={() => addObject(type.id)}><span>{deviceGlyph(type.id)}</span>{type.label}</button>)}</aside>
+      <aside className="workspace-palette"><h3>Objects</h3>{PALETTE_OBJECT_TYPES.map(type => <button key={type.id} className={type.id === 'camera' ? 'is-camera' : ''} onClick={() => addObject(type.id)}><span>{deviceGlyph(type.id)}</span>{type.id === 'camera' ? 'Tracking camera' : type.label}</button>)}</aside>
       <section className="workspace-stage">
         <div className="workspace-view-tabs">{['iso', 'top', 'front'].map(item => <button key={item} className={view === item ? 'is-active' : ''} onClick={() => setView(item)}>{item === 'iso' ? 'Isometric' : item === 'top' ? 'Top' : 'Front'}</button>)}</div>
         <Suspense fallback={<div className="workspace-3d-loading">Preparing 3D workspace…</div>}>
@@ -135,7 +142,9 @@ function Editor({ initial, onSave, onCancel }) {
         <label>Left / right<input type="range" min="-1" max="1" step="0.05" value={selected.scene.x} onChange={event => updateScene({ x: Number(event.target.value) })}/></label>
         <label>Height<input type="range" min="-1" max="1" step="0.05" value={selected.scene.y} onChange={event => updateScene({ y: Number(event.target.value) })}/></label>
         <label>Depth<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
-        <label>Scale<input type="range" min="0.6" max="1.8" step="0.1" value={selected.scene.scale} onChange={event => updateScene({ scale: Number(event.target.value) })}/></label>
+        <div className="workspace-dimensions-heading"><span>Object dimensions</span><button type="button" onClick={() => setDraft(current => ({ ...current, objects: current.objects.map(object => object.id === selectedId ? { ...object, dimensions: { width: 1, height: 1, depth: 1 } } : object) }))}>Reset</button></div>
+        {['width', 'height', 'depth'].map(axis => <label key={axis} className="workspace-dimension-control"><span>{axis}<output>{(selected.dimensions?.[axis] || 1).toFixed(2)}×</output></span><input type="range" min="0.4" max="2.8" step="0.05" value={selected.dimensions?.[axis] || 1} onChange={event => updateDimension(axis, event.target.value)}/></label>)}
+        <label>Overall scale<input type="range" min="0.6" max="1.8" step="0.1" value={selected.scene.scale} onChange={event => updateScene({ scale: Number(event.target.value) })}/></label>
         <label>Rotation<input type="range" min="-45" max="45" step="5" value={selected.scene.rotation} onChange={event => updateScene({ rotation: Number(event.target.value) })}/></label>
         <small>{WORKSPACE_ROLE_LABELS[selected.role]}</small><button className="danger" onClick={removeSelected}>Remove object</button>
       </> : <p>Select an object to place it precisely.</p>}</aside>

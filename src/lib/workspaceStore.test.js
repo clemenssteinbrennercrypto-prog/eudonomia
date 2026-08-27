@@ -22,7 +22,16 @@ describe('workspace storage', () => {
     const active = getActiveWorkspace(state)
     expect(active.name).toBe('Imported workspace')
     expect(active.objects[0]).toMatchObject({ col: 0.2, row: 0.5 })
+    expect(active.objects[0].dimensions).toEqual({ width: 1, height: 1, depth: 1 })
     expect(active.calibration.status).toBe('uncalibrated')
+  })
+
+  it('preserves independent object dimensions and clamps unusable values', () => {
+    const state = migrateLegacyDevices([
+      { ...devices[0], dimensions: { width: 2.4, height: 0.7, depth: 99 } },
+      devices[1],
+    ])
+    expect(getActiveWorkspace(state).objects[0].dimensions).toEqual({ width: 2.4, height: 0.7, depth: 2.8 })
   })
 
   it('repairs an unknown active id to the first valid workspace', () => {
@@ -57,10 +66,12 @@ describe('workspace storage', () => {
   })
 
   it('creates an immutable session snapshot', () => {
-    const workspace = getActiveWorkspace(migrateLegacyDevices(devices))
+    const state = migrateLegacyDevices([{ ...devices[0], dimensions: { width: 2.1, height: 0.8, depth: 1.4 } }, devices[1]])
+    const workspace = getActiveWorkspace(state)
     const snapshot = workspaceSnapshot(workspace)
     workspace.objects[0].col = 0.9
     expect(snapshot.objects[0].col).toBe(0.2)
+    expect(snapshot.objects[0].dimensions).toEqual({ width: 2.1, height: 0.8, depth: 1.4 })
   })
 
   it('invalidates one target or the complete relative calibration frame', () => {
