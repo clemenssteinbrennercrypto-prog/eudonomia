@@ -18,7 +18,8 @@
   "dependencies": {
     "@mediapipe/face_mesh": "^0.4.1633559619",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "three": "^0.179.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
