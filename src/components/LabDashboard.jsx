@@ -73,7 +73,7 @@ function AttentionField({ bins }) {
   )
 }
 
-export default function LabDashboard({ focusModeEnabled, onSession, onProtection, onAnalytics }) {
+export default function LabDashboard({ focusModeEnabled, sessionRevision = 0, onSession, onProtection, onAnalytics }) {
   const [scoreRange, setScoreRange] = useState('day')
   const [fieldRange, setFieldRange] = useState('day')
   const [nativeStatus, setNativeStatus] = useState({ checked: false, connected: false, helperInstalled: false })
@@ -81,7 +81,7 @@ export default function LabDashboard({ focusModeEnabled, onSession, onProtection
     ledger: loadFocusLedger(),
     sessions: loadSessions(),
     focusConfig: loadFocusAppsConfig(),
-  }), [])
+  }), [sessionRevision])
   const data = useMemo(() => buildDashboardData({
     ...source,
     focusModeEnabled,

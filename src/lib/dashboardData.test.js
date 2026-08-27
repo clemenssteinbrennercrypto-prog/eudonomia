@@ -103,6 +103,36 @@ describe('dashboard data', () => {
     expect(result.recentSessions[0]).not.toHaveProperty('focus')
   })
 
+  it('counts a measured session even when its goal is not marked done', () => {
+    const session = {
+      id: 'unfinished-goal',
+      startedAt: new Date(2026, 7, 25, 9).getTime(),
+      timestamp: new Date(2026, 7, 25, 10).getTime(),
+      actualSeconds: 3600,
+      measuredSeconds: 3580,
+      scoreSum: 214800,
+      focusedSeconds: 3000,
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      focusMetricVersion: 1,
+      focusMetricRejection: null,
+      sessionEfficiency: 60,
+      deepFocusSeconds: 3580,
+      goalOutcome: null,
+    }
+    const ledger = {
+      schemaVersion: 1,
+      days: {
+        '2026-08-25': {
+          sessions: {
+            [session.id]: { version: 1, measuredSeconds: 3580, scoreSum: 214800, deepFocusSeconds: 3580 },
+          },
+        },
+      },
+    }
+    expect(buildDashboardData({ ledger, sessions: [session], focusConfig: {}, focusModeEnabled: false, now: NOW }).period.score)
+      .not.toBeNull()
+  })
+
   it('does not report configured protection ready before native verification', () => {
     const base = {
       ledger: emptyFocusLedger(), sessions: [], focusModeEnabled: true, now: NOW,

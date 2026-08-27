@@ -182,6 +182,7 @@ export default function App() {
   const [duration, setDuration] = useState(30)
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
+  const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const updateStatus = useAppUpdateStatus()
@@ -224,6 +225,9 @@ export default function App() {
     })
     const saved = saveSession(enriched)
     setSessionData(saved)
+    // LabDashboard caches its storage snapshot while mounted. Bump this after
+    // every completed session so returning to Lab cannot show a stale ledger.
+    setSessionRevision(value => value + 1)
     setScreen('end')
   }, [task, goal, energyLevel, tags, activeWorkspace])
 
@@ -260,6 +264,7 @@ export default function App() {
       {screen === 'lab' && (
         <LabDashboard
           focusModeEnabled={focusModeEnabled}
+          sessionRevision={sessionRevision}
           onSession={() => setScreen('session-setup')}
           onProtection={() => setScreen('focus-apps')}
           onAnalytics={() => setScreen('history')}
