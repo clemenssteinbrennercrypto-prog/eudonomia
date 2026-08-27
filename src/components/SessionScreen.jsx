@@ -1117,6 +1117,22 @@ export default function SessionScreen({
     setCameraEpoch(e => e + 1)
   }, [])
 
+  const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
+    // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
+    // if the WebView dies, native blocking still clears itself shortly after.
+    const leaseSeconds = blockingLeaseSeconds(duration, timeLeftRef.current)
+    const endTs = active ? Date.now() + leaseSeconds * 1000 : 0
+    if (active) lastActivePushAtRef.current = Date.now()
+    const companionSession = await pushCompanionSession({
+      active,
+      endTs,
+      sessionState,
+      ...companionBlockingRef.current,
+    })
+    applyCompanionSession(companionSession)
+    return companionSession
+  }, [applyCompanionSession, duration])
+
   // Window focus is independent evidence that delayed callbacks came from
   // backgrounding rather than a camera dropout. Persist these intervals so a
   // future migration never has to infer the cause from timeline gaps alone.
@@ -1170,22 +1186,6 @@ export default function SessionScreen({
       window.removeEventListener('focus', onWake)
     }
   }, [pushBlockingState, restartCamera])
-
-  const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
-    // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
-    // if the WebView dies, native blocking still clears itself shortly after.
-    const leaseSeconds = blockingLeaseSeconds(duration, timeLeftRef.current)
-    const endTs = active ? Date.now() + leaseSeconds * 1000 : 0
-    if (active) lastActivePushAtRef.current = Date.now()
-    const companionSession = await pushCompanionSession({
-      active,
-      endTs,
-      sessionState,
-      ...companionBlockingRef.current,
-    })
-    applyCompanionSession(companionSession)
-    return companionSession
-  }, [applyCompanionSession, duration])
 
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
