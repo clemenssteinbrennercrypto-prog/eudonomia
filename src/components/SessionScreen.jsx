@@ -626,6 +626,37 @@ function StatusDot({ status, score, reason, isCalibrating, confidence = 0, score
   scoreRef.current = score
   const [trend, setTrend] = useState('→')
   useEffect(() => {
+    // Keep the display awake while a visible focus session is running. This
+    // prevents macOS display sleep from suspending the camera/WebView. Wake
+    // Lock cannot prevent background WebView throttling, so backgrounding is
+    // handled separately below by pausing the session.
+    let wakeLock = null
+    let cancelled = false
+    const acquireWakeLock = async () => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      try {
+        if (navigator.wakeLock?.request) {
+          wakeLock = await navigator.wakeLock.request('screen')
+        }
+      } catch {
+        // Wake Lock is optional on some WKWebView versions; camera health and
+        // the background pause guard remain the source of truth.
+      }
+    }
+    acquireWakeLock()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') acquireWakeLock()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      wakeLock?.release?.().catch?.(() => {})
+      wakeLock = null
+    }
+  }, [])
+
+  useEffect(() => {
     const interval = setInterval(() => {
       const prev = prevScoreRef.current
       const curr = scoreRef.current
@@ -1097,6 +1128,15 @@ export default function SessionScreen({
     const onBackground = () => {
       if (sessionEndedRef.current || isPausedRef.current || backgroundedAtSecondRef.current != null) return
       backgroundedAtSecondRef.current = elapsedSecond(Date.now())
+      // A blurred/hidden WKWebView is allowed to throttle both setInterval
+      // and video-frame delivery. Pause immediately instead of letting wall
+      // clock time outrun the measured camera time. The user can resume only
+      // after returning to the session, making the missing interval explicit.
+      isPausedRef.current = true
+      pausedAtRef.current = Date.now()
+      statsSampleAtRef.current = pausedAtRef.current
+      setIsPaused(true)
+      void pushBlockingState(false, 'paused')
     }
     const closeBackgroundInterval = () => {
       const startSecond = backgroundedAtSecondRef.current
@@ -1129,7 +1169,7 @@ export default function SessionScreen({
       window.removeEventListener('blur', onBackground)
       window.removeEventListener('focus', onWake)
     }
-  }, [restartCamera])
+  }, [pushBlockingState, restartCamera])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     // Unlimited sessions use a rolling lease. The 30s keepalive renews it;

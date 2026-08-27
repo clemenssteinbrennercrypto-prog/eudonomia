@@ -17,4 +17,17 @@ describe('SessionScreen accumulation wiring', () => {
     expect(guard).toBeGreaterThan(tickStart)
     expect(guard).toBeLessThan(cameraHealth)
   })
+
+  it('pauses immediately when the WebView is backgrounded instead of timing unmeasured time', () => {
+    const background = source.indexOf('const onBackground = () => {')
+    const pause = source.indexOf('isPausedRef.current = true', background)
+    const blocking = source.indexOf("pushBlockingState(false, 'paused')", background)
+    expect(background).toBeGreaterThan(-1)
+    expect(pause).toBeGreaterThan(background)
+    expect(blocking).toBeGreaterThan(pause)
+  })
+
+  it('requests a screen wake lock while the session status is mounted', () => {
+    expect(source).toContain("navigator.wakeLock.request('screen')")
+  })
 })
