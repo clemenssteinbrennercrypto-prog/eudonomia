@@ -1144,15 +1144,10 @@ export default function SessionScreen({
     const onBackground = () => {
       if (sessionEndedRef.current || isPausedRef.current || backgroundedAtSecondRef.current != null) return
       backgroundedAtSecondRef.current = elapsedSecond(Date.now())
-      // A blurred/hidden WKWebView is allowed to throttle both setInterval
-      // and video-frame delivery. Pause immediately instead of letting wall
-      // clock time outrun the measured camera time. The user can resume only
-      // after returning to the session, making the missing interval explicit.
-      isPausedRef.current = true
-      pausedAtRef.current = Date.now()
-      statsSampleAtRef.current = pausedAtRef.current
-      setIsPaused(true)
-      void pushBlockingState(false, 'paused')
+      // Losing window focus is normal: the user is expected to work in another
+      // app while Eudaimonia tracks it. Keep the session and native blocking
+      // active. Fresh-frame accounting below already refuses any interval the
+      // backgrounded WebView genuinely failed to measure.
     }
     const closeBackgroundInterval = () => {
       const startSecond = backgroundedAtSecondRef.current
@@ -1185,7 +1180,7 @@ export default function SessionScreen({
       window.removeEventListener('blur', onBackground)
       window.removeEventListener('focus', onWake)
     }
-  }, [pushBlockingState, restartCamera])
+  }, [restartCamera])
 
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return

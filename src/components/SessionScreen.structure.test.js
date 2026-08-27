@@ -18,13 +18,14 @@ describe('SessionScreen accumulation wiring', () => {
     expect(guard).toBeLessThan(cameraHealth)
   })
 
-  it('pauses immediately when the WebView is backgrounded instead of timing unmeasured time', () => {
+  it('keeps the session active while another work app has window focus', () => {
     const background = source.indexOf('const onBackground = () => {')
-    const pause = source.indexOf('isPausedRef.current = true', background)
-    const blocking = source.indexOf("pushBlockingState(false, 'paused')", background)
+    const closeBackground = source.indexOf('const closeBackgroundInterval = () => {', background)
+    const handler = source.slice(background, closeBackground)
     expect(background).toBeGreaterThan(-1)
-    expect(pause).toBeGreaterThan(background)
-    expect(blocking).toBeGreaterThan(pause)
+    expect(handler).toContain('backgroundedAtSecondRef.current = elapsedSecond(Date.now())')
+    expect(handler).not.toContain('isPausedRef.current = true')
+    expect(handler).not.toContain("pushBlockingState(false, 'paused')")
   })
 
   it('requests a screen wake lock while the session status is mounted', () => {
