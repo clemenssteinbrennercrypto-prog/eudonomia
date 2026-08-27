@@ -1084,6 +1084,12 @@ export default function SessionScreen({
     }
     if (sessionEndedRef.current) return true
 
+    // A companion keepalive can race with the visibility handler: while the
+    // WebView is backgrounded it may echo the previous `active` state. Never
+    // let that stale echo resume a session that was auto-paused to protect
+    // camera measurement integrity.
+    if (session.sessionState === 'active' && backgroundedAtSecondRef.current != null) return true
+
     if (session.sessionState === 'paused' && !isPausedRef.current) {
       isPausedRef.current = true
       pausedAtRef.current = pausedAtRef.current || Date.now()
