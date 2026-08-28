@@ -22,6 +22,7 @@ export function createCameraController(videoEl, {
   let muteTimer = null
   let stopped = false
   let inFlight = false
+  let inactiveReported = false
 
   const reportTrackLoss = reason => {
     if (stopped) return
@@ -31,6 +32,14 @@ export function createCameraController(videoEl, {
   const pump = () => {
     if (stopped) return
     timer = setTimeout(pump, frameMs)
+    const track = stream?.getVideoTracks?.()[0]
+    if (track?.enabled === false || track?.readyState === 'ended') {
+      if (!inactiveReported) {
+        inactiveReported = true
+        reportTrackLoss(track.readyState === 'ended' ? 'ended' : 'disabled')
+      }
+      return
+    }
     if (inFlight || videoEl.readyState < 2 || !streamHasLiveVideo(stream)) return
     inFlight = true
     Promise.resolve(onFrame()).catch(() => {}).finally(() => { inFlight = false })

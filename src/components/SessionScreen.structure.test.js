@@ -18,22 +18,35 @@ describe('SessionScreen accumulation wiring', () => {
     expect(guard).toBeLessThan(cameraHealth)
   })
 
-  it('pauses immediately when the WebView is backgrounded instead of timing unmeasured time', () => {
-    const background = source.indexOf('const onBackground = (')
-    const wake = source.indexOf('const onWake = () => {', background)
-    const handler = source.slice(background, wake)
-    expect(background).toBeGreaterThan(-1)
+  it('keeps a healthy camera and session active during an ordinary blur', () => {
+    const blur = source.indexOf('const onBlur = () => {')
+    const suspend = source.indexOf('const onSuspend = () => {', blur)
+    const handler = source.slice(blur, suspend)
+    expect(blur).toBeGreaterThan(-1)
+    expect(handler).toContain('recordBackground()')
+    expect(handler).not.toContain('pauseSession')
+    expect(handler).not.toContain('restartCamera')
+    expect(handler).not.toContain('setCameraSuspended')
+  })
+
+  it('pauses and tears down the camera only on a real suspension boundary', () => {
+    const suspend = source.indexOf('const onSuspend = () => {')
+    const closeInterval = source.indexOf('const closeBackgroundInterval', suspend)
+    const handler = source.slice(suspend, closeInterval)
     expect(handler).toContain('void pauseSession()')
+    expect(handler).toContain('interruptCamera()')
     expect(handler).toContain('setCameraSuspended(true)')
     expect(source).toContain("session.sessionState === 'active' &&")
     expect(source).toContain('backgroundedAtSecondRef.current != null || explicitResumeRequiredRef.current || !cameraReadyRef.current')
   })
 
-  it('treats blur, hidden, close and reopen as explicit lifecycle paths', () => {
-    expect(source).toContain("window.addEventListener('blur', onBlur)")
-    expect(source).toContain("document.addEventListener('visibilitychange', onVisibilityChange)")
-    expect(source).toContain("if (event.state === 'hidden') onBackground({ suspendCamera: true })")
-    expect(source).toContain('setCameraSuspended(false)')
+  it('only reconnects on focus after suspension or a stale heartbeat', () => {
+    const wake = source.indexOf('const onWake = () => {')
+    const attach = source.indexOf('return attachSessionWindowLifecycle', wake)
+    const handler = source.slice(wake, attach)
+    expect(handler).toContain('if (cameraSuspendedRef.current)')
+    expect(handler).toContain('Date.now() - lastFrame > CAMERA_RECOVER_MS')
+    expect(handler.match(/restartCamera\(true\)/g)).toHaveLength(2)
   })
 
   it('does not resume until the new MediaPipe generation delivered a frame', () => {

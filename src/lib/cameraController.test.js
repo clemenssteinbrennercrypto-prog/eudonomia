@@ -111,4 +111,19 @@ describe('camera controller lifecycle', () => {
     expect(onTrackLost).toHaveBeenCalledWith('muted')
     controller.stop()
   })
+
+  it('reports a disabled track instead of silently stalling', async () => {
+    vi.useFakeTimers()
+    const stream = fakeStream()
+    const onTrackLost = vi.fn()
+    const controller = createCameraController(fakeVideo(), {
+      width: 320, height: 240, onFrame: vi.fn(), onTrackLost,
+      getUserMedia: vi.fn().mockResolvedValue(stream), frameMs: 10,
+    })
+    await controller.start()
+    stream.track.enabled = false
+    await vi.advanceTimersByTimeAsync(12)
+    expect(onTrackLost).toHaveBeenCalledWith('disabled')
+    controller.stop()
+  })
 })

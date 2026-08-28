@@ -52,6 +52,7 @@ import {
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
 import { createCameraController } from '../lib/cameraController'
+import { attachSessionWindowLifecycle } from '../lib/sessionWindowLifecycle'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -875,6 +876,7 @@ export default function SessionScreen({
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
   const cameraReadyRef         = useRef(false) // true only after MediaPipe returned a frame for the current generation
   const cameraGenerationRef    = useRef(0)
+  const cameraSuspendedRef     = useRef(false)
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
@@ -1130,26 +1132,34 @@ export default function SessionScreen({
     void pauseSession()
   }, [pauseSession])
 
-  // blur covers focus loss/Space changes; hidden covers minimisation and a
-  // suspended WebView; the native event distinguishes an actual close. Every
-  // path pauses synchronously. Hidden/close also destroys the camera pipeline,
-  // so reopening cannot accidentally reuse an ended MediaStream.
+  // blur covers normal app/Space changes and remains active. Hidden covers
+  // minimisation or WebView suspension; the native event distinguishes an
+  // actual close. Only hidden/close pauses and destroys the camera pipeline.
   useEffect(() => {
     const elapsedSecond = now => {
       const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
       return Math.max(0, (now - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     }
-    const onBackground = ({ suspendCamera = false } = {}) => {
+    const recordBackground = () => {
       if (sessionEndedRef.current) return
-      explicitResumeRequiredRef.current = true
       if (backgroundedAtSecondRef.current == null) {
         backgroundedAtSecondRef.current = elapsedSecond(Date.now())
       }
+    }
+    const onBlur = () => {
+      // Switching to the editor/browser (or another macOS Space) is the normal
+      // session workflow. Record it for diagnostics, but keep tracking and
+      // native blocking active while camera frames remain healthy.
+      recordBackground()
+    }
+    const onSuspend = () => {
+      if (sessionEndedRef.current) return
+      recordBackground()
+      explicitResumeRequiredRef.current = true
       void pauseSession()
-      if (suspendCamera) {
-        interruptCamera()
-        setCameraSuspended(true)
-      }
+      interruptCamera()
+      cameraSuspendedRef.current = true
+      setCameraSuspended(true)
     }
     const closeBackgroundInterval = () => {
       const startSecond = backgroundedAtSecondRef.current
@@ -1161,34 +1171,27 @@ export default function SessionScreen({
     const onWake = () => {
       if (document.visibilityState !== 'visible' || sessionEndedRef.current) return
       closeBackgroundInterval()
-      setCameraSuspended(false)
-      restartCamera(true)
+      if (cameraSuspendedRef.current) {
+        cameraSuspendedRef.current = false
+        setCameraSuspended(false)
+        restartCamera(true)
+        return
+      }
+      const lastFrame = lastFrameAtRef.current
+      if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
+        interruptCamera('stalled')
+        restartCamera(true)
+      }
     }
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') onWake()
-      else onBackground({ suspendCamera: true })
-    }
-    const onBlur = () => onBackground({ suspendCamera: false })
 
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('blur', onBlur)
-    window.addEventListener('focus', onWake)
-    let unlisten = () => {}
-    let lifecycleListenerCancelled = false
-    listenWindowLifecycle(event => {
-      if (event.state === 'hidden') onBackground({ suspendCamera: true })
-      else onWake()
-    }).then(stop => {
-      if (lifecycleListenerCancelled) stop()
-      else unlisten = stop
+    return attachSessionWindowLifecycle({
+      documentTarget: document,
+      windowTarget: window,
+      listenNative: listenWindowLifecycle,
+      onBlur,
+      onSuspend,
+      onVisible: onWake,
     })
-    return () => {
-      lifecycleListenerCancelled = true
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('blur', onBlur)
-      window.removeEventListener('focus', onWake)
-      unlisten()
-    }
   }, [interruptCamera, pauseSession, restartCamera])
 
   useEffect(() => {
