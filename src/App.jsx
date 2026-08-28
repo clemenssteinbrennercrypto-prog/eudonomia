@@ -50,15 +50,13 @@ function AppRefreshControl({ updateStatus }) {
     updateVersion,
     error,
     reloadCurrentApp,
-    installNativeUpdate,
+    reloadOrUpdate,
   } = updateStatus
 
   const isNative = runtime === 'native'
   const versionText = updateVersion ? ` ${updateVersion}` : ''
-  const primaryAction = isNative && updateAvailable ? installNativeUpdate : reloadCurrentApp
-  const primaryLabel = isNative && updateAvailable
-    ? installing ? 'Installing' : 'Update'
-    : 'Reload'
+  const primaryAction = isNative ? reloadOrUpdate : reloadCurrentApp
+  const primaryLabel = installing ? 'Installing' : 'Reload'
   const statusText = installing
     ? 'Installing update...'
     : updateAvailable
@@ -66,14 +64,14 @@ function AppRefreshControl({ updateStatus }) {
       : checking
         ? 'Checking updates...'
         : error
-          ? 'Reload only'
+          ? 'Reload unavailable'
           : isNative
             ? 'Native app up to date'
             : 'Reload current app'
 
   const title = updateAvailable
     ? isNative
-      ? 'A native app update is available. Update installs a newer app bundle; Reload only refreshes the current UI.'
+      ? 'Reload installs the available native app update and restarts Eudonomia.'
       : 'Reload refreshes this local development build.'
     : error
       ? `Update check unavailable: ${error}. Reload refreshes the current app only.`
@@ -86,7 +84,7 @@ function AppRefreshControl({ updateStatus }) {
         type="button"
         onClick={primaryAction}
         disabled={installing}
-        aria-label={isNative && updateAvailable ? 'Install native Eudonomia update' : 'Reload current Eudonomia app'}
+        aria-label={isNative ? 'Reload Eudonomia and install any available update' : 'Reload current Eudonomia app'}
       >
         <span className="app-refresh-icon" aria-hidden="true">↻</span>
         <span>{primaryLabel}</span>
@@ -94,17 +92,6 @@ function AppRefreshControl({ updateStatus }) {
       <span className={`app-refresh-status ${updateAvailable ? 'is-update' : ''}`}>
         {statusText}
       </span>
-      {isNative && updateAvailable && (
-        <button
-          className="app-update-button"
-          type="button"
-          onClick={reloadCurrentApp}
-          disabled={installing}
-          aria-label="Reload current Eudonomia app without installing the available native update"
-        >
-          Reload only
-        </button>
-      )}
     </div>
   )
 }

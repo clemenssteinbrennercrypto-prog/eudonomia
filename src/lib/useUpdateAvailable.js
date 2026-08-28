@@ -11,6 +11,24 @@ const DEFAULT_STATUS = {
   error: null,
 }
 
+export async function runNativeReload({ invoke, reload, onState }) {
+  onState?.({ installing: true, error: null })
+  try {
+    const result = await invoke('install_native_update')
+    if (result?.installed) return { installed: true, reloaded: false }
+    if (result?.error) {
+      onState?.({ installing: false, error: result.error })
+      return { installed: false, reloaded: false, error: result.error }
+    }
+    reload()
+    return { installed: false, reloaded: true }
+  } catch (error) {
+    const message = error?.message || String(error)
+    onState?.({ installing: false, error: message })
+    return { installed: false, reloaded: false, error: message }
+  }
+}
+
 function getTauriInvoke() {
   return window.__TAURI__?.core?.invoke || null
 }
@@ -70,29 +88,21 @@ export function useAppUpdateStatus() {
     }))
   }, [])
 
-  const installNativeUpdate = useCallback(async () => {
+  const reloadOrUpdate = useCallback(async () => {
     const invoke = getTauriInvoke()
-    if (!invoke || installingRef.current) return
+    if (!invoke) {
+      window.location.reload()
+      return
+    }
+    if (installingRef.current) return
 
     installingRef.current = true
-    setStatus(prev => ({ ...prev, installing: true, error: null }))
-
-    try {
-      const result = await invoke('install_native_update')
-      setStatus(prev => ({
-        ...prev,
-        installing: false,
-        updateAvailable: Boolean(result?.version && !result?.installed),
-        updateVersion: result?.version || prev.updateVersion,
-        error: result?.error || (result?.installed ? null : 'No native update is currently available.'),
-      }))
-    } catch (error) {
-      setStatus(prev => ({
-        ...prev,
-        installing: false,
-        error: error?.message || String(error),
-      }))
-    } finally {
+    await runNativeReload({
+      invoke,
+      reload: () => window.location.reload(),
+      onState: patch => setStatus(prev => ({ ...prev, ...patch })),
+    })
+    if (document.visibilityState === 'visible') {
       installingRef.current = false
     }
   }, [])
@@ -118,7 +128,7 @@ export function useAppUpdateStatus() {
   return {
     ...status,
     checkForUpdate,
-    installNativeUpdate,
+    reloadOrUpdate,
     reloadCurrentApp: () => window.location.reload(),
   }
 }
