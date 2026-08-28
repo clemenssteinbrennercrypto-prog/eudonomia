@@ -312,8 +312,23 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // The session is held in the live WebView. Destroying it here
                 // loses the timer and camera state, while the tray's later
-                // show() cannot resurrect that WebView. Keep it alive, notify
-                // React so it can pause and tear down the camera, then hide it.
+                // show() cannot resurrect that WebView. Keep it alive and get
+                // it out of the way.
+                //
+                // This must be minimize(), not hide(). hide() calls AppKit's
+                // orderOut:, which fully unmaps the window from the screen
+                // list (isVisible -> NO) — the same state transition that
+                // happens when an app is truly backgrounded, and it is what
+                // caused macOS/WebKit to suspend the live camera capture
+                // (the getUserMedia MediaStreamTrack went muted/ended and
+                // MediaPipe frames stopped) while the window was closed.
+                // Ordinary alt-tab never hit this: the window stays on
+                // screen, just covered by another app's window, so
+                // isVisible stays YES and capture is unaffected. A
+                // miniaturized window keeps isVisible == YES (it is
+                // represented by a Dock tile, not removed from the screen
+                // list), so it does not trigger the same suspension.
+                // show_main_window() already calls unminimize() on reopen.
                 api.prevent_close();
                 let _ = window.emit(
                     "window-lifecycle",
@@ -322,7 +337,7 @@ fn main() {
                         "reason": "close"
                     }),
                 );
-                let _ = window.hide();
+                let _ = window.minimize();
             }
         })
         .run(tauri::generate_context!())
