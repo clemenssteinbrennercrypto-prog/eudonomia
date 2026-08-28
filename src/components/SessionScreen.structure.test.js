@@ -19,13 +19,33 @@ describe('SessionScreen accumulation wiring', () => {
   })
 
   it('pauses immediately when the WebView is backgrounded instead of timing unmeasured time', () => {
-    const background = source.indexOf('const onBackground = () => {')
-    const pause = source.indexOf('isPausedRef.current = true', background)
-    const blocking = source.indexOf("pushBlockingState(false, 'paused')", background)
+    const background = source.indexOf('const onBackground = (')
+    const wake = source.indexOf('const onWake = () => {', background)
+    const handler = source.slice(background, wake)
     expect(background).toBeGreaterThan(-1)
-    expect(pause).toBeGreaterThan(background)
-    expect(blocking).toBeGreaterThan(pause)
-    expect(source).toContain("session.sessionState === 'active' && backgroundedAtSecondRef.current != null")
+    expect(handler).toContain('void pauseSession()')
+    expect(handler).toContain('setCameraSuspended(true)')
+    expect(source).toContain("session.sessionState === 'active' &&")
+    expect(source).toContain('backgroundedAtSecondRef.current != null || explicitResumeRequiredRef.current || !cameraReadyRef.current')
+  })
+
+  it('treats blur, hidden, close and reopen as explicit lifecycle paths', () => {
+    expect(source).toContain("window.addEventListener('blur', onBlur)")
+    expect(source).toContain("document.addEventListener('visibilitychange', onVisibilityChange)")
+    expect(source).toContain("if (event.state === 'hidden') onBackground({ suspendCamera: true })")
+    expect(source).toContain('setCameraSuspended(false)')
+  })
+
+  it('does not resume until the new MediaPipe generation delivered a frame', () => {
+    expect(source).toContain('generation !== cameraGenerationRef.current')
+    expect(source).toContain("setCameraStatus('ready')")
+    expect(source).toContain('!cameraReadyRef.current || Date.now() - lastDeliveredFrameAtRef.current > CAMERA_RECOVER_MS')
+  })
+
+  it('pauses timer accumulation on a camera fault', () => {
+    const faultBranch = source.indexOf('if (cameraFaultRef.current) {')
+    const calibrationBranch = source.indexOf('if (calibrating) {', faultBranch)
+    expect(source.slice(faultBranch, calibrationBranch)).toContain('interruptCamera(cameraFaultRef.current)')
   })
 
   it('requests a screen wake lock while the session status is mounted', () => {

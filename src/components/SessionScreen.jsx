@@ -9,6 +9,7 @@ import {
   fetchCompanionSession,
   fetchOutputDelta,
   listenCompanionSession,
+  listenWindowLifecycle,
   pushCompanionSession,
   setOutputWatchFolder,
 } from '../lib/nativeCompanion'
@@ -50,6 +51,7 @@ import {
   accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
+import { createCameraController } from '../lib/cameraController'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -291,68 +293,6 @@ function OverlayIcon({ type }) {
 // app they're actually working in), and has no way to notice or recover from a
 // dead MediaStream. Owning it gives us instant track-loss events, our own error
 // classification, and a frame pump that survives backgrounding.
-const CAMERA_FRAME_MS = 67   // ~15fps, matching the previous cap
-const MUTE_GRACE_MS   = 1200 // a track can mute briefly; only a sustained mute is a loss
-
-function createCameraController(videoEl, { width, height, onFrame, onTrackLost }) {
-  let stream = null
-  let timer = null
-  let muteTimer = null
-  let stopped = false
-  let inFlight = false
-
-  const pump = () => {
-    if (stopped) return
-    // A timer-driven pump is throttled in a hidden page but never suspended,
-    // unlike rAF; tracking degrades to a lower frame rate instead of stopping.
-    timer = setTimeout(pump, CAMERA_FRAME_MS)
-    if (inFlight || videoEl.readyState < 2) return
-    inFlight = true
-    Promise.resolve(onFrame()).catch(() => {}).finally(() => { inFlight = false })
-  }
-
-  const watchTrack = (track) => {
-    track.addEventListener('ended', () => { if (!stopped) onTrackLost('ended') })
-    track.addEventListener('mute', () => {
-      if (stopped || muteTimer) return
-      muteTimer = setTimeout(() => {
-        muteTimer = null
-        if (!stopped && track.muted) onTrackLost('muted')
-      }, MUTE_GRACE_MS)
-    })
-    track.addEventListener('unmute', () => {
-      if (muteTimer) { clearTimeout(muteTimer); muteTimer = null }
-    })
-  }
-
-  return {
-    async start() {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width, height } })
-      if (stopped) {                       // unmounted while acquiring
-        stream.getTracks().forEach(t => t.stop())
-        stream = null
-        return
-      }
-      videoEl.srcObject = stream
-      stream.getVideoTracks().forEach(watchTrack)
-      try { await videoEl.play() } catch { /* autoplay is muted+inline; pump anyway */ }
-      pump()
-    },
-    stop() {
-      stopped = true
-      if (timer) { clearTimeout(timer); timer = null }
-      if (muteTimer) { clearTimeout(muteTimer); muteTimer = null }
-      try { videoEl.pause() } catch {}
-      if (stream) stream.getTracks().forEach(t => t.stop())
-      if (videoEl.srcObject === stream) videoEl.srcObject = null
-      stream = null
-    },
-  }
-}
-
-
-
-
 // Horizontal eye gaze — the signal the old system was missing entirely.
 // Iris centre X relative to the midpoint between the eye's inner/outer corners,
 // normalized by eye width, averaged over both eyes. Sign is arbitrary until
@@ -869,8 +809,11 @@ export default function SessionScreen({
   const [focusScore,      setFocusScore]      = useState(68)
   const [camHidden,       setCamHidden]       = useState(false)
   const [camSize,         setCamSize]         = useState('full') // 'full' | 'mini'
-  const [isPaused,        setIsPaused]        = useState(false)
+  const [isPaused,        setIsPaused]        = useState(true)
   const [cameraFault,     setCameraFault]     = useState(null) // null | 'permission' | 'busy' | 'no_camera' | 'library' | 'stalled' | 'no_frames'
+  const [cameraStatus,    setCameraStatus]    = useState('connecting') // connecting | ready | interrupted | fault
+  const [cameraSuspended, setCameraSuspended] = useState(false)
+  const [initialCameraPending, setInitialCameraPending] = useState(true)
   const [cameraEpoch,     setCameraEpoch]     = useState(0)    // bump = tear down and rebuild the camera pipeline
   const [isCalibrating,   setIsCalibrating]   = useState(true)
   const [calibProgress,   setCalibProgress]   = useState(0) // 0..1 during calibration
@@ -901,11 +844,12 @@ export default function SessionScreen({
   const videoRef        = useRef(null)
   const sessionEndedRef = useRef(false)
   const startTimeRef    = useRef(Date.now())
-  const isPausedRef     = useRef(false)
-  const pausedAtRef     = useRef(null) // timestamp when paused
+  const isPausedRef     = useRef(true)
+  const pausedAtRef     = useRef(Date.now()) // timestamp when paused
   const pausedTotalRef  = useRef(0)    // total ms spent paused
   const timeLeftRef     = useRef(totalSeconds ?? 0)
   const companionSessionHadActiveRef = useRef(false)
+  const explicitResumeRequiredRef = useRef(true)
   const lastActivePushAtRef    = useRef(0)   // when we last told the companion this session is active
 
   // ── Detection rolling buffers ─────────────────────────────────────────────
@@ -929,6 +873,8 @@ export default function SessionScreen({
   const lastFrameAtRef         = useRef(0)     // last time the camera pipeline delivered a frame
   const lastDeliveredFrameAtRef = useRef(0)    // real frame only; camera restart grace must never count as measurement
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
+  const cameraReadyRef         = useRef(false) // true only after MediaPipe returned a frame for the current generation
+  const cameraGenerationRef    = useRef(0)
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
@@ -1088,7 +1034,10 @@ export default function SessionScreen({
     // WebView is backgrounded it may echo the previous `active` state. Never
     // let that stale echo resume a session that was auto-paused to protect
     // camera measurement integrity.
-    if (session.sessionState === 'active' && backgroundedAtSecondRef.current != null) return true
+    if (
+      session.sessionState === 'active' &&
+      (backgroundedAtSecondRef.current != null || explicitResumeRequiredRef.current || !cameraReadyRef.current)
+    ) return true
 
     if (session.sessionState === 'paused' && !isPausedRef.current) {
       isPausedRef.current = true
@@ -1114,8 +1063,10 @@ export default function SessionScreen({
     if (!manual && now - lastRecoverAtRef.current < CAMERA_RECOVER_MS) return
     lastRecoverAtRef.current = now
     cameraRecoverTriesRef.current = manual ? 0 : cameraRecoverTriesRef.current + 1
-    // Give the new pipeline a fresh grace period before the stall check judges it.
-    lastFrameAtRef.current = now
+    cameraReadyRef.current = false
+    lastFrameAtRef.current = 0
+    lastDeliveredFrameAtRef.current = 0
+    setCameraStatus('connecting')
     if (manual) {
       cameraFaultRef.current = null
       setCameraFault(null)
@@ -1139,55 +1090,6 @@ export default function SessionScreen({
     return companionSession
   }, [applyCompanionSession, duration])
 
-  // Window focus is independent evidence that delayed callbacks came from
-  // backgrounding rather than a camera dropout. Persist these intervals so a
-  // future migration never has to infer the cause from timeline gaps alone.
-  useEffect(() => {
-    const elapsedSecond = (now) => {
-      const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
-      return Math.max(0, (now - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
-    }
-    const onBackground = () => {
-      if (sessionEndedRef.current || isPausedRef.current || backgroundedAtSecondRef.current != null) return
-      backgroundedAtSecondRef.current = elapsedSecond(Date.now())
-      // Losing window focus is normal: the user is expected to work in another
-      // app while Eudaimonia tracks it. Keep the session and native blocking
-      // active. Fresh-frame accounting below already refuses any interval the
-      // backgrounded WebView genuinely failed to measure.
-    }
-    const closeBackgroundInterval = () => {
-      const startSecond = backgroundedAtSecondRef.current
-      if (startSecond == null) return
-      const endSecond = elapsedSecond(Date.now())
-      if (endSecond > startSecond) {
-        timerThrottlingIntervalsRef.current.push({ startSecond, endSecond })
-      }
-      backgroundedAtSecondRef.current = null
-    }
-    const onWake = () => {
-      if (document.visibilityState !== 'visible') return
-      closeBackgroundInterval()
-      if (sessionEndedRef.current) return
-      const lastFrame = lastFrameAtRef.current
-      if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
-        cameraRecoverTriesRef.current = 0   // a fresh wake deserves fresh attempts
-        restartCamera()
-      }
-    }
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') onWake()
-      else onBackground()
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('blur', onBackground)
-    window.addEventListener('focus', onWake)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('blur', onBackground)
-      window.removeEventListener('focus', onWake)
-    }
-  }, [restartCamera])
-
   const pauseSession = useCallback(async () => {
     if (sessionEndedRef.current || isPausedRef.current) return
     isPausedRef.current = true
@@ -1199,6 +1101,11 @@ export default function SessionScreen({
 
   const resumeSession = useCallback(async () => {
     if (sessionEndedRef.current || !isPausedRef.current) return
+    if (!cameraReadyRef.current || Date.now() - lastDeliveredFrameAtRef.current > CAMERA_RECOVER_MS) {
+      restartCamera(true)
+      return
+    }
+    explicitResumeRequiredRef.current = false
     isPausedRef.current = false
     if (pausedAtRef.current) {
       pausedTotalRef.current += Date.now() - pausedAtRef.current
@@ -1207,7 +1114,88 @@ export default function SessionScreen({
     statsSampleAtRef.current = Date.now()
     setIsPaused(false)
     await pushBlockingState(true, 'active')
-  }, [pushBlockingState])
+  }, [pushBlockingState, restartCamera])
+
+  const interruptCamera = useCallback((fault = null) => {
+    if (sessionEndedRef.current) return
+    explicitResumeRequiredRef.current = true
+    cameraReadyRef.current = false
+    lastFrameAtRef.current = 0
+    lastDeliveredFrameAtRef.current = 0
+    setCameraStatus(fault ? 'fault' : 'interrupted')
+    if (fault) {
+      cameraFaultRef.current = fault
+      setCameraFault(fault)
+    }
+    void pauseSession()
+  }, [pauseSession])
+
+  // blur covers focus loss/Space changes; hidden covers minimisation and a
+  // suspended WebView; the native event distinguishes an actual close. Every
+  // path pauses synchronously. Hidden/close also destroys the camera pipeline,
+  // so reopening cannot accidentally reuse an ended MediaStream.
+  useEffect(() => {
+    const elapsedSecond = now => {
+      const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
+      return Math.max(0, (now - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
+    }
+    const onBackground = ({ suspendCamera = false } = {}) => {
+      if (sessionEndedRef.current) return
+      explicitResumeRequiredRef.current = true
+      if (backgroundedAtSecondRef.current == null) {
+        backgroundedAtSecondRef.current = elapsedSecond(Date.now())
+      }
+      void pauseSession()
+      if (suspendCamera) {
+        interruptCamera()
+        setCameraSuspended(true)
+      }
+    }
+    const closeBackgroundInterval = () => {
+      const startSecond = backgroundedAtSecondRef.current
+      if (startSecond == null) return
+      const endSecond = elapsedSecond(Date.now())
+      if (endSecond > startSecond) timerThrottlingIntervalsRef.current.push({ startSecond, endSecond })
+      backgroundedAtSecondRef.current = null
+    }
+    const onWake = () => {
+      if (document.visibilityState !== 'visible' || sessionEndedRef.current) return
+      closeBackgroundInterval()
+      setCameraSuspended(false)
+      restartCamera(true)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') onWake()
+      else onBackground({ suspendCamera: true })
+    }
+    const onBlur = () => onBackground({ suspendCamera: false })
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onWake)
+    let unlisten = () => {}
+    let lifecycleListenerCancelled = false
+    listenWindowLifecycle(event => {
+      if (event.state === 'hidden') onBackground({ suspendCamera: true })
+      else onWake()
+    }).then(stop => {
+      if (lifecycleListenerCancelled) stop()
+      else unlisten = stop
+    })
+    return () => {
+      lifecycleListenerCancelled = true
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onWake)
+      unlisten()
+    }
+  }, [interruptCamera, pauseSession, restartCamera])
+
+  useEffect(() => {
+    if (!initialCameraPending || cameraStatus !== 'ready' || sessionEndedRef.current) return
+    setInitialCameraPending(false)
+    void resumeSession()
+  }, [cameraStatus, initialCameraPending, resumeSession])
 
   useEffect(() => {
     const focusCfg = loadFocusAppsConfig()
@@ -2331,16 +2319,18 @@ export default function SessionScreen({
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!videoRef.current) return
+    if (!videoRef.current || cameraSuspended || sessionEndedRef.current) return
     // FaceMesh is bundled and served from this app's own origin (see
     // index.html). If that local runtime fails to load, do not run on with a
     // frozen default score — surface it instead. We no longer need MediaPipe's
     // camera_utils at all; we drive the camera ourselves.
     if (!window.FaceMesh) {
-      cameraFaultRef.current = 'library'
-      setCameraFault('library')
+      interruptCamera('library')
       return
     }
+    let cancelled = false
+    const generation = cameraGenerationRef.current + 1
+    cameraGenerationRef.current = generation
     const faceMesh = new window.FaceMesh({
       // Resolved against the document base so the same build works on Vercel and
       // inside the native app (vite base is './'). Local files, never a CDN.
@@ -2350,9 +2340,20 @@ export default function SessionScreen({
       maxNumFaces: 1, refineLandmarks: true,
       minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
     })
-    faceMesh.onResults(handleFaceResults)
+    faceMesh.onResults(results => {
+      if (cancelled || generation !== cameraGenerationRef.current || sessionEndedRef.current) return
+      handleFaceResults(results)
+      if (!cameraReadyRef.current) {
+        cameraReadyRef.current = true
+        cameraRecoverTriesRef.current = 0
+        if (cameraFaultRef.current === 'stalled' || cameraFaultRef.current === 'no_frames') {
+          cameraFaultRef.current = null
+          setCameraFault(null)
+        }
+        setCameraStatus('ready')
+      }
+    })
 
-    let cancelled = false
     const faultFor = (err) => {
       const name = err?.name || ''
       if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission'
@@ -2363,8 +2364,7 @@ export default function SessionScreen({
     const raiseFault = (err) => {
       if (cancelled) return
       const fault = faultFor(err)
-      cameraFaultRef.current = fault
-      setCameraFault(fault)
+      interruptCamera(fault)
     }
 
     const camera = createCameraController(videoRef.current, {
@@ -2376,7 +2376,11 @@ export default function SessionScreen({
       // A track that ends or stays muted is dead for good (lid closed, camera
       // taken by another app, USB unplugged). Rebuild immediately rather than
       // waiting for the heartbeat to infer it seconds later.
-      onTrackLost: () => { if (!cancelled) restartCamera() },
+      onTrackLost: () => {
+        if (cancelled) return
+        interruptCamera('stalled')
+        restartCamera()
+      },
     })
 
     camera.start().catch(raiseFault)
@@ -2388,7 +2392,7 @@ export default function SessionScreen({
     }
     // cameraEpoch is the restart trigger: bumping it tears this down and
     // rebuilds a fresh FaceMesh + camera against a live MediaStream.
-  }, [handleFaceResults, cameraEpoch, restartCamera])
+  }, [cameraEpoch, cameraSuspended, handleFaceResults, interruptCamera, restartCamera])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
@@ -2397,6 +2401,14 @@ export default function SessionScreen({
       const now = Date.now()
       const previousSampleAt = statsSampleAtRef.current
       statsSampleAtRef.current = now
+      if (cameraSuspended) return
+      if (!cameraReadyRef.current) {
+        const connectingSince = lastRecoverAtRef.current || startTimeRef.current
+        if (!cameraFaultRef.current && now - connectingSince > CAMERA_STALL_MS) {
+          interruptCamera('no_frames')
+        }
+        return
+      }
       if (isPausedRef.current) return
 
       const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
@@ -2437,13 +2449,15 @@ export default function SessionScreen({
         setCameraFault(fault)
       }
       if (cameraFaultRef.current) {
-        // No trustworthy signal: never accumulate focus/streak/phase/timeline
-        // stats. The timer above keeps running so the user can end the session.
+        // No trustworthy signal: pause the session itself. This prevents both
+        // focus accumulation and wall-clock progress until a new pipeline has
+        // delivered a frame and the user explicitly resumes.
         goodStreakSecsRef.current = 0        // don't let a streak survive a blackout (R4)
         if (currentStreakRef.current !== 0) {
           currentStreakRef.current = 0
           setCurrentStreak(0)
         }
+        interruptCamera(cameraFaultRef.current)
         return
       }
 
@@ -2524,7 +2538,7 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [accumulateMeasurement, duration, restartCamera])
+  }, [accumulateMeasurement, cameraSuspended, duration, interruptCamera, restartCamera])
 
   useEffect(() => {
     if (shouldAutoEndSession(duration, timeLeft)) endSession(true)
@@ -2632,10 +2646,15 @@ export default function SessionScreen({
           backdropFilter: 'blur(2px)',
         }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Paused
+            {cameraStatus === 'ready' ? 'Paused' : cameraStatus === 'fault' ? 'Camera unavailable' : 'Reconnecting camera'}
           </span>
+          {cameraStatus !== 'ready' && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+              The timer and focus measurement are stopped. Resume becomes available only after a new camera frame is verified.
+            </span>
+          )}
           <button
-            onClick={resumeSession}
+            onClick={() => cameraStatus === 'ready' ? resumeSession() : restartCamera(true)}
             style={{
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
               borderRadius: 100, padding: '10px 28px',
@@ -2643,9 +2662,9 @@ export default function SessionScreen({
               letterSpacing: '0.03em',
             }}
           >
-            Resume
+            {cameraStatus === 'ready' ? 'Resume' : 'Connect camera'}
           </button>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>space to resume</span>
+          {cameraStatus === 'ready' && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>space to resume</span>}
         </div>
       )}
       {window.innerWidth < 600 && (

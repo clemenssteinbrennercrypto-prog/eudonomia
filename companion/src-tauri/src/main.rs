@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 const MAIN_LABEL: &str = "main";
@@ -182,6 +182,13 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let _ = window.emit(
+            "window-lifecycle",
+            serde_json::json!({
+                "state": "visible",
+                "reason": "reopen"
+            }),
+        );
     }
 }
 
@@ -297,6 +304,26 @@ fn main() {
                 .build(app)?;
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != MAIN_LABEL {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // The session is held in the live WebView. Destroying it here
+                // loses the timer and camera state, while the tray's later
+                // show() cannot resurrect that WebView. Keep it alive, notify
+                // React so it can pause and tear down the camera, then hide it.
+                api.prevent_close();
+                let _ = window.emit(
+                    "window-lifecycle",
+                    serde_json::json!({
+                        "state": "hidden",
+                        "reason": "close"
+                    }),
+                );
+                let _ = window.hide();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running eudonomia");

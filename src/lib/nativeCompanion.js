@@ -75,6 +75,12 @@ export function listenCompanionSession(onUpdate) {
   })
 }
 
+export function listenWindowLifecycle(onUpdate) {
+  return listenNative('window-lifecycle', payload => {
+    if (payload?.state === 'hidden' || payload?.state === 'visible') onUpdate(payload)
+  })
+}
+
 export async function pushCompanionSession({
   active,
   endTs = 0,
