@@ -23,10 +23,11 @@ describe('SessionScreen accumulation wiring', () => {
     const suspend = source.indexOf('const onSuspend = () => {', blur)
     const handler = source.slice(blur, suspend)
     expect(blur).toBeGreaterThan(-1)
-    expect(handler).toContain('recordBackground()')
     expect(handler).not.toContain('pauseSession')
     expect(handler).not.toContain('restartCamera')
     expect(handler).not.toContain('setCameraSuspended')
+    expect(handler).not.toContain('backgroundedAtSecondRef')
+    expect(handler).not.toContain('timerThrottlingIntervalsRef')
   })
 
   it('pauses and tears down the camera only on a real suspension boundary', () => {
@@ -36,8 +37,7 @@ describe('SessionScreen accumulation wiring', () => {
     expect(handler).toContain('void pauseSession()')
     expect(handler).toContain('interruptCamera()')
     expect(handler).toContain('setCameraSuspended(true)')
-    expect(source).toContain("session.sessionState === 'active' &&")
-    expect(source).toContain('backgroundedAtSecondRef.current != null || explicitResumeRequiredRef.current || !cameraReadyRef.current')
+    expect(source).toContain("session.sessionState === 'active' && !canApplyCompanionActive")
   })
 
   it('only reconnects on focus after suspension or a stale heartbeat', () => {

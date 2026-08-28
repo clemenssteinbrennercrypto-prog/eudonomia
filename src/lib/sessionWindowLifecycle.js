@@ -1,3 +1,7 @@
+export function canApplyCompanionActive({ explicitResumeRequired, cameraReady }) {
+  return !explicitResumeRequired && cameraReady
+}
+
 export function attachSessionWindowLifecycle({
   documentTarget,
   windowTarget,

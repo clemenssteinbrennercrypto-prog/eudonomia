@@ -52,7 +52,7 @@ import {
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
 import { createCameraController } from '../lib/cameraController'
-import { attachSessionWindowLifecycle } from '../lib/sessionWindowLifecycle'
+import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/sessionWindowLifecycle'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -1036,10 +1036,10 @@ export default function SessionScreen({
     // WebView is backgrounded it may echo the previous `active` state. Never
     // let that stale echo resume a session that was auto-paused to protect
     // camera measurement integrity.
-    if (
-      session.sessionState === 'active' &&
-      (backgroundedAtSecondRef.current != null || explicitResumeRequiredRef.current || !cameraReadyRef.current)
-    ) return true
+    if (session.sessionState === 'active' && !canApplyCompanionActive({
+      explicitResumeRequired: explicitResumeRequiredRef.current,
+      cameraReady: cameraReadyRef.current,
+    })) return true
 
     if (session.sessionState === 'paused' && !isPausedRef.current) {
       isPausedRef.current = true
@@ -1140,7 +1140,7 @@ export default function SessionScreen({
       const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
       return Math.max(0, (now - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
     }
-    const recordBackground = () => {
+    const startSuspensionInterval = () => {
       if (sessionEndedRef.current) return
       if (backgroundedAtSecondRef.current == null) {
         backgroundedAtSecondRef.current = elapsedSecond(Date.now())
@@ -1148,13 +1148,12 @@ export default function SessionScreen({
     }
     const onBlur = () => {
       // Switching to the editor/browser (or another macOS Space) is the normal
-      // session workflow. Record it for diagnostics, but keep tracking and
-      // native blocking active while camera frames remain healthy.
-      recordBackground()
+      // session workflow. It is neither a pause nor timer-throttling evidence.
+      // Camera heartbeat accounting remains the authority if frames really stop.
     }
     const onSuspend = () => {
       if (sessionEndedRef.current) return
-      recordBackground()
+      startSuspensionInterval()
       explicitResumeRequiredRef.current = true
       void pauseSession()
       interruptCamera()

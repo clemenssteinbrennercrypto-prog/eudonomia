@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { attachSessionWindowLifecycle } from './sessionWindowLifecycle'
+import { attachSessionWindowLifecycle, canApplyCompanionActive } from './sessionWindowLifecycle'
+
+describe('companion resume gate', () => {
+  it('allows resume during ordinary blur when the camera remains healthy', () => {
+    expect(canApplyCompanionActive({ explicitResumeRequired: false, cameraReady: true })).toBe(true)
+  })
+
+  it('rejects resume after suspension until a fresh frame and explicit confirmation', () => {
+    expect(canApplyCompanionActive({ explicitResumeRequired: true, cameraReady: true })).toBe(false)
+    expect(canApplyCompanionActive({ explicitResumeRequired: false, cameraReady: false })).toBe(false)
+  })
+})
 
 function harness() {
   const documentTarget = new EventTarget()
