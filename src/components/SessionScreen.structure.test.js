@@ -20,8 +20,8 @@ describe('SessionScreen accumulation wiring', () => {
 
   it('keeps a healthy camera and session active during an ordinary blur', () => {
     const blur = source.indexOf('const onBlur = () => {')
-    const suspend = source.indexOf('const onSuspend = () => {', blur)
-    const handler = source.slice(blur, suspend)
+    const hidden = source.indexOf('const onHidden = () => {', blur)
+    const handler = source.slice(blur, hidden)
     expect(blur).toBeGreaterThan(-1)
     expect(handler).not.toContain('pauseSession')
     expect(handler).not.toContain('restartCamera')
@@ -30,23 +30,23 @@ describe('SessionScreen accumulation wiring', () => {
     expect(handler).not.toContain('timerThrottlingIntervalsRef')
   })
 
-  it('pauses and tears down the camera only on a real suspension boundary', () => {
-    const suspend = source.indexOf('const onSuspend = () => {')
-    const closeInterval = source.indexOf('const closeBackgroundInterval', suspend)
-    const handler = source.slice(suspend, closeInterval)
-    expect(handler).toContain('void pauseSession()')
-    expect(handler).toContain('interruptCamera()')
-    expect(handler).toContain('setCameraSuspended(true)')
+  it('keeps the session and camera owned across hidden, minimise and native close', () => {
+    const hidden = source.indexOf('const onHidden = () => {')
+    const closeInterval = source.indexOf('const closeBackgroundInterval', hidden)
+    const handler = source.slice(hidden, closeInterval)
+    expect(handler).toContain('startSuspensionInterval()')
+    expect(handler).not.toContain('pauseSession')
+    expect(handler).not.toContain('interruptCamera')
+    expect(handler).not.toContain('setCameraSuspended')
     expect(source).toContain("session.sessionState === 'active' && !canApplyCompanionActive")
   })
 
-  it('only reconnects on focus after suspension or a stale heartbeat', () => {
+  it('only reconnects on focus after a stale heartbeat', () => {
     const wake = source.indexOf('const onWake = () => {')
     const attach = source.indexOf('return attachSessionWindowLifecycle', wake)
     const handler = source.slice(wake, attach)
-    expect(handler).toContain('if (cameraSuspendedRef.current)')
     expect(handler).toContain('Date.now() - lastFrame > CAMERA_RECOVER_MS')
-    expect(handler.match(/restartCamera\(true\)/g)).toHaveLength(2)
+    expect(handler.match(/restartCamera\(true\)/g)).toHaveLength(1)
   })
 
   it('does not resume until the new MediaPipe generation delivered a frame', () => {
@@ -63,5 +63,11 @@ describe('SessionScreen accumulation wiring', () => {
 
   it('requests a screen wake lock while the session status is mounted', () => {
     expect(source).toContain("navigator.wakeLock.request('screen')")
+  })
+
+  it('always exposes the live session plan, falling back to the task text', () => {
+    expect(source).not.toContain('{goal.trim() && (')
+    expect(source).toContain('onClick={() => setShowSessionPlan(true)}')
+    expect(source).toContain('{goal.trim() || task}')
   })
 })

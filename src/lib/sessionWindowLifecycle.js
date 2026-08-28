@@ -7,7 +7,7 @@ export function attachSessionWindowLifecycle({
   windowTarget,
   listenNative,
   onBlur,
-  onSuspend,
+  onHidden,
   onVisible,
 }) {
   let disposed = false
@@ -15,7 +15,7 @@ export function attachSessionWindowLifecycle({
 
   const handleVisibilityChange = () => {
     if (documentTarget.visibilityState === 'visible') onVisible('visibility')
-    else onSuspend('hidden')
+    else onHidden('hidden')
   }
   const handleBlur = () => onBlur('blur')
   const handleFocus = () => {
@@ -27,7 +27,7 @@ export function attachSessionWindowLifecycle({
   windowTarget.addEventListener('focus', handleFocus)
 
   Promise.resolve(listenNative(event => {
-    if (event.state === 'hidden') onSuspend(event.reason || 'close')
+    if (event.state === 'hidden') onHidden(event.reason || 'close')
     else if (event.state === 'visible') onVisible(event.reason || 'reopen')
   })).then(stop => {
     if (disposed) stop()

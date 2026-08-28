@@ -19,7 +19,7 @@ function harness() {
   let nativeListener = () => {}
   const callbacks = {
     onBlur: vi.fn(),
-    onSuspend: vi.fn(),
+    onHidden: vi.fn(),
     onVisible: vi.fn(),
   }
   const detach = attachSessionWindowLifecycle({
@@ -39,7 +39,7 @@ describe('session window lifecycle', () => {
     const h = harness()
     h.windowTarget.dispatchEvent(new Event('blur'))
     expect(h.onBlur).toHaveBeenCalledOnce()
-    expect(h.onSuspend).not.toHaveBeenCalled()
+    expect(h.onHidden).not.toHaveBeenCalled()
     h.windowTarget.dispatchEvent(new Event('focus'))
     expect(h.onVisible).toHaveBeenCalledWith('focus')
     h.detach()
@@ -50,25 +50,25 @@ describe('session window lifecycle', () => {
     h.documentTarget.visibilityState = 'visible'
     h.windowTarget.dispatchEvent(new Event('blur'))
     expect(h.onBlur).toHaveBeenCalledWith('blur')
-    expect(h.onSuspend).not.toHaveBeenCalled()
+    expect(h.onHidden).not.toHaveBeenCalled()
     h.detach()
   })
 
-  it('suspends for a hidden or minimised WebView and wakes when visible', () => {
+  it('reports a hidden or minimised WebView without deciding session state', () => {
     const h = harness()
     h.documentTarget.visibilityState = 'hidden'
     h.documentTarget.dispatchEvent(new Event('visibilitychange'))
-    expect(h.onSuspend).toHaveBeenCalledWith('hidden')
+    expect(h.onHidden).toHaveBeenCalledWith('hidden')
     h.documentTarget.visibilityState = 'visible'
     h.documentTarget.dispatchEvent(new Event('visibilitychange'))
     expect(h.onVisible).toHaveBeenCalledWith('visibility')
     h.detach()
   })
 
-  it('uses native close/reopen events as explicit suspension boundaries', () => {
+  it('reports native close/reopen without deciding camera ownership', () => {
     const h = harness()
     h.native({ state: 'hidden', reason: 'close' })
-    expect(h.onSuspend).toHaveBeenCalledWith('close')
+    expect(h.onHidden).toHaveBeenCalledWith('close')
     h.native({ state: 'visible', reason: 'reopen' })
     expect(h.onVisible).toHaveBeenCalledWith('reopen')
     h.detach()

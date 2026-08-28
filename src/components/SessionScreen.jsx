@@ -813,7 +813,6 @@ export default function SessionScreen({
   const [isPaused,        setIsPaused]        = useState(true)
   const [cameraFault,     setCameraFault]     = useState(null) // null | 'permission' | 'busy' | 'no_camera' | 'library' | 'stalled' | 'no_frames'
   const [cameraStatus,    setCameraStatus]    = useState('connecting') // connecting | ready | interrupted | fault
-  const [cameraSuspended, setCameraSuspended] = useState(false)
   const [initialCameraPending, setInitialCameraPending] = useState(true)
   const [cameraEpoch,     setCameraEpoch]     = useState(0)    // bump = tear down and rebuild the camera pipeline
   const [isCalibrating,   setIsCalibrating]   = useState(true)
@@ -876,7 +875,6 @@ export default function SessionScreen({
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
   const cameraReadyRef         = useRef(false) // true only after MediaPipe returned a frame for the current generation
   const cameraGenerationRef    = useRef(0)
-  const cameraSuspendedRef     = useRef(false)
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
@@ -1132,9 +1130,11 @@ export default function SessionScreen({
     void pauseSession()
   }, [pauseSession])
 
-  // blur covers normal app/Space changes and remains active. Hidden covers
-  // minimisation or WebView suspension; the native event distinguishes an
-  // actual close. Only hidden/close pauses and destroys the camera pipeline.
+  // Window focus, visibility and the red close button are presentation state,
+  // not session state. The webcam must keep tracking while Eudonomia is behind
+  // the work app or hidden in the tray. Fresh-frame accounting remains the
+  // authority: if WKWebView actually stops delivering frames, measurement is
+  // withheld and the camera health path rebuilds the stream.
   useEffect(() => {
     const elapsedSecond = now => {
       const ongoingPause = pausedAtRef.current ? now - pausedAtRef.current : 0
@@ -1151,14 +1151,9 @@ export default function SessionScreen({
       // session workflow. It is neither a pause nor timer-throttling evidence.
       // Camera heartbeat accounting remains the authority if frames really stop.
     }
-    const onSuspend = () => {
+    const onHidden = () => {
       if (sessionEndedRef.current) return
       startSuspensionInterval()
-      explicitResumeRequiredRef.current = true
-      void pauseSession()
-      interruptCamera()
-      cameraSuspendedRef.current = true
-      setCameraSuspended(true)
     }
     const closeBackgroundInterval = () => {
       const startSecond = backgroundedAtSecondRef.current
@@ -1170,15 +1165,10 @@ export default function SessionScreen({
     const onWake = () => {
       if (document.visibilityState !== 'visible' || sessionEndedRef.current) return
       closeBackgroundInterval()
-      if (cameraSuspendedRef.current) {
-        cameraSuspendedRef.current = false
-        setCameraSuspended(false)
-        restartCamera(true)
-        return
-      }
       const lastFrame = lastFrameAtRef.current
       if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
-        interruptCamera('stalled')
+        // Returning from a throttled/hidden WebView should heal transparently.
+        // Do not turn the user's still-active session into a manual pause.
         restartCamera(true)
       }
     }
@@ -1188,10 +1178,10 @@ export default function SessionScreen({
       windowTarget: window,
       listenNative: listenWindowLifecycle,
       onBlur,
-      onSuspend,
+      onHidden,
       onVisible: onWake,
     })
-  }, [interruptCamera, pauseSession, restartCamera])
+  }, [restartCamera])
 
   useEffect(() => {
     if (!initialCameraPending || cameraStatus !== 'ready' || sessionEndedRef.current) return
@@ -2321,7 +2311,7 @@ export default function SessionScreen({
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!videoRef.current || cameraSuspended || sessionEndedRef.current) return
+    if (!videoRef.current || sessionEndedRef.current) return
     // FaceMesh is bundled and served from this app's own origin (see
     // index.html). If that local runtime fails to load, do not run on with a
     // frozen default score — surface it instead. We no longer need MediaPipe's
@@ -2380,7 +2370,9 @@ export default function SessionScreen({
       // waiting for the heartbeat to infer it seconds later.
       onTrackLost: () => {
         if (cancelled) return
-        interruptCamera('stalled')
+        // A hidden WKWebView can briefly end its track. Reacquire immediately
+        // without changing the user's pause state; only the heartbeat timeout
+        // escalates a failed reconnect into a tracking fault.
         restartCamera()
       },
     })
@@ -2394,7 +2386,7 @@ export default function SessionScreen({
     }
     // cameraEpoch is the restart trigger: bumping it tears this down and
     // rebuilds a fresh FaceMesh + camera against a live MediaStream.
-  }, [cameraEpoch, cameraSuspended, handleFaceResults, interruptCamera, restartCamera])
+  }, [cameraEpoch, handleFaceResults, interruptCamera, restartCamera])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
@@ -2403,7 +2395,6 @@ export default function SessionScreen({
       const now = Date.now()
       const previousSampleAt = statsSampleAtRef.current
       statsSampleAtRef.current = now
-      if (cameraSuspended) return
       if (!cameraReadyRef.current) {
         const connectingSince = lastRecoverAtRef.current || startTimeRef.current
         if (!cameraFaultRef.current && now - connectingSince > CAMERA_STALL_MS) {
@@ -2540,7 +2531,7 @@ export default function SessionScreen({
       }
     }, 1000)
     return () => clearInterval(tick)
-  }, [accumulateMeasurement, cameraSuspended, duration, interruptCamera, restartCamera])
+  }, [accumulateMeasurement, duration, interruptCamera, restartCamera])
 
   useEffect(() => {
     if (shouldAutoEndSession(duration, timeLeft)) endSession(true)
@@ -2779,11 +2770,9 @@ export default function SessionScreen({
           countUp={!hasTimeLimit}
         />
 
-        {goal.trim() && (
-          <button className="live-session-plan-button" type="button" onClick={() => setShowSessionPlan(true)}>
-            <span aria-hidden="true">≡</span> Session plan
-          </button>
-        )}
+        <button className="live-session-plan-button" type="button" onClick={() => setShowSessionPlan(true)}>
+          <span aria-hidden="true">≡</span> Session plan
+        </button>
 
         <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', width: '100%' }}>
           <ActivityPill
@@ -2922,7 +2911,7 @@ export default function SessionScreen({
               <div><span>Session reference</span><h2 id="live-session-plan-title">{task}</h2></div>
               <button type="button" aria-label="Close session plan" onClick={() => setShowSessionPlan(false)}>×</button>
             </header>
-            <div className="session-plan-content">{goal}</div>
+            <div className="session-plan-content">{goal.trim() || task}</div>
             <footer><span>Keep this open as long as you need.</span><button type="button" onClick={() => setShowSessionPlan(false)}>Back to session</button></footer>
           </section>
         </div>
