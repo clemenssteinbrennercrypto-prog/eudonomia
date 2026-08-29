@@ -82,6 +82,12 @@ sequence, minimize or close the window, then reopen; the sequence must have
 advanced. Leaving the screen stops the prototype so it cannot remain a second
 camera owner when a normal session begins.
 
+On 29 August 2026 Clemens ran that diagnostic on the target MacBook Air. The
+frame sequence continued advancing until Stop during both yellow minimize and
+red close/hide. This is the required Step 1 proof that native capture and
+inference survive those window states. It is not a live-score verification:
+sessions still use the WebView source pending the parity gate.
+
 AVFoundation callbacks are the native frame heartbeat. After one second
 without a real callback the prototype emits `faulted/no_frames`, clears the ROI
 and sends no repeated landmark packet. This is the native equivalent of the
@@ -154,7 +160,8 @@ the repository and can be deleted after review.
 - Extract/replay the exact stateful scorer for both landmark streams.
 - Publish the actual parity table; align preprocessing if any fixed gate fails.
 - Measure CPU/energy impact for old and native paths on the same MacBook.
-- Run real yellow-minimize and red-close tests with deliberate looking away.
+- Run the live-session yellow-minimize and red-close score tests after the
+  parity-gated source switch.
 - Remove/occupy the real camera and prove session coverage becomes absent.
 - Only after all gates pass: add a source flag and feed native landmarks into
   the existing JavaScript scorer.

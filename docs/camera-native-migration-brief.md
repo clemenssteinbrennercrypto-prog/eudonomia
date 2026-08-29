@@ -1,208 +1,226 @@
-# Auftrag: Kamera-Messung aus der WebView herauslösen (Eudonomia)
+# Migration brief: move camera measurement out of the WebView
 
-Du arbeitest am Eudonomia-Repo auf macOS. **Lies zuerst `AGENTS.md` vollständig**, dann `CLAUDE.md`. Führe `git pull --rebase origin main` aus, bevor du beginnst.
+Read `AGENTS.md` and `CLAUDE.md` completely before working on this migration.
+Pull and rebase from `origin/main` before starting and before pushing.
 
-Dieser Auftrag ist das Ergebnis einer abgeschlossenen Root-Cause-Analyse. **Die Diagnose ist erledigt und belegt — bitte nicht neu aufrollen.** Baue auf ihr auf.
+This brief records a completed root-cause analysis. Do not restart that
+investigation or repeat the rejected lifecycle workarounds below.
 
----
+## 1. Failure
 
-## 1. Das Problem
+A live session must continue measuring attention while its window is minimized
+or closed/hidden. The WebView camera path did not do that.
 
-Während einer Live-Session soll die Aufmerksamkeitsmessung weiterlaufen, auch wenn das Fenster minimiert oder geschlossen/versteckt ist. Sie tut es nicht.
+User-verified reproduction:
 
-**Reproduktion (vom Nutzer verifiziert):**
-1. Session starten, fixiert auf einen Punkt schauen → Score pendelt sich ein, z. B. 75
-2. Gelben Minimize-Button drücken
-3. Bewusst in Dead-Zones schauen, unruhig wirken, wegschauen
-4. Fenster wieder öffnen
-5. **Score steht unverändert bei 75, mit flacher grüner Linie** — als wäre durchgehend fokussiert gearbeitet worden
+1. Start a session and look steadily at one point until the score settles.
+2. Yellow-minimize the window.
+3. Look into dead zones, move around and look away.
+4. Reopen the window.
+5. The score and green timeline remain flat at their pre-minimize value.
 
-Das grüne macOS-Kamerasymbol **bleibt dabei die ganze Zeit an**. Das ist der entscheidende Hinweis (siehe §2).
+The macOS camera indicator remains green. The media track also stays `live` and
+the video element stays ready, but `video.currentTime` and the decoded pixels
+stop changing. MediaPipe repeatedly receives the frozen image and returns the
+same confident landmarks.
 
----
+## 2. Established root cause
 
-## 2. Root Cause (belegt, nicht spekulativ)
+WKWebView stops delivering new `getUserMedia` video pixels when its view is no
+longer in a visible window. Scheduling JavaScript more aggressively does not
+restart that media pipeline.
 
-**macOS erlaubt Kamera-Capture im Hintergrund. WebKit liefert die Frames nur nicht mehr aus.**
+The native-camera architecture no longer relies on an audio-specific forum
+quote as evidence for video behavior. The direct evidence is stronger:
 
-Beweiskette:
-- Das grüne Kamerasymbol bleibt bei minimiertem Fenster an → **macOS nimmt weiter auf**. Die Hardware läuft.
-- Die bekannten Hintergrund-Kamera-Restriktionen (`videoDeviceNotAvailableInBackground`, das `com.apple.developer.avfoundation.multitasking-camera-access` Entitlement) sind **iOS-Konzepte**. macOS hat sie nicht — Zoom, OBS, Photo Booth nehmen bei minimiertem Fenster normal weiter auf.
-- WKWebView suspendiert dagegen die Media-Capture-Zustellung an die Seite, sobald die View nicht in einem sichtbaren Fenster ist. Im Apple-Entwicklerforum steht dazu explizit: *"Native AVAudioSession microphone capture works in the background without issues"* — nativ funktioniert es, in der WebView nicht. Für iOS existiert ein Workaround (`UIBackgroundModes`), **für macOS gibt es kein Äquivalent**.
-- Konkreter Mechanismus im Code: Der Track bleibt `readyState === 'live'` und `video.readyState` bleibt 4, aber WebKit dekodiert keine neuen Pixel mehr. Das `<video>`-Element liefert **immer wieder exakt dasselbe eingefrorene Bild**. MediaPipe verarbeitet es brav und gibt jedes Mal identische Landmarks zurück → konstanter, "selbstbewusster" Score.
+- The stale-frame guard reproduced the frozen WebView mechanism on the target
+  MacBook.
+- On 29 August 2026, the native AVFoundation prototype's frame sequence and
+  FaceMesh inference continued advancing on that MacBook during both yellow
+  minimize and red close/hide, until the user pressed Stop.
+- The documented `videoDeviceNotAvailableInBackground` interruption and
+  multitasking-camera entitlement are iOS concepts; they do not provide a
+  macOS WebView workaround.
 
-**Konsequenz: Solange die Messung von `getUserMedia` innerhalb der WebView abhängt, ist zuverlässiges Hintergrund-Tracking auf macOS nicht machbar. Kein JS-Fix ändert das.**
+The Apple forum thread remains useful context for native capture and WebView
+lifecycle behavior, but its quoted example concerns `AVAudioSession`. It must
+not be presented as direct proof of camera behavior.
 
-Quellen:
+Sources:
+
 - https://developer.apple.com/forums/thread/689182
 - https://developer.apple.com/documentation/AVFoundation/AVCaptureSession/InterruptionReason/videoDeviceNotAvailableInBackground
 
----
+Consequence: reliable macOS background measurement cannot keep
+`getUserMedia` inside the WebView as its frame source. No React visibility,
+focus or timer handler changes that boundary.
 
-## 3. Was bereits versucht wurde — NICHT wiederholen
+## 3. Attempts that must remain but did not solve the cause
 
-Alle vier Commits sind bereits auf `main`. Die ersten drei haben das Problem **nicht** gelöst:
-
-| Commit | Was | Ergebnis |
+| Commit | Change | Result |
 |---|---|---|
-| `28be656` | Nativer `CloseRequested`-Handler: `window.hide()` → `window.minimize()` | Sinnvoll (verhindert vollständiges Unmapping beim roten Button), löst das Kernproblem aber nicht |
-| `de67f03` | macOS App Nap Exemption via `NSProcessInfo` Activity-Token, gehalten solange Session aktiv/pausiert | Sinnvoll und bleibt drin, löst das Kernproblem aber nicht |
-| `7f645a5` | `"backgroundThrottling": "disabled"` in `tauri.conf.json` (= WebKit `inactiveSchedulingPolicy = none`, macOS 14+) | **Getestet, wirkungslos.** Steuert Task-Scheduling, nicht die Capture-Pipeline |
-| `ea2bdfc` | Stale-Frame-Schutz in `cameraController.js`: `video.currentTime` wird überwacht; ein Bild, das >1 s stillsteht, wird nicht mehr an MediaPipe gefüttert | **Wertvoll, muss bleiben** — siehe §6 |
+| `28be656` | Close requests minimize instead of fully unmapping the window | Useful, but WebKit still freezes video delivery |
+| `de67f03` | Hold an App Nap exemption while a session is active or paused | Useful, but App Nap was not the media-pipeline boundary |
+| `7f645a5` | Disable WebKit background throttling on supported macOS versions | Ineffective for capture; it changes scheduling policy |
+| `ea2bdfc` | Reject a video image whose `currentTime` is stale for more than one second | Required honesty guard, not a background-capture fix |
 
-`ea2bdfc` ist kein Fix des Problems, sondern das **Ehrlichkeits-Sicherheitsnetz**: Es verhindert, dass ein Standbild als echte Messung gewertet wird. Die Zeit wird dann korrekt als *nicht gemessen* markiert statt erfunden. Diese Garantie darf durch deinen Umbau **nicht** verloren gehen.
+The `ea2bdfc` guard prevents a frozen image from becoming invented measured
+time. Preserve it until the old path is removed, and preserve an equivalent
+native frame heartbeat afterward.
 
----
+## 4. Required architecture
 
-## 4. Die Lösung
+- Capture frames with AVFoundation in the native Rust process.
+- Run the same MediaPipe detector and Attention FaceMesh weights natively.
+- Send landmarks or derived signals to React only through Tauri commands and
+  events.
+- Keep live pixels inside the native process and in memory.
+- Remove WebView `getUserMedia` as the measurement source only after parity.
 
-**Kamera-Capture und Landmark-Inferenz wandern in den nativen Rust-Prozess. Die WebView wird reine Anzeige.**
+Do not replace FaceMesh with Apple Vision. Vision's landmark and iris geometry
+does not match the ruler on which the existing EAR, gaze, pose and history
+thresholds were calibrated.
 
-Konkret:
-- Capture via **AVFoundation** (`AVCaptureSession`) im nativen Prozess
-- Landmark-Inferenz mit **denselben MediaPipe-Modellen**, nativ ausgeführt
-- Ergebnisse (Landmarks bzw. abgeleitete Signale) gehen über das **bestehende Tauri-IPC** an die WebView
-- `getUserMedia` in der WebView entfällt als Messquelle
+Do not capture natively and then run MediaPipe.js in the hidden WebView. That
+would retain the WebKit lifecycle dependency this migration exists to remove.
 
-### Warum nicht Apple Vision als Analyse-Engine
+## 5. Exact model contract
 
-Naheliegend, aber **falsch für dieses Produkt**:
-- Vision liefert 76 Landmarks + je *einen* Pupillenpunkt. MediaPipe liefert 468 Landmarks + 5 Iris-Punkte pro Auge (bei `refineLandmarks: true`, was hier aktiv ist).
-- Das gesamte Scoring (EAR-Schwellen, Iris-/Gaze-Geometrie, die Yaw-Vorzeichen-Konvention) ist auf MediaPipes Geometrie getunt, teilweise mit wissenschaftlichen Zitaten in den Kommentaren.
-- **Entscheidend:** AGENTS.md §5 — *"One ruler, every day. Comparable history is the only durable asset here."* Ein Engine-Wechsel ändert den Maßstab und macht die gesamte bisherige History unvergleichbar.
-- Das 2D-Gaze-Tracking (laut AGENTS.md §9 ein fertiges, verifiziertes Feature) würde durch die gröberen Iris-Daten schlechter.
+The JavaScript application uses the legacy `@mediapipe/face_mesh` solution with
+`refineLandmarks: true`. Its TFLite files are slices inside
+`face_mesh_solution_packed_assets.data`, not loose repository files. The native
+implementation must use the matching short-range detector and 478-point
+Attention landmark model.
 
-### Warum nicht "Frames nativ holen, MediaPipe.js in der WebView behalten"
+The implemented prototype pins and documents:
 
-Wurde erwogen und verworfen: Die Messung hinge weiterhin davon ab, dass WebKit JavaScript im versteckten Fenster am Leben lässt. Genau diese Lifecycle-Abhängigkeit ist die Ursache des Problems. Apple kann das Verhalten jederzeit ändern — dann steht man wieder hier. Für eine dauerhafte Lösung ist das die falsche Wahl.
+- `@mediapipe/face_mesh` `0.4.1633559619`
+- the exact packed-asset, detector and Attention-model SHA-256 values
+- Google's official MediaPipe 0.10.35 arm64 runtime and its SHA-256
+- the three required V2 custom TFLite operators
 
-### Technischer Ausgangspunkt
+See `docs/native-camera-prototype.md` for offsets, hashes and runtime details.
 
-Die MediaPipe-Modelle sind TFLite-Modelle. Verwertbare Referenzimplementierungen der kompletten Pipeline (Face Detection → ROI → Landmarks → Iris):
-- https://github.com/okieraised/rs-face-detection-tflite (Rust)
-- https://github.com/patlevin/face-detection-tflite (Python, Referenz für die Preprocessing-Logik)
-- Optional CoreML-Konvertierung für Neural-Engine-Beschleunigung: https://github.com/gouthamvgk/facemesh_coreml_tf
+## 6. Parity is the release gate
 
-**Wichtiges Detail zu den Modellen:** Im Repo liegt unter `public/mediapipe/` die *Legacy*-`face_mesh`-Solution als gepackte WASM-Assets (`face_mesh_solution_packed_assets.data`). Die `.tflite`-Dateien liegen dort **nicht lose** vor — sie stecken in diesem Paket. Weil `refineLandmarks: true` gesetzt ist, ist das relevante Landmark-Modell die Attention-Variante (478 Landmarks inkl. Iris). Kläre früh, ob du die Modelle aus dem Paket extrahierst oder die offiziellen Äquivalente beziehst, und **dokumentiere, welche Gewichte du verwendest** — davon hängt die Parität ab.
+The main risk is preprocessing, not merely loading identical weights. FaceMesh
+crops, scales and rotates a tracked facial ROI before landmark inference. A
+small transform mismatch changes the meaning of tuned thresholds without an
+obvious failure.
 
----
+Nothing may switch to the native source until both engines have processed the
+same recorded pixels and the comparison reports mean, p95 and maximum for:
 
-## 5. Das Hauptrisiko und das verbindliche Akzeptanzkriterium
+- normalized landmark distance
+- `yawSigned` and `pitchDeg`
+- EAR for each eye
+- `irisH`
+- per-frame attention score
+- `FOCUSED_SCORE` classification
 
-Das Risiko ist **nicht** das Modell (identische Gewichte → identische Ausgabe). Das Risiko ist das **Preprocessing**: MediaPipe croppt, rotiert und skaliert die Gesichts-ROI vor der Landmark-Inferenz. Weicht das auch nur leicht ab, verschieben sich alle Koordinaten — und die getunten Schwellen bedeuten still und leise etwas anderes. **Das ist eine Fehlerklasse, die niemand bemerkt**, und sie würde die gesamte History entwerten.
+Fixed proposed gates:
 
-Deshalb gilt: **Es wird nichts umgeschaltet, bevor Parität gemessen und bestanden ist.**
+- landmark p95 `< 0.005`, maximum `< 0.02`
+- yaw and pitch p95 `< 1.5°`
+- score p95 `< 2` points
+- identical `FOCUSED_SCORE` classification for at least 99% of frames
 
-### Paritäts-Harness (Schritt 2, vor jedem Scoring-Umbau)
+The classification gate is decisive because it produces `focusedSeconds`,
+which feeds history, calibration, the end screen and export.
 
-1. Referenz-Frames aufzeichnen: ein realer Clip des Nutzers in typischer Arbeitshaltung (mehrere Minuten, verschiedene Kopfhaltungen, Blinzeln, Wegschauen, unterschiedliche Beleuchtung). Als Einzelbilder auf Platte, damit beide Engines **exakt dieselben Pixel** sehen.
-2. Beide Engines über dieselben Dateien laufen lassen, pro Frame dumpen:
-   - alle Landmarks (normalisierte Koordinaten)
-   - die daraus abgeleiteten Signale (`yawSigned`, `pitchDeg`, EAR pro Auge, `irisH`)
-   - den resultierenden Attention-Score
-3. Vergleichen und berichten: Mittelwert, p95, Maximum je Metrik.
+Do not reinterpret signs. Match them empirically through the harness:
+`yawSigned > 0` is head-left from the user's perspective, while `irisH > 0` is
+eyes-right.
 
-**Vorgeschlagene Schwellen (mit dem Nutzer/Reviewer final abstimmen):**
-- Landmark-Abweichung (normalisiert, euklidisch): **p95 < 0.005**, max < 0.02
-- Abweichung `yawSigned` / `pitchDeg`: **p95 < 1.5°**
-- Score-Abweichung pro Frame: **p95 < 2 Punkte**
-- **Klassifikations-Parität: ≥ 99 % der Frames identisch bzgl. `FOCUSED_SCORE`-Schwelle**
+If parity fails, align preprocessing. Do not weaken the gate. If parity proves
+unreachable, keep the old source or ask Clemens to choose a separately
+versioned scoring generation; that is a product decision.
 
-Das letzte Kriterium ist das wichtigste: `focusedSeconds` ist laut AGENTS.md §4.8 die gemeldete Fokus-Prozentzahl und speist History, Kalibrierung, End-Screen und Export.
+## 7. Measurement and privacy invariants
 
-**Vorzeichen-Konventionen nicht wegdiskutieren:** AGENTS.md §4.7 — `yawSigned > 0` = Kopf nach LINKS (Nutzersicht), `irisH > 0` = Augen nach RECHTS, also *entgegengesetzte* Konventionen. Das ist schon zweimal invertiert worden. Leite das nicht neu her — **matche die Ausgaben empirisch über das Harness.**
+- Scoring constants and thresholds do not change in this migration.
+- Every penalty retains its hold time or debounce.
+- Reset accumulators on face absence, camera fault and other hard transitions.
+- No real frames means absent measurement: `trackingFaulted` and
+  `finalScore: null`, never a plausible default score.
+- Window focus, blur, visibility, minimize and close never change pause state.
+- Live frames never leave the native process and are never written to disk.
+- The only disk exception is the user's explicit local parity recording. It
+  stays outside the repository and must be deletable after the comparison.
+- Rust and React communicate only through Tauri IPC. Do not add HTTP or
+  WebSocket transport.
 
----
+## 8. Staged delivery
 
-## 6. Verbindliche Randbedingungen
+1. Native AVFoundation capture and landmark prototype over Tauri IPC.
+2. Recorded-frame parity harness and measured gate.
+3. Native source behind an explicit flag while both paths remain available.
+4. Feed native landmarks into the existing JavaScript scorer unless parity
+   data justifies moving more logic.
+5. Remove the JavaScript camera path only after real-use confirmation.
 
-- **Scoring-Schwellenwerte und -Konstanten bleiben unverändert.** Der Umbau tauscht die Signalquelle, nicht den Maßstab.
-- **Die Invarianten aus AGENTS.md §4 gelten weiter**, insbesondere: jede Penalty braucht Hold-Time/Debounce; Akkumulatoren bei harten Zustandswechseln zurücksetzen; `git log -S"<Konstante>"` vor jeder Schwellenänderung.
-- **"Never report what was not measured"** (AGENTS.md §5) bleibt oberste Regel. Liegen keine echten Frames vor, ist das Ergebnis *absent* (`trackingFaulted`, `finalScore: null`) — niemals ein Default, der wie eine Messung aussieht. Der Stale-Frame-Schutz aus `ea2bdfc` bzw. ein äquivalenter nativer Mechanismus muss erhalten bleiben.
-- **Pause nur durch bewusste Nutzeraktion** (Leertaste, Pause-Button, expliziter Companion-Befehl). Fenster-Focus/Blur/Visibility/Close dürfen den Pausezustand nie verändern. Kein erzwungenes manuelles Resume nach normalem Close/Reopen.
-- **Privacy:** Frames dürfen den Prozess nicht verlassen und nie auf Platte geschrieben werden — **Ausnahme:** die bewusst aufgezeichneten Referenz-Frames für das Paritäts-Harness. Die liegen lokal, gehören dem Nutzer, und müssen nach Abschluss löschbar sein. Nichts davon geht ins Repo.
-- **IPC-Architektur:** Rust ↔ React ausschließlich über Tauri Commands/Events. **Kein lokaler HTTP-Service, kein WebSocket** (AGENTS.md §1).
-- `NSCameraUsageDescription` ist in `companion/src-tauri/Info.plist` bereits vorhanden; die native Capture nutzt dieselbe TCC-Berechtigung.
-- Zielplattform: macOS 15.7.3, arm64 (Apple Silicon).
+Step 1 is implemented and its minimize/close lifecycle was verified on the
+target MacBook. Step 2 is implemented as a harness but is still blocked on the
+multi-minute user recording and stateful score replay. No live-session source
+switch has occurred.
 
----
+## 9. Two-machine boundary
 
-## 7. Vorgehen — gestaffelt, mit früher Sichtbarkeit
+The Mac Mini build machine has no built-in camera. It can compile, run tests and
+process recorded frames, but it cannot perform the real camera test.
 
-AGENTS.md §8: *"Show the smallest working thing early."* Nicht drei Ebenen tief bauen, bevor der Nutzer etwas sieht.
+Only the user's MacBook Air can:
 
-**Schritt 1 — Nativer Prototyp**
-AVFoundation-Capture + Landmark-Inferenz in Rust. Gibt Landmarks über bestehendes Tauri-IPC aus. Noch kein Scoring-Umbau, noch keine Umschaltung. Ziel: beweisen, dass native Landmarks fließen — **auch bei minimiertem und geschlossenem Fenster**.
+- record the reference clip
+- verify native frames through minimize and close
+- verify the eventual live session score while deliberately looking away
+- test real camera removal or contention
 
-**Schritt 2 — Paritäts-Gate (§5)**
-Harness bauen, Referenz-Frames aufzeichnen, beide Engines vergleichen, **Zahlen vorlegen**. Erst wenn die Schwellen bestanden sind, geht es weiter. Werden sie nicht bestanden: Preprocessing angleichen, nicht die Schwellen aufweichen.
+Never claim one of those tests passed on the camera-less build machine.
 
-**Schritt 3 — Umschaltung hinter einem Flag**
-Native Engine als Messquelle aktivierbar, mit Rückfallmöglichkeit auf den JS-Pfad. Beide Pfade bleiben vorerst lauffähig.
+CI, not a local build, publishes the artifact the user runs. A push to `main`
+updates the `internal-test` release through `companion-test.yml`. Confirm both
+the tag and the displayed build ID before asking the user to test.
 
-**Schritt 4 — Scoring anbinden**
-Ob das Scoring nativ wandert oder in JS bleibt und mit nativen Landmarks gefüttert wird, entscheidet sich nach den Zahlen aus Schritt 2. Default-Annahme: Scoring bleibt zunächst in JS (minimiert Risiko, alle Tests bleiben gültig).
+## 10. Verification
 
-**Schritt 5 — Aufräumen**
-JS-Kamerapfad entfernen, sobald der native Pfad im Realbetrieb bestätigt ist. Der Stale-Frame-/Ehrlichkeits-Schutz bleibt.
+Current automated baseline after the native prototype:
 
----
-
-## 7a. Zwei Maschinen — wer was darf
-
-Der Build läuft auf einem **Mac Mini**. Der Nutzer sitzt an einem **MacBook Air (M4)**. Das ist keine Formalie:
-
-- **Der Mac Mini hat keine eingebaute Kamera.** Der entscheidende Test aus §8 (minimieren, bewusst wegschauen, Score muss sich ändern) ist dort **nicht durchführbar**.
-- **Behaupte niemals, der Kamera-Test sei bestanden, wenn er auf der Build-Maschine lief.** Wenn dort keine echte Kamera mit echtem Gesicht davor war, ist er nicht gelaufen. Sag das klar, statt es zu überspringen.
-- Was auf dem Mac Mini **geht und dort auch hingehört:** kompilieren, Unit-Tests, und das komplette **Paritäts-Harness** — das läuft bewusst auf aufgezeichneten Frames von der Platte und braucht keine Kamera.
-- Was **nur beim Nutzer auf dem MacBook Air geht:** die Referenz-Frames aufzeichnen (§5.1) und der reale Kamera-/Minimize-Test (§8). Beides ausdrücklich beim Nutzer anfordern, mit klarer Anleitung, statt es zu umgehen.
-- Das ausgelieferte Artefakt baut ohnehin die CI (`companion-test.yml` → Tag `internal-test`), nicht die lokale Maschine. Ein lokaler Build ändert nichts an dem, was der Nutzer startet.
-
----
-
-## 8. Verifikation
-
-Automatisiert (müssen grün bleiben — aktuell 265 JS + 29 Rust):
 ```bash
-npm test -- --run
+npm test -- --run                 # 266 tests
 npm run build
-cd companion/src-tauri && cargo test && cargo check
+cd companion/src-tauri
+cargo test                        # 39 tests: 10 library + 29 app
+cargo check
 ```
 
-**Ein grüner Build ist keine Verifikation** (AGENTS.md §7). Verpflichtend zusätzlich, in der echten App mit echter Kamera:
-1. Session starten, fixiert schauen → Score notieren
-2. Gelb minimieren, **bewusst wegschauen / unruhig sein**, ~2 Min
-3. Wieder öffnen → **Score muss sich verändert haben.** Flache Linie = nicht gelöst.
-4. Dasselbe mit dem roten Close-Button
-5. Session beenden, gespeicherten Datensatz prüfen: `actualSeconds`, `measuredSeconds`, `measurementCoverage`, `trackingFaulted`, `completed`
-6. Gegenprobe auf Ehrlichkeit: Kamera hart entziehen (z. B. von anderer App belegen lassen) → Zeit muss als *nicht gemessen* erscheinen, kein Fantasie-Score
+A green build is not runtime verification. After the parity-gated source
+switch, manually test with a real camera:
 
-### Fallen, die in dieser Analyse real Zeit gekostet haben
+1. Start a session, fixate and note the score.
+2. Yellow-minimize, deliberately look away and move for about two minutes.
+3. Reopen; the score and timeline must have changed.
+4. Repeat with red close/hide.
+5. Inspect `actualSeconds`, `measuredSeconds`, `measurementCoverage`,
+   `trackingFaulted` and `completed` in the saved record.
+6. Remove or occupy the camera; unavailable time must remain unmeasured.
 
-- **GUI-Automation per AppleScript ist hier gefährlich.** Test-Build und installierte App heißen beide `eudonomia-companion`. System Events adressiert Klicks nach OS-Fokus, **nicht** nach PID — auch bei explizitem PID-Targeting und eigener Bundle-ID. Dadurch wurden zweimal versehentlich echte Sessions in der Produktiv-App des Nutzers gestartet. **Teste manuell oder mit sicherer Isolation, nicht per Klick-Automation gegen die laufende App.**
-- **Release-Kanäle:** `/Applications/Eudonomia.app` ist die real genutzte App. Ein lokaler Build in `target/` ändert daran nichts. Push auf `main` → `companion-test.yml` → Tag `internal-test`. Prüfe vor jeder Aussage "das ist jetzt live", ob die Assets unter dem Tag `internal-test` **tatsächlich** neu sind, und ob der Nutzer die passende Build-ID sieht. Es wurde bereits mehrfach mit der falschen Version getestet.
-- **Nicht die laufende Companion-App ungeprüft killen** (AGENTS.md §8): vorher prüfen, dass keine Session aktiv und Blocking deaktiviert ist.
-- **Der DMG-Schritt von `build:companion` scheitert oft** an einem gemounteten Volume der Vorbuilds. Die `.app` ist trotzdem gültig. Fix: `hdiutil detach /Volumes/dmg.* -force`.
+Do not automate these clicks through AppleScript/System Events: test and
+production builds share a process name, and previous automation started real
+sessions in the wrong app. Do not kill the running companion without first
+confirming there is no active session and blocking is disabled.
 
----
+## 11. Required final report
 
-## 9. Was am Ende geliefert werden soll
+- exact weights and provenance
+- full parity table, including focused-classification parity
+- preprocessing, mirroring and sign conventions
+- old-versus-native CPU and energy measurements
+- real yellow-minimize and red-close live-score results
+- hard camera-failure honesty result
+- remaining system-sleep, lid-close and camera-contention limitations
+- commit hashes and verified `internal-test` status
 
-1. Welche Modellgewichte verwendet werden und woher sie stammen
-2. Die **Paritäts-Zahlen** aus Schritt 2 (Mittelwert/p95/max je Metrik, inkl. Klassifikations-Parität) — das ist das zentrale Ergebnis
-3. Wie das Preprocessing an MediaPipe angeglichen wurde, inkl. der Vorzeichen-/Spiegelungs-Konventionen
-4. CPU-/Akku-Vergleich alt vs. neu
-5. Ergebnis des echten Kamera-Tests aus §8, inklusive des Minimize-Tests mit bewusstem Wegschauen
-6. Was passiert, wenn die Kamera wirklich stirbt — Beleg, dass keine Zeit erfunden wird
-7. Verbleibende Grenzen (z. B. Verhalten bei echtem System-Sleep, Lid-Close, Kamera durch andere App belegt)
-8. Commit-Hashes und Status des `internal-test`-Builds
-
-**Commit-Nachrichten:** erklären *warum*, nicht *was* — den verhinderten Fehler benennen, und alles festhalten, was ein späterer Agent sonst neu entdecken müsste. Eigener Attribution-Trailer. Nicht in `.github/workflows/` pushen.
-
-**Ergänze AGENTS.md** um die neue Architektur-Entscheidung und die Paritäts-Anforderung, damit der nächste Agent nicht wieder bei "vielleicht hilft ein React-Handler" anfängt.
-
----
-
-## 10. Wenn die Parität nicht erreichbar ist
-
-Dann **nicht** die Schwellen aufweichen und **nicht** still umschalten. Melden, mit Zahlen. Es gibt dann zwei ehrliche Wege: Preprocessing weiter angleichen, oder bewusst eine neue, versionierte Scoring-Generation einführen (analog zur `focusMetric.js`-Versionierung in AGENTS.md §4.9), sodass alte und neue Sessions klar getrennt bleiben statt vermischt zu werden. Das ist eine Produktentscheidung des Nutzers, keine Implementierungsentscheidung.
+Commit messages must explain the prevented failure and record facts a later
+agent would otherwise have to rediscover. Include the agent's attribution
+trailer. Do not modify `.github/workflows/` as part of this work.

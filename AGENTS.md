@@ -40,7 +40,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, 126 tests — must stay green
+npm test           # vitest, currently 266 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -48,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # 26 tests
+cargo test         # currently 39 tests (10 library + 29 app)
 cargo check
 ```
 
@@ -272,7 +272,9 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-79 JS tests, 19 Rust tests. Both must stay green.
+There are currently 266 JS tests and 39 Rust tests (10 native-camera library
+tests plus 29 app tests). Both suites must stay green. Treat these counts as a
+checkpoint, not a substitute for reading the runner output when tests are added.
 
 Test the **refusals and the boundaries**, not just the happy path. The valuable
 tests here assert that the code stays quiet on thin data, rejects malformed model
@@ -470,6 +472,12 @@ completed switchover. Internal-test builds show a start/stop/frame-counter card
 on Protection so the MacBook can prove Step 1 without DevTools. Leaving that
 screen stops the prototype before a real session can claim the camera.
 
+On 29 Aug 2026 Clemens verified this prototype on the target MacBook Air: the
+native frame sequence continued advancing both while the window was yellow-
+minimized and while it was red-closed/hidden, until he pressed Stop. This passes
+the Step 1 native-lifecycle test. It does **not** pass the recorded-frame parity
+gate and does not verify the still-WebView-backed live session score.
+
 The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
 to bundle extra binaries and the Universal build then fails for the arm64-only
 runner. `Cargo.toml` also keeps `default-run = "eudonomia-companion"` so no
@@ -488,8 +496,9 @@ The comparator refuses to pass while replay scores are absent. A three-image
 third-party smoke run found landmark mean/p95/max
 `0.001255/0.002782/0.004885`, yaw p95 `0.848°` and pitch p95 `0.280°`; this is
 not Clemens' parity result. His multi-minute clip, score parity, CPU/battery
-comparison and real minimize/close tests are still outstanding. **Do not
-switch the session source or claim the background bug fixed.**
+comparison, live-session minimize/close score test and hard camera-removal test
+are still outstanding. **Do not switch the session source or claim the
+background bug fixed.**
 
 ### Verifying it — the traps that already cost real time
 
