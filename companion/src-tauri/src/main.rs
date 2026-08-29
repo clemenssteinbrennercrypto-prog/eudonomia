@@ -16,6 +16,7 @@ mod output;
 use activity::{
     ActivityState, DebugState, SessionConfig, SharedActivity, SharedDebug, SharedSession,
 };
+use eudonomia_companion::native_camera;
 use native::NativeState;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -258,11 +259,22 @@ fn main() {
             native::install_blocking_helper,
             native::set_output_watch_folder,
             native::get_output_delta,
+            native_camera::get_native_camera_status,
+            native_camera::start_native_camera_prototype,
+            native_camera::stop_native_camera_prototype,
             pick_output_folder,
             install_native_update,
             quit_app
         ])
         .setup(move |app| {
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            {
+                let media_pipe_library = app.path().resource_dir()?.join("libmediapipe.dylib");
+                // The runtime crate has no download feature. Point it at the
+                // verified app resource before the prototype worker can start.
+                std::env::set_var("MEDIAPIPE_LIB", media_pipe_library);
+            }
+
             let native_state = NativeState {
                 activity: state.clone(),
                 session: session.clone(),
@@ -274,6 +286,7 @@ fn main() {
             };
 
             app.manage(native_state.clone());
+            app.manage(native_camera::NativeCameraState::default());
             activity::start_polling(native_state, app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;

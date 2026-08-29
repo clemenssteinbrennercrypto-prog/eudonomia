@@ -81,6 +81,28 @@ export function listenWindowLifecycle(onUpdate) {
   })
 }
 
+// Native camera migration prototype. This path is deliberately not connected
+// to live scoring until recorded-frame parity passes.
+export async function startNativeCameraPrototype() {
+  return invokeNative('start_native_camera_prototype')
+}
+
+export async function stopNativeCameraPrototype() {
+  return invokeNative('stop_native_camera_prototype')
+}
+
+export async function fetchNativeCameraStatus() {
+  return invokeNative('get_native_camera_status')
+}
+
+export function listenNativeCameraLandmarks(onUpdate) {
+  return listenNative('native-camera-landmarks', onUpdate)
+}
+
+export function listenNativeCameraStatus(onUpdate) {
+  return listenNative('native-camera-status', onUpdate)
+}
+
 export async function pushCompanionSession({
   active,
   endTs = 0,

@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchCompanionDebug,
+  fetchNativeCameraStatus,
   fetchOutputDelta,
   listenActivityUpdates,
+  listenNativeCameraLandmarks,
   normalizeCompanionSession,
   pushCompanionSession,
+  startNativeCameraPrototype,
+  stopNativeCameraPrototype,
 } from './nativeCompanion'
 
 afterEach(() => {
@@ -101,5 +105,29 @@ describe('native events and output', () => {
     globalThis.window = { __TAURI__: { core: { invoke } } }
 
     await expect(fetchOutputDelta()).resolves.toBeNull()
+  })
+
+  it('keeps native camera prototype traffic on Tauri commands and events', async () => {
+    const unlisten = vi.fn()
+    const invoke = vi.fn().mockResolvedValue({ state: 'running', frameSequence: 7 })
+    const listen = vi.fn(async (_name, handler) => {
+      handler({ payload: { frameSequence: 7, facePresent: true, landmarks: [] } })
+      return unlisten
+    })
+    globalThis.window = { __TAURI__: { core: { invoke }, event: { listen } } }
+    const onLandmarks = vi.fn()
+
+    await expect(startNativeCameraPrototype()).resolves.toMatchObject({ state: 'running' })
+    await expect(fetchNativeCameraStatus()).resolves.toMatchObject({ frameSequence: 7 })
+    await expect(stopNativeCameraPrototype()).resolves.toMatchObject({ state: 'running' })
+    await expect(listenNativeCameraLandmarks(onLandmarks)).resolves.toBe(unlisten)
+
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      'start_native_camera_prototype',
+      'get_native_camera_status',
+      'stop_native_camera_prototype',
+    ])
+    expect(listen).toHaveBeenCalledWith('native-camera-landmarks', expect.any(Function))
+    expect(onLandmarks).toHaveBeenCalledWith(expect.objectContaining({ frameSequence: 7 }))
   })
 })

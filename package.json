@@ -10,6 +10,7 @@
     "build:companion": "npm run refresh:companion-webui && cd companion/src-tauri && cargo tauri build",
     "preview": "vite preview",
     "mediapipe:copy": "node scripts/copy-mediapipe.mjs",
+    "camera:parity:compare": "node scripts/camera-parity/compare.mjs",
     "predev": "node scripts/copy-mediapipe.mjs",
     "prebuild": "node scripts/copy-mediapipe.mjs",
     "test": "vitest run",

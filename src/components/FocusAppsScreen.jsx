@@ -7,14 +7,21 @@ import {
 } from '../lib/activityReceiver'
 import {
   fetchCompanionDebug,
+  fetchNativeCameraStatus,
   installCompanionHelper,
+  listenNativeCameraLandmarks,
+  listenNativeCameraStatus,
   pushCompanionSession,
+  startNativeCameraPrototype,
+  stopNativeCameraPrototype,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
+const SHOW_NATIVE_CAMERA_PROTOTYPE = import.meta.env.DEV ||
+  import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL === 'test'
 
 function addUnique(list, value) {
   const app = value.trim()
@@ -616,6 +623,175 @@ function CompanionStatus() {
   )
 }
 
+function NativeCameraPrototypeStatus() {
+  const [camera, setCamera] = useState({
+    state: 'stopped',
+    fault: null,
+    frameSequence: 0,
+    lastFrameAtMs: null,
+  })
+  const [facePresent, setFacePresent] = useState(null)
+  const [landmarkCount, setLandmarkCount] = useState(0)
+  const [actionError, setActionError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    const unlisteners = []
+
+    const refresh = async () => {
+      try {
+        const status = await fetchNativeCameraStatus()
+        if (!cancelled && status) setCamera(status)
+      } catch (error) {
+        if (!cancelled) setActionError(String(error?.message || error))
+      }
+    }
+    const subscribe = async () => {
+      const [unlistenLandmarks, unlistenStatus] = await Promise.all([
+        listenNativeCameraLandmarks(payload => {
+          if (cancelled || !payload) return
+          setFacePresent(payload.facePresent === true)
+          setLandmarkCount(Array.isArray(payload.landmarks) ? payload.landmarks.length : 0)
+          setCamera(previous => ({
+            ...previous,
+            state: 'running',
+            fault: null,
+            frameSequence: payload.frameSequence,
+            lastFrameAtMs: payload.capturedAtMs,
+          }))
+        }),
+        listenNativeCameraStatus(payload => {
+          if (cancelled || !payload) return
+          setCamera(payload)
+          if (payload.state !== 'running') {
+            setFacePresent(null)
+            setLandmarkCount(0)
+          }
+        }),
+      ])
+      if (cancelled) {
+        unlistenLandmarks?.()
+        unlistenStatus?.()
+        return
+      }
+      unlisteners.push(unlistenLandmarks, unlistenStatus)
+    }
+
+    refresh()
+    subscribe()
+    const interval = setInterval(refresh, 1000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      unlisteners.forEach(unlisten => unlisten?.())
+      // This diagnostic must never remain a second camera owner after the user
+      // leaves Protection and starts a real session.
+      stopNativeCameraPrototype().catch(() => {})
+    }
+  }, [])
+
+  const start = async () => {
+    setActionError('')
+    try {
+      const status = await startNativeCameraPrototype()
+      if (!status) throw new Error('Native Companion unavailable')
+      setCamera(status)
+    } catch (error) {
+      setActionError(String(error?.message || error))
+    }
+  }
+
+  const stop = async () => {
+    setActionError('')
+    try {
+      const status = await stopNativeCameraPrototype()
+      if (status) {
+        setCamera(status)
+        setFacePresent(null)
+        setLandmarkCount(0)
+      }
+    } catch (error) {
+      setActionError(String(error?.message || error))
+    }
+  }
+
+  const active = camera.state === 'starting' || camera.state === 'running' ||
+    (camera.state === 'faulted' && camera.fault === 'no_frames')
+  const statusTone = camera.state === 'running'
+    ? 'var(--good)'
+    : camera.state === 'faulted'
+      ? 'var(--bad)'
+      : 'var(--warn)'
+
+  return (
+    <section style={{
+      background: 'rgba(122,152,255,0.06)',
+      border: '1px solid var(--line)',
+      borderRadius: 16,
+      padding: '14px 16px',
+      display: 'grid',
+      gap: 12,
+    }}>
+      <div>
+        <div style={{ color: 'var(--ultra-bright)', fontSize: 13, fontWeight: 900 }}>
+          Internal test · native camera prototype
+        </div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
+          Diagnostic only—this does not feed the session score. Start it outside a session,
+          note the frame number, minimize or close the window, then reopen it. A larger frame
+          number proves AVFoundation and native FaceMesh kept running.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ color: statusTone, fontSize: 12, fontWeight: 900 }}>
+          {camera.state || 'unknown'}{camera.fault ? ` · ${camera.fault}` : ''}
+        </span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 750 }}>
+          Frame {Number(camera.frameSequence || 0).toLocaleString()}
+        </span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 750 }}>
+          Face {facePresent === null ? '—' : facePresent ? `yes · ${landmarkCount} points` : 'no'}
+        </span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
+          Last native frame: {ageLabel(camera.lastFrameAtMs)}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={start}
+          disabled={active}
+          style={{
+            border: 'none', borderRadius: 10, padding: '8px 13px', fontFamily: 'inherit',
+            background: active ? 'var(--line)' : 'var(--ultra)', color: 'var(--text)',
+            cursor: active ? 'default' : 'pointer', fontSize: 12, fontWeight: 900,
+          }}
+        >
+          Start native capture
+        </button>
+        <button
+          type="button"
+          onClick={stop}
+          disabled={!active && camera.state !== 'faulted'}
+          style={{
+            border: '1px solid var(--line)', borderRadius: 10, padding: '8px 13px',
+            fontFamily: 'inherit', background: 'var(--surface)', color: 'var(--text-secondary)',
+            cursor: !active && camera.state !== 'faulted' ? 'default' : 'pointer',
+            fontSize: 12, fontWeight: 850,
+          }}
+        >
+          Stop
+        </button>
+      </div>
+      {actionError && (
+        <div style={{ color: 'var(--bad)', fontSize: 11, fontWeight: 800 }}>{actionError}</div>
+      )}
+    </section>
+  )
+}
+
 export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusModeEnabled }) {
   const initial = useMemo(() => loadFocusAppsConfig(), [])
   const [focusApps, setFocusApps] = useState(initial.focusApps)
@@ -972,6 +1148,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             )}
           </div>
         </div>
+
+        {SHOW_NATIVE_CAMERA_PROTOTYPE && <NativeCameraPrototypeStatus />}
 
         {/* Which engine reads your goal. Switchable at any time — the app works
             the same whichever is chosen, only better or worse informed, and any

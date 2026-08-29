@@ -435,6 +435,62 @@ scoring generation (as `focusMetric.js` does, §4.9) so old and new sessions sta
 separated rather than blended. That is Clemens' product decision, not an
 implementation detail.
 
+### Native prototype status (29 Aug 2026)
+
+The first native path now exists **in parallel** and is deliberately not a live
+session measurement source yet:
+
+- `AVCaptureSession` delivers 640×480 BGRA buffers to a bounded native queue.
+  Rust immediately copies them to in-memory RGB; no live frame is written to
+  disk or sent over IPC.
+- The models are byte slices from the exact `@mediapipe/face_mesh`
+  `0.4.1633559619` packed asset already used by the WebView: short-range face
+  detector plus `face_landmark_with_attention.tflite` (478 points). Do not
+  replace them with a modern Face Landmarker `.task`: its 256×256 unified-output
+  graph is not the same model contract.
+- The attention graph needs MediaPipe's three custom TFLite ops
+  (`Landmarks2TransformMatrix`, `TransformTensorBilinear`,
+  `TransformLandmarks`). The native loader registers the official V2 ops from
+  the pinned MediaPipe 0.10.35 arm64 library. That library is verified and
+  bundled at build time; the installed app never downloads it at runtime.
+- Detector letterboxing, weighted NMS, detection/landmark ROI tracking,
+  192×192 rotated crop, attention-region refinement and full-image projection
+  are native. There is no horizontal mirror in preprocessing. The resulting
+  signs are held by tests: `yawSigned > 0` is head-left and `irisH > 0` is
+  eyes-right.
+- Only landmarks/status cross Tauri events. If AVFoundation delivers no new
+  buffer for one second, the native ROI is reset and status becomes
+  `faulted/no_frames`; no previous landmarks are replayed.
+
+Prototype commands are `start_native_camera_prototype`,
+`stop_native_camera_prototype`, and `get_native_camera_status`; events are
+`native-camera-landmarks` and `native-camera-status`. The WebView scoring path
+still uses `getUserMedia`. Do not interpret the presence of these commands as a
+completed switchover. Internal-test builds show a start/stop/frame-counter card
+on Protection so the MacBook can prove Step 1 without DevTools. Leaving that
+screen stops the prototype before a real session can claim the camera.
+
+The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
+to bundle extra binaries and the Universal build then fails for the arm64-only
+runner. `Cargo.toml` also keeps `default-run = "eudonomia-companion"` so no
+future auxiliary target can silently become the app executable.
+
+The recorded-frame tools are:
+
+```bash
+cargo run --manifest-path companion/src-tauri/Cargo.toml \
+  --example native_camera_reference -- <frames-dir> <native.jsonl>
+# Run npm dev, open /native-camera-parity.html, select the same directory.
+npm run camera:parity:compare -- <facemesh-js.jsonl> <native.jsonl>
+```
+
+The comparator refuses to pass while replay scores are absent. A three-image
+third-party smoke run found landmark mean/p95/max
+`0.001255/0.002782/0.004885`, yaw p95 `0.848°` and pitch p95 `0.280°`; this is
+not Clemens' parity result. His multi-minute clip, score parity, CPU/battery
+comparison and real minimize/close tests are still outstanding. **Do not
+switch the session source or claim the background bug fixed.**
+
 ### Verifying it — the traps that already cost real time
 
 - **A green build proves nothing here.** The decisive test is: start a session,

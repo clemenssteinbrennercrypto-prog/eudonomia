@@ -6,3 +6,4 @@ dist/
 .claude/settings.local.json
 public/mediapipe/
 companion/webui/mediapipe/
+companion/src-tauri/resources/libmediapipe.dylib

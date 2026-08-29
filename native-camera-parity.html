@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eudonomia · Camera parity reference</title>
+    <script src="./mediapipe/face_mesh.js"></script>
+    <style>
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+      body { margin: 0; min-height: 100vh; background: #070b1a; color: #e7ecff; display: grid; place-items: center; }
+      main { width: min(680px, calc(100vw - 40px)); padding: 36px; border: 1px solid rgba(122,152,255,.25); border-radius: 18px; background: #0d1330; }
+      h1 { margin: 0 0 10px; font-size: 26px; }
+      p { color: #9eaad9; line-height: 1.5; }
+      label { display: block; margin: 24px 0 16px; padding: 18px; border: 1px dashed #6b8cff; border-radius: 12px; }
+      button { border: 0; border-radius: 10px; padding: 12px 18px; background: #2c46ff; color: white; font-weight: 700; cursor: pointer; }
+      button:disabled { opacity: .45; cursor: default; }
+      #status { min-height: 24px; margin-top: 18px; font-family: ui-monospace, monospace; color: #2fe3a8; }
+      .warning { color: #ffb340; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>FaceMesh.js parity reference</h1>
+      <p>Select the local reference-frame directory. Files are processed in name order by the unchanged WebView engine. Pixels and results stay in this browser; the only output is the JSONL file you download.</p>
+      <p class="warning">This page does not record frames and does not produce a score yet. A null score keeps the parity gate closed.</p>
+      <label>
+        Reference frames (PNG/JPEG)
+        <input id="frames" type="file" accept="image/png,image/jpeg" webkitdirectory multiple />
+      </label>
+      <button id="run" disabled>Run FaceMesh.js reference</button>
+      <div id="status" aria-live="polite"></div>
+    </main>
+    <script type="module" src="/src/nativeCameraParity.js"></script>
+  </body>
+</html>

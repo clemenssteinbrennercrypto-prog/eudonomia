@@ -36,6 +36,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": {
+      "resources/libmediapipe.dylib": "libmediapipe.dylib"
+    },
     "targets": [
       "dmg",
       "app"
