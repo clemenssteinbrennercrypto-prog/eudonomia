@@ -16,6 +16,10 @@ pub struct NativeState {
     pub debug: SharedDebug,
     pub companion_version: String,
     pub output_baseline: Arc<Mutex<Option<OutputSnapshot>>>,
+    // Held only while a session is active/paused — see app_nap.rs. Keeps
+    // macOS from App-Napping the live camera capture while the window is
+    // minimized or behind another app.
+    pub app_nap: Arc<Mutex<Option<crate::app_nap::AppNapGuard>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -202,6 +206,20 @@ fn apply_session_payload(
     let blocked_domains_count = blocked_domains.len();
     let allowed_apps_count = allowed_apps.len();
 
+    // A paused session can still resume any moment, so keep holding the
+    // App Nap exemption through "paused" too; only drop it once the
+    // session is genuinely over.
+    let should_hold_app_nap = session_state == "active" || session_state == "paused";
+    if let Ok(mut guard) = state.app_nap.lock() {
+        if should_hold_app_nap && guard.is_none() {
+            *guard = Some(crate::app_nap::begin("Eudonomia live focus session"));
+        } else if !should_hold_app_nap {
+            if let Some(token) = guard.take() {
+                crate::app_nap::end(token);
+            }
+        }
+    }
+
     let accepted = if let Ok(mut config) = state.session.lock() {
         // Preserve host_block_applied/applied_domains: they mirror real system
         // state and must survive repeated session updates.
@@ -375,6 +393,7 @@ mod tests {
             debug: Default::default(),
             companion_version: "0.1.2608221200".to_string(),
             output_baseline: Default::default(),
+            app_nap: Default::default(),
         }
     }
 
@@ -442,5 +461,55 @@ mod tests {
         assert_eq!(config.blocked_domains, vec!["reddit.com"]);
         assert!(config.host_block_applied);
         assert_eq!(config.applied_domains, vec!["old.example"]);
+    }
+
+    #[test]
+    fn app_nap_exemption_is_held_across_active_and_paused_and_released_on_end() {
+        let state = state();
+        assert!(state.app_nap.lock().unwrap().is_none());
+
+        apply_session_payload(
+            &state,
+            SessionPayload {
+                active: true,
+                end_ts: 200,
+                ..Default::default()
+            },
+            100,
+        );
+        assert!(
+            state.app_nap.lock().unwrap().is_some(),
+            "active session must hold the App Nap exemption"
+        );
+
+        // Paused (active=false, session_state="paused") must keep holding it —
+        // the session can resume any moment and the camera must stay live.
+        apply_session_payload(
+            &state,
+            SessionPayload {
+                active: false,
+                session_state: Some("paused".to_string()),
+                ..Default::default()
+            },
+            150,
+        );
+        assert!(
+            state.app_nap.lock().unwrap().is_some(),
+            "paused session must still hold the App Nap exemption"
+        );
+
+        apply_session_payload(
+            &state,
+            SessionPayload {
+                active: false,
+                session_state: Some("ended".to_string()),
+                ..Default::default()
+            },
+            160,
+        );
+        assert!(
+            state.app_nap.lock().unwrap().is_none(),
+            "ended session must release the App Nap exemption"
+        );
     }
 }

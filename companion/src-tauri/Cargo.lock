@@ -761,6 +761,8 @@ name = "eudonomia-companion"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "objc2",
+ "objc2-foundation",
  "semver",
  "serde",
  "serde_json",

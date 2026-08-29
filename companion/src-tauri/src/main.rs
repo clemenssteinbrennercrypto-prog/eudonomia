@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod activity;
+mod app_nap;
 mod blocking;
 mod native;
 mod output;
@@ -269,6 +270,7 @@ fn main() {
                 companion_version: app.package_info().version.to_string(),
                 // No folder is watched until the UI nominates one for a session.
                 output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+                app_nap: std::sync::Arc::new(std::sync::Mutex::new(None)),
             };
 
             app.manage(native_state.clone());
