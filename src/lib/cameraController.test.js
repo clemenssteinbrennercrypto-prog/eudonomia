@@ -21,6 +21,17 @@ function fakeVideo() {
   return { readyState: 4, srcObject: null, play: vi.fn(), pause: vi.fn() }
 }
 
+// A video element whose decoded picture advances only when told to — the
+// real behaviour of an off-screen WKWebView <video> is that currentTime
+// simply stops moving while the track stays 'live'.
+function fakeAdvancingVideo() {
+  return {
+    readyState: 4, srcObject: null, play: vi.fn(), pause: vi.fn(),
+    currentTime: 0,
+    advance(by = 0.1) { this.currentTime += by },
+  }
+}
+
 afterEach(() => vi.useRealTimers())
 
 describe('camera stream validity', () => {
@@ -109,6 +120,125 @@ describe('camera controller lifecycle', () => {
     stream.track.mute()
     await vi.advanceTimersByTimeAsync(21)
     expect(onTrackLost).toHaveBeenCalledWith('muted')
+    controller.stop()
+  })
+
+  // The bug this guards: a minimized window keeps the track 'live' and
+  // readyState at 4 while WebKit stops decoding, so the element hands out one
+  // frozen frame forever. Scoring it produced a flat, confident focus score
+  // for a user who was not even looking at the screen.
+  it('stops feeding frames once the decoded picture freezes', async () => {
+    vi.useFakeTimers()
+    const stream = fakeStream()
+    const video = fakeAdvancingVideo()
+    const onFrame = vi.fn()
+    const onTrackLost = vi.fn()
+    let clock = 0
+    const controller = createCameraController(video, {
+      width: 320, height: 240, onFrame, onTrackLost,
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      frameMs: 10, staleFrameMs: 100, now: () => clock,
+    })
+    await controller.start()
+
+    // Picture advancing: frames flow.
+    for (let i = 0; i < 5; i += 1) {
+      clock += 10
+      video.advance()
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    const framesWhileLive = onFrame.mock.calls.length
+    expect(framesWhileLive).toBeGreaterThan(0)
+
+    // Picture frozen (currentTime no longer moves) past the grace window.
+    for (let i = 0; i < 30; i += 1) {
+      clock += 10
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    const framesAfterFreeze = onFrame.mock.calls.length
+
+    expect(framesAfterFreeze).toBeGreaterThan(framesWhileLive) // grace allowed
+    expect(controller.diagnostics().pictureStale).toBe(true)
+
+    // Nothing more is sent while it stays frozen...
+    const settled = onFrame.mock.calls.length
+    for (let i = 0; i < 20; i += 1) {
+      clock += 10
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    expect(onFrame).toHaveBeenCalledTimes(settled)
+    // ...and a frozen picture is NOT a dead track: never reconnect for it.
+    expect(onTrackLost).not.toHaveBeenCalled()
+
+    controller.stop()
+  })
+
+  // SessionScreen relies on these transitions to withhold measurement without
+  // faulting. If they stop firing, a minimized window either scores a frozen
+  // frame or forces the user to resume by hand — both are regressions.
+  it('reports suspension transitions once each, never as track loss', async () => {
+    vi.useFakeTimers()
+    const stream = fakeStream()
+    const video = fakeAdvancingVideo()
+    const onPictureSuspended = vi.fn()
+    const onTrackLost = vi.fn()
+    let clock = 0
+    const controller = createCameraController(video, {
+      width: 320, height: 240, onFrame: vi.fn(), onTrackLost, onPictureSuspended,
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      frameMs: 10, staleFrameMs: 100, now: () => clock,
+    })
+    await controller.start()
+
+    for (let i = 0; i < 30; i += 1) {   // freeze
+      clock += 10
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    expect(onPictureSuspended).toHaveBeenCalledTimes(1)
+    expect(onPictureSuspended).toHaveBeenLastCalledWith(true)
+
+    for (let i = 0; i < 10; i += 1) {   // still frozen — no repeat calls
+      clock += 10
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    expect(onPictureSuspended).toHaveBeenCalledTimes(1)
+
+    video.advance()                     // picture returns
+    clock += 10
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onPictureSuspended).toHaveBeenCalledTimes(2)
+    expect(onPictureSuspended).toHaveBeenLastCalledWith(false)
+
+    expect(onTrackLost).not.toHaveBeenCalled()
+    controller.stop()
+  })
+
+  it('resumes feeding frames as soon as the picture advances again', async () => {
+    vi.useFakeTimers()
+    const stream = fakeStream()
+    const video = fakeAdvancingVideo()
+    const onFrame = vi.fn()
+    let clock = 0
+    const controller = createCameraController(video, {
+      width: 320, height: 240, onFrame, onTrackLost: vi.fn(),
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      frameMs: 10, staleFrameMs: 100, now: () => clock,
+    })
+    await controller.start()
+
+    for (let i = 0; i < 30; i += 1) {   // freeze
+      clock += 10
+      await vi.advanceTimersByTimeAsync(10)
+    }
+    expect(controller.diagnostics().pictureStale).toBe(true)
+    const frozenAt = onFrame.mock.calls.length
+
+    video.advance()                     // window visible again
+    clock += 10
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(onFrame.mock.calls.length).toBeGreaterThan(frozenAt)
+    expect(controller.diagnostics().pictureStale).toBe(false)
     controller.stop()
   })
 

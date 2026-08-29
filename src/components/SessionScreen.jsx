@@ -875,6 +875,12 @@ export default function SessionScreen({
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
   const cameraReadyRef         = useRef(false) // true only after MediaPipe returned a frame for the current generation
   const cameraGenerationRef    = useRef(0)
+  // The window is hidden/minimized and WebKit stopped decoding into the video
+  // element. The camera hardware is still ours and the stream is still live —
+  // only the picture is frozen. Measurement must stop (a still frame is not a
+  // measurement) but the stream must NOT be rebuilt and the session must NOT
+  // be paused, or ordinary minimizing would demand a manual resume.
+  const pictureSuspendedRef    = useRef(false)
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
@@ -2375,12 +2381,19 @@ export default function SessionScreen({
         // escalates a failed reconnect into a tracking fault.
         restartCamera()
       },
+      onPictureSuspended: (suspended) => {
+        if (cancelled) return
+        pictureSuspendedRef.current = suspended
+      },
     })
 
     camera.start().catch(raiseFault)
 
     return () => {
       cancelled = true
+      // The next generation starts from a live picture; never inherit this
+      // one's suspension state.
+      pictureSuspendedRef.current = false
       camera.stop()
       faceMesh.close?.()
     }
@@ -2397,7 +2410,11 @@ export default function SessionScreen({
       statsSampleAtRef.current = now
       if (!cameraReadyRef.current) {
         const connectingSince = lastRecoverAtRef.current || startTimeRef.current
-        if (!cameraFaultRef.current && now - connectingSince > CAMERA_STALL_MS) {
+        if (
+          !cameraFaultRef.current &&
+          !pictureSuspendedRef.current &&   // hidden window, not a dead camera
+          now - connectingSince > CAMERA_STALL_MS
+        ) {
           interruptCamera('no_frames')
         }
         return
@@ -2426,6 +2443,17 @@ export default function SessionScreen({
       if (healable && lastFrame && frameGapMs < CAMERA_STALL_MS) {
         cameraFaultRef.current = null            // frames arrived — self-heal
         setCameraFault(null)
+      } else if (pictureSuspendedRef.current) {
+        // Frames are absent because the window is hidden, not because the
+        // camera died. Withhold measurement (measuredSpanSeconds already
+        // does, since no frame was delivered) but never rebuild the stream
+        // and never fault: minimizing must not cost the user a manual resume.
+        goodStreakSecsRef.current = 0            // no streak survives a blind span (R4)
+        if (currentStreakRef.current !== 0) {
+          currentStreakRef.current = 0
+          setCurrentStreak(0)
+        }
+        return
       } else if (
         !cameraFaultRef.current &&
         lastFrame &&                             // only once frames HAVE flowed (never mid cold-start)
