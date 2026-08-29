@@ -357,3 +357,101 @@ decisions for Clemens, not bugs to fix unasked:
 - **Nothing brings the user back.** There is no notification, reminder or
   scheduling anywhere in the codebase. A focus tracker without re-engagement is
   a one-week app.
+
+---
+
+## 10. Camera measurement architecture — decided 29 Aug 2026
+
+**Read this before touching anything camera-related. It ends a chain of four
+failed fixes.**
+
+### The finding
+
+Background attention measurement cannot be built on `getUserMedia` inside the
+WebView on macOS. Not "is buggy" — cannot.
+
+- macOS **does** allow background camera capture. The green camera indicator
+  stays lit while the window is minimized, and the iOS-style restrictions
+  (`videoDeviceNotAvailableInBackground`, the `multitasking-camera-access`
+  entitlement) are iOS-only concepts. Zoom, OBS and Photo Booth capture while
+  backgrounded.
+- **WKWebView** is what stops delivering frames once its view is not in a
+  visible window. Apple's own forum guidance is explicit that native capture
+  keeps working in the background while the WebView's does not, and the iOS
+  workaround (`UIBackgroundModes`) has no macOS equivalent.
+- Observable signature: the track stays `readyState === 'live'` and
+  `video.readyState` stays 4, but WebKit stops decoding, so the element hands
+  out **the same frozen frame forever**. MediaPipe returns identical landmarks
+  every time, producing a flat, confident score for a user who has walked away.
+
+### What was tried and did not fix it — do not retry
+
+- `28be656` — native `CloseRequested` uses `minimize()` instead of `hide()`.
+  Worth keeping (a hidden window is fully unmapped), but not the cause.
+- `de67f03` — App Nap exemption via `NSProcessInfo` activity token, held while
+  a session is active or paused. Worth keeping, not the cause.
+- `7f645a5` — `"backgroundThrottling": "disabled"` (WebKit
+  `inactiveSchedulingPolicy = none`). **Tested on macOS 15.7.3: no effect.** It
+  governs task scheduling, not the capture pipeline.
+- `ea2bdfc` — stale-frame guard: `video.currentTime` is watched, and a picture
+  frozen for over a second is no longer fed to MediaPipe. **This one is
+  load-bearing and must survive any rewrite.** It is not a fix for the capture
+  problem; it is the guarantee that a frozen frame is never scored as a
+  measurement. Removing it silently reintroduces fabricated focus time.
+
+### The decision
+
+Camera capture and landmark inference move into the native Rust process
+(AVFoundation + the **same** MediaPipe TFLite models). The WebView becomes
+display only. Rationale for using the same models rather than Apple Vision:
+
+- Vision gives 76 landmarks and one pupil point per eye; MediaPipe with
+  `refineLandmarks: true` gives 468 landmarks plus five iris points per eye.
+- Every scoring constant, the gaze geometry and the yaw/iris sign conventions
+  (§4.7) are tuned to MediaPipe's geometry, several with research citations.
+- Above all, §5's *"One ruler, every day"*: changing the landmark engine changes
+  the ruler and makes all existing history incomparable.
+
+Feeding native frames into the WebView so MediaPipe.js could stay was
+considered and rejected: measurement would still depend on WebKit keeping JS
+alive while hidden, which is the exact class of dependency that caused this.
+
+### The non-negotiable gate
+
+The risk is **not** the model — identical weights give identical output. The
+risk is the **preprocessing** (ROI crop, rotation, scale before landmark
+inference). A slight mismatch shifts every coordinate, and the tuned thresholds
+quietly come to mean something else. Nobody notices; the history silently rots.
+
+Therefore **nothing switches over until parity is measured and passed**, on
+identical recorded frames, reporting mean/p95/max for landmark delta, yaw and
+pitch, per-frame score, and above all **classification parity against
+`FOCUSED_SCORE` (target ≥ 99% of frames)** — that threshold is what produces
+`focusedSeconds`, i.e. the reported focus percentage (§4.8).
+
+If parity cannot be reached: do not weaken the thresholds and do not switch
+quietly. Either keep aligning the preprocessing, or introduce a new **versioned**
+scoring generation (as `focusMetric.js` does, §4.9) so old and new sessions stay
+separated rather than blended. That is Clemens' product decision, not an
+implementation detail.
+
+### Verifying it — the traps that already cost real time
+
+- **A green build proves nothing here.** The decisive test is: start a session,
+  fixate, note the score, minimize, deliberately look away and move around for
+  ~2 min, reopen. **The score must have changed.** A flat line means unfixed.
+  This was reported as fixed three times before that test was actually run.
+- **Two machines.** Builds happen on a Mac Mini, which has **no camera**. The
+  test above is impossible there. The parity harness runs on recorded frames and
+  needs no camera; the real camera test and the reference-frame recording belong
+  to Clemens on his MacBook Air. Never report the camera test as passed from a
+  machine that cannot perform it.
+- **Do not drive the app with AppleScript/System Events.** The test build and
+  the installed app share the process name `eudonomia-companion`, and System
+  Events routes clicks by OS focus rather than by the PID addressed — even with
+  a distinct bundle identifier. This started two real sessions in Clemens'
+  production app during the investigation. Test manually.
+- **Check the release channel before claiming something is live.** Confirm the
+  assets under the `internal-test` tag are actually new and that Clemens sees
+  the matching build id. Testing against the wrong build has happened more than
+  once (§2).
