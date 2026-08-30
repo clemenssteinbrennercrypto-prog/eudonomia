@@ -7,6 +7,7 @@ import { describeFocusMetricRejection } from '../lib/focusMetric'
 import { durationFromSession } from '../lib/sessionDuration'
 
 function fmt(seconds) {
+  seconds = Math.round(seconds)
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -25,6 +26,7 @@ function motivational(pct, distractionEvents, actualSeconds) {
 }
 
 function fmtSecond(s) {
+  s = Math.round(s)
   const m = Math.floor(s / 60)
   const sec = s % 60
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
