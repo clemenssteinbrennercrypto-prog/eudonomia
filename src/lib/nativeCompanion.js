@@ -81,15 +81,18 @@ export function listenWindowLifecycle(onUpdate) {
   })
 }
 
-// Native camera migration prototype. This path is deliberately not connected
-// to live scoring until recorded-frame parity passes.
-export async function startNativeCameraPrototype() {
+// Native camera capture/inference stays in the Rust process. The prototype
+// diagnostic and the opt-in V2 session source deliberately share one owner.
+export async function startNativeCameraMeasurement() {
   return invokeNative('start_native_camera_prototype')
 }
 
-export async function stopNativeCameraPrototype() {
+export async function stopNativeCameraMeasurement() {
   return invokeNative('stop_native_camera_prototype')
 }
+
+export const startNativeCameraPrototype = startNativeCameraMeasurement
+export const stopNativeCameraPrototype = stopNativeCameraMeasurement
 
 export async function fetchNativeCameraStatus() {
   return invokeNative('get_native_camera_status')

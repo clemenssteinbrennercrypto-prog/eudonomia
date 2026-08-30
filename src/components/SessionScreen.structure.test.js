@@ -55,10 +55,20 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source).toContain('!cameraReadyRef.current || Date.now() - lastDeliveredFrameAtRef.current > CAMERA_RECOVER_MS')
   })
 
-  it('pauses timer accumulation on a camera fault', () => {
+  it('withholds accumulation on a camera fault without manufacturing a user pause', () => {
     const faultBranch = source.indexOf('if (cameraFaultRef.current) {')
     const calibrationBranch = source.indexOf('if (calibrating) {', faultBranch)
     expect(source.slice(faultBranch, calibrationBranch)).toContain('interruptCamera(cameraFaultRef.current)')
+    const interruptStart = source.indexOf('const interruptCamera = useCallback')
+    const lifecycleStart = source.indexOf('// Window focus', interruptStart)
+    expect(source.slice(interruptStart, lifecycleStart)).not.toContain('pauseSession')
+  })
+
+  it('feeds validated native landmarks into the unchanged scoring callback', () => {
+    expect(source).toContain('nativeLandmarksForScoring(payload)')
+    expect(source).toContain('{ multiFaceLandmarks: landmarks.length ? [landmarks] : [] },')
+    expect(source).toContain('payload.capturedAtMs')
+    expect(source).toContain('attentionMeasurementSource: cameraMeasurement.id')
   })
 
   it('requests a screen wake lock while the session status is mounted', () => {

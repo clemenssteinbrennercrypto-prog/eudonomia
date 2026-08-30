@@ -1,8 +1,9 @@
 # Native camera prototype and parity gate
 
-Status: prototype only, 29 August 2026. The session still measures through the
-WebView. Nothing in this document is evidence that the background-camera bug is
-fixed in the installed app.
+Status: opt-in native scoring V2 for internal builds, 30 August 2026. Exact
+parity with the historical WebGL ruler failed, so V2 is deliberately separate.
+Nothing in this document is evidence that the background-camera bug is fixed
+until the real MacBook live-session tests pass.
 
 ## Exact model and runtime provenance
 
@@ -78,17 +79,17 @@ face-presence flag and optional 478 landmarks—never pixels. A one-element fram
 queue drops work when inference falls behind instead of growing memory.
 
 Internal-test builds expose these commands as a diagnostic card on the
-Protection / Focus Apps screen. It is not present in public builds and is not
-connected to session scoring. Start it outside a session, note the native frame
-sequence, minimize or close the window, then reopen; the sequence must have
-advanced. Leaving the screen stops the prototype so it cannot remain a second
-camera owner when a normal session begins.
+Protection / Focus Apps screen. Start it outside a session, note the native
+frame sequence, minimize or close the window, then reopen; the sequence must
+have advanced. Leaving the screen stops the diagnostic so it cannot remain a
+second camera owner when an opt-in V2 session begins. The separate toggle on
+that card controls whether new sessions use V2; the buttons themselves do not.
 
 On 29 August 2026 Clemens ran that diagnostic on the target MacBook Air. The
 frame sequence continued advancing until Stop during both yellow minimize and
 red close/hide. This is the required Step 1 proof that native capture and
-inference survive those window states. It is not a live-score verification:
-sessions still use the WebView source pending the parity gate.
+inference survive those window states. It was not a live-score verification;
+the later V2 session wiring still requires its own test.
 
 AVFoundation callbacks are the native frame heartbeat. After one second
 without a real callback the prototype emits `faulted/no_frames`, clears the ROI
@@ -201,7 +202,8 @@ The following hypotheses were checked without weakening any threshold:
 #### Backend, runtime and ROI isolation
 
 Further full-clip runs used the same 4,376 PNGs and the same shared score
-replay. These are diagnostic comparisons; none authorizes a source switch.
+replay. These diagnostic comparisons did not pass or authorize a V1 source
+switch; the later V2 decision is recorded below.
 
 | Comparison | Landmark mean / p95 / max | Yaw p95 | Score p95 | Focused parity |
 |---|---:|---:|---:|---:|
@@ -232,10 +234,13 @@ WebGL-specific pixel-to-tensor/inference path, especially during motion blur,
 large pose and partial face loss; it is not attributed to one unmeasured
 floating-point operation.
 
-The correct product state is unchanged: **the source does not switch**.
-Continue reproducing the historical WebGL execution path, or obtain Clemens'
-decision for a separately versioned scoring generation; never relax the gate
-or blend the histories.
+On 30 August Clemens chose the honest alternative allowed by the failed gate: a
+separately versioned native scoring generation. The internal source toggle now
+writes `attentionScoringVersion: 2` and
+`attentionMeasurementSource: native_mediapipe_v2`; release builds cannot enable
+it. Stable V1 daily history and calibration refuse these sessions instead of
+blending the rulers. The measured failure remains part of V2's provenance; it
+was not turned into a pass and no threshold was changed.
 
 ### Early smoke result (not the parity gate)
 
@@ -256,15 +261,10 @@ repository and can be deleted after review.
 
 ## Still outstanding
 
-- Continue aligning the native execution path, or obtain Clemens' explicit
-  product decision for a separately versioned scoring generation. Do not
-  switch the source with the measured 97.2806% classification parity.
 - Measure CPU/energy impact for old and native paths on the same MacBook.
-- Run the live-session yellow-minimize and red-close score tests after the
-  parity-gated source switch.
+- Run the opt-in V2 live-session yellow-minimize and red-close score tests.
 - Remove/occupy the real camera and prove session coverage becomes absent.
-- Only after all gates pass: add a source flag and feed native landmarks into
-  the existing JavaScript scorer.
+- Decide whether V2 becomes the stable generation only after those live tests.
 
 System sleep, lid close and camera contention remain unverified. No claim about
 those cases is warranted yet.

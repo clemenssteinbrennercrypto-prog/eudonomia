@@ -40,7 +40,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 270 tests — must stay green
+npm test           # vitest, currently 279 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -272,7 +272,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 270 JS tests and 40 Rust tests (11 native-camera library
+There are currently 279 JS tests and 40 Rust tests (11 native-camera library
 tests plus 29 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -437,10 +437,19 @@ scoring generation (as `focusMetric.js` does, §4.9) so old and new sessions sta
 separated rather than blended. That is Clemens' product decision, not an
 implementation detail.
 
-### Native prototype status (29 Aug 2026)
+That product decision was made on 30 Aug 2026 after the isolation work below:
+use the native path as an explicit **V2 scoring generation**. Internal-test and
+dev builds expose an opt-in toggle; release builds cannot enable it. V2 sessions
+store `attentionScoringVersion: 2` and
+`attentionMeasurementSource: native_mediapipe_v2`. The stable V1 daily ledger,
+history aggregates and personal calibration refuse V2 rather than blending the
+two rulers. Do not remove that separation. Promotion of V2 history is a later
+product decision after the real MacBook tests, not a reason to relabel V2 as V1.
 
-The first native path now exists **in parallel** and is deliberately not a live
-session measurement source yet:
+### Native V2 status (30 Aug 2026)
+
+The native path exists **in parallel** and is an opt-in internal V2 live-session
+source; stable/release sessions remain on V1:
 
 - `AVCaptureSession` delivers 640×480 BGRA buffers to a bounded native queue.
   Rust immediately copies them to in-memory RGB; no live frame is written to
@@ -464,19 +473,21 @@ session measurement source yet:
   buffer for one second, the native ROI is reset and status becomes
   `faulted/no_frames`; no previous landmarks are replayed.
 
-Prototype commands are `start_native_camera_prototype`,
+The underlying compatibility commands remain `start_native_camera_prototype`,
 `stop_native_camera_prototype`, and `get_native_camera_status`; events are
-`native-camera-landmarks` and `native-camera-status`. The WebView scoring path
-still uses `getUserMedia`. Do not interpret the presence of these commands as a
-completed switchover. Internal-test builds show a start/stop/frame-counter card
-on Protection so the MacBook can prove Step 1 without DevTools. Leaving that
-screen stops the prototype before a real session can claim the camera.
+`native-camera-landmarks` and `native-camera-status`. Internal-test builds show
+both the V2 session-source toggle and the start/stop/frame-counter diagnostic on
+Protection. Leaving that screen stops the diagnostic before a session claims
+the camera. With the toggle on, native landmarks feed the unchanged JavaScript
+scorer through Tauri events; live pixels never cross IPC, and `getUserMedia` is
+not acquired. Turning the toggle off restores WebView V1.
 
 On 29 Aug 2026 Clemens verified this prototype on the target MacBook Air: the
 native frame sequence continued advancing both while the window was yellow-
 minimized and while it was red-closed/hidden, until he pressed Stop. This passes
-the Step 1 native-lifecycle test. It does **not** pass the recorded-frame parity
-gate and does not verify the still-WebView-backed live session score.
+the Step 1 native-lifecycle test. It does **not** verify the V2 live session
+score; yellow-minimize, red-close and camera-loss tests remain user work on the
+MacBook.
 
 The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
 to bundle extra binaries and the Universal build then fails for the arm64-only
@@ -509,9 +520,10 @@ failure, and that FaceMesh.js WebGL versus FaceMesh.js CPU itself misses the
 score/classification gates (`4.000` p95, `98.8574%`). Identical weights do not
 make execution backends interchangeable. Full numbers and eliminated
 hypotheses are in
-`docs/native-camera-prototype.md`. CPU/battery, live-session minimize/close
-score and hard camera-removal tests remain outstanding. **Do not switch the
-session source or claim the background bug fixed.**
+`docs/native-camera-prototype.md`. The failed parity is why V2 must stay
+versioned. CPU/battery, live-session minimize/close score and hard
+camera-removal tests remain outstanding. **Do not claim the background bug
+fixed until Clemens runs those tests.**
 
 ### Verifying it — the traps that already cost real time
 

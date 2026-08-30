@@ -426,6 +426,8 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
     outputEvidence       = null,
     phaseInterventions   = null,
     focusMetricRejection = null,
+    attentionScoringVersion = null,
+    attentionMeasurementSource = null,
   } = sessionData
 
   // The verdict — did the work match the intention? Runs once, after the fact,
@@ -490,11 +492,13 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
   // Personal best detection
   const isPersonalBest = useMemo(() => {
     if (focusPct == null) return false
-    const prevSessions = loadSessions().filter(s => s.id !== id)
+    const generation = attentionScoringVersion ?? 1
+    const prevSessions = loadSessions().filter(s =>
+      s.id !== id && (s.attentionScoringVersion ?? 1) === generation)
     if (prevSessions.length === 0) return false
     const prevMax = Math.max(...prevSessions.map(s => sessionFocusPct(s) ?? 0))
     return focusPct > prevMax
-  }, [id, focusPct])
+  }, [attentionScoringVersion, id, focusPct])
   const [copied, setCopied] = useState(false)
   const [shared, setShared] = useState(false)
 
@@ -647,6 +651,11 @@ export default function EndScreen({ sessionData, onRestart, onShowHistory }) {
               {focusPct == null ? '--' : `${focusPct}%`}
             </span>
             <span className="stat-label">{focusPct == null ? 'focus not measured' : 'time above threshold'}</span>
+            {attentionMeasurementSource === 'native_mediapipe_v2' && (
+              <span style={{ fontSize: 10, color: 'var(--ultra-bright)', fontWeight: 800, marginTop: 4, display: 'block', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Native ruler · V2
+              </span>
+            )}
             {isPersonalBest && (
               <span style={{ fontSize: 12, color: 'var(--good)', fontWeight: 600, marginTop: 4, display: 'block' }}>
                 New best 🏆

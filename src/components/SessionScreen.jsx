@@ -9,9 +9,13 @@ import {
   fetchCompanionSession,
   fetchOutputDelta,
   listenCompanionSession,
+  listenNativeCameraLandmarks,
+  listenNativeCameraStatus,
   listenWindowLifecycle,
   pushCompanionSession,
   setOutputWatchFolder,
+  startNativeCameraMeasurement,
+  stopNativeCameraMeasurement,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, loadFocusAppsConfig, loadOutputFolder, loadStrictMode } from '../lib/storage'
@@ -39,7 +43,7 @@ import {
   getCircadianFactor,
   headVariance,
 } from '../lib/attention'
-import { ATTENTION_SCORING_VERSION, TIMER_THROTTLING_EVIDENCE_VERSION } from '../lib/focusMetric'
+import { TIMER_THROTTLING_EVIDENCE_VERSION } from '../lib/focusMetric'
 import {
   blockingLeaseSeconds,
   hasTimeLimit as isTimed,
@@ -52,6 +56,12 @@ import {
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
 import { createCameraController } from '../lib/cameraController'
+import {
+  cameraMeasurementProfile,
+  loadNativeCameraV2Enabled,
+  nativeCameraFaultFor,
+  nativeLandmarksForScoring,
+} from '../lib/cameraMeasurement'
 import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/sessionWindowLifecycle'
 import {
   BLINK_WIN_MS,
@@ -785,6 +795,11 @@ export default function SessionScreen({
   focusModeEnabled = true,
   onEnd,
 }) {
+  const nativeCameraV2Enabled = useMemo(loadNativeCameraV2Enabled, [])
+  const cameraMeasurement = useMemo(
+    () => cameraMeasurementProfile(nativeCameraV2Enabled),
+    [nativeCameraV2Enabled]
+  )
   const hasTimeLimit = isTimed(duration)
   const totalSeconds = hasTimeLimit ? duration * 60 : null
   const sessionIntent = useMemo(
@@ -874,8 +889,11 @@ export default function SessionScreen({
   const lastFrameAtRef         = useRef(0)     // last time the camera pipeline delivered a frame
   const lastDeliveredFrameAtRef = useRef(0)    // real frame only; camera restart grace must never count as measurement
   const cameraFaultRef         = useRef(null)  // mirrors cameraFault for the interval callback
+  const trackingFaultObservedRef = useRef(false)
   const cameraReadyRef         = useRef(false) // true only after MediaPipe returned a frame for the current generation
   const cameraGenerationRef    = useRef(0)
+  const nativeFrameSequenceRef = useRef(0)
+  const nativeRestartPendingRef = useRef(false)
   // The window is hidden/minimized and WebKit stopped decoding into the video
   // element. The camera hardware is still ours and the stream is still live —
   // only the picture is frozen. Measurement must stop (a still frame is not a
@@ -1078,8 +1096,9 @@ export default function SessionScreen({
       cameraFaultRef.current = null
       setCameraFault(null)
     }
+    if (nativeCameraV2Enabled) nativeRestartPendingRef.current = true
     setCameraEpoch(e => e + 1)
-  }, [])
+  }, [nativeCameraV2Enabled])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
@@ -1125,17 +1144,32 @@ export default function SessionScreen({
 
   const interruptCamera = useCallback((fault = null) => {
     if (sessionEndedRef.current) return
-    explicitResumeRequiredRef.current = true
     cameraReadyRef.current = false
     lastFrameAtRef.current = 0
     lastDeliveredFrameAtRef.current = 0
     setCameraStatus(fault ? 'fault' : 'interrupted')
     if (fault) {
+      trackingFaultObservedRef.current = true
       cameraFaultRef.current = fault
       setCameraFault(fault)
     }
-    void pauseSession()
-  }, [pauseSession])
+    // A camera outage withholds measurement; it is not a user pause. Keep the
+    // wall clock and native protection running, and erase every stateful hold
+    // that could otherwise leak a pre-fault bonus or penalty into recovery.
+    goodStreakSecsRef.current = 0
+    currentStreakRef.current = 0
+    sustainedGoodMsRef.current = 0
+    scoreLowSinceRef.current = null
+    headDownStartRef.current = null
+    headTurnLeftStartRef.current = null
+    headTurnRightStartRef.current = null
+    eyesClosedSinceRef.current = null
+    yawnStartRef.current = null
+    phoneStartRef.current = null
+    distractionDownStartRef.current = null
+    lookingUpStartRef.current = null
+    setCurrentStreak(0)
+  }, [])
 
   // Window focus, visibility and the red close button are presentation state,
   // not session state. The webcam must keep tracking while Eudonomia is behind
@@ -1173,7 +1207,7 @@ export default function SessionScreen({
       if (document.visibilityState !== 'visible' || sessionEndedRef.current) return
       closeBackgroundInterval()
       const lastFrame = lastFrameAtRef.current
-      if (lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
+      if (!nativeCameraV2Enabled && lastFrame && Date.now() - lastFrame > CAMERA_RECOVER_MS) {
         // Returning from a throttled/hidden WebView should heal transparently.
         // Do not turn the user's still-active session into a manual pause.
         restartCamera(true)
@@ -1188,7 +1222,7 @@ export default function SessionScreen({
       onHidden,
       onVisible: onWake,
     })
-  }, [restartCamera])
+  }, [nativeCameraV2Enabled, restartCamera])
 
   useEffect(() => {
     if (!initialCameraPending || cameraStatus !== 'ready' || sessionEndedRef.current) return
@@ -1350,7 +1384,7 @@ export default function SessionScreen({
     // of saying something false.
     const measuredSeconds = measuredSecondsRef.current
     const hasMeasurement = measuredSeconds > 0
-    const trackingFaulted = !!cameraFaultRef.current
+    const trackingFaulted = trackingFaultObservedRef.current || !!cameraFaultRef.current
     const avgFocusScore = hasMeasurement
       ? Math.round(scoreSumRef.current / measuredSeconds)
       : null
@@ -1360,7 +1394,13 @@ export default function SessionScreen({
     onEnd({
       startedAt:            startTimeRef.current,
       endedAt,
-      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      attentionScoringVersion: cameraMeasurement.attentionScoringVersion,
+      attentionMeasurementSource: cameraMeasurement.id,
+      attentionModel: nativeCameraV2Enabled ? {
+        package: cameraMeasurement.modelPackage,
+        landmarkModelSha256: cameraMeasurement.landmarkModelSha256,
+        detectorModelSha256: cameraMeasurement.detectorModelSha256,
+      } : null,
       attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
       plannedDuration:      duration,
       energyLevel,
@@ -1406,7 +1446,16 @@ export default function SessionScreen({
         intervals: [...timerThrottlingIntervalsRef.current],
       },
     })
-  }, [accumulateMeasurement, duration, energyLevel, onEnd, pushBlockingState, stopAmbient])
+  }, [
+    accumulateMeasurement,
+    cameraMeasurement,
+    duration,
+    energyLevel,
+    nativeCameraV2Enabled,
+    onEnd,
+    pushBlockingState,
+    stopAmbient,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -1531,10 +1580,12 @@ export default function SessionScreen({
   }, [endSession, pauseSession, resumeSession])
 
   // ── Per-frame analysis ────────────────────────────────────────────────────
-  const handleFaceResults = useCallback((results) => {
+  const handleFaceResults = useCallback((results, capturedAt = Date.now()) => {
     // Frame heartbeat: proof that the camera pipeline is actually delivering.
     // Recorded before the pause/end guard so a paused session isn't judged stalled.
-    const deliveredAt = Date.now()
+    const deliveredAt = Number.isFinite(capturedAt)
+      ? Math.min(capturedAt, Date.now())
+      : Date.now()
     lastFrameAtRef.current = deliveredAt
     lastDeliveredFrameAtRef.current = deliveredAt
     if (sessionEndedRef.current || isPausedRef.current) return
@@ -2318,7 +2369,82 @@ export default function SessionScreen({
 
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!videoRef.current || sessionEndedRef.current) return
+    if (sessionEndedRef.current) return
+    if (nativeCameraV2Enabled) {
+      let cancelled = false
+      const generation = cameraGenerationRef.current + 1
+      const unlisteners = []
+      cameraGenerationRef.current = generation
+      nativeFrameSequenceRef.current = 0
+      nativeRestartPendingRef.current = false
+      setCameraStatus('connecting')
+
+      const markReady = () => {
+        if (cameraReadyRef.current) return
+        cameraReadyRef.current = true
+        cameraRecoverTriesRef.current = 0
+        cameraFaultRef.current = null
+        setCameraFault(null)
+        setCameraStatus('ready')
+      }
+      const onLandmarks = payload => {
+        if (cancelled || generation !== cameraGenerationRef.current || sessionEndedRef.current) return
+        const landmarks = nativeLandmarksForScoring(payload)
+        if (landmarks == null) {
+          interruptCamera('library')
+          return
+        }
+        if (payload.frameSequence <= nativeFrameSequenceRef.current) return
+        nativeFrameSequenceRef.current = payload.frameSequence
+        handleFaceResults(
+          { multiFaceLandmarks: landmarks.length ? [landmarks] : [] },
+          payload.capturedAtMs
+        )
+        markReady()
+      }
+      const onStatus = status => {
+        if (cancelled || generation !== cameraGenerationRef.current || !status) return
+        const fault = nativeCameraFaultFor(status)
+        if (fault) interruptCamera(fault)
+      }
+
+      const start = async () => {
+        const [unlistenLandmarks, unlistenStatus] = await Promise.all([
+          listenNativeCameraLandmarks(onLandmarks),
+          listenNativeCameraStatus(onStatus),
+        ])
+        if (cancelled) {
+          unlistenLandmarks?.()
+          unlistenStatus?.()
+          return
+        }
+        unlisteners.push(unlistenLandmarks, unlistenStatus)
+        try {
+          const status = await startNativeCameraMeasurement()
+          if (cancelled) {
+            if (generation === cameraGenerationRef.current) await stopNativeCameraMeasurement()
+            return
+          }
+          if (!status) interruptCamera('library')
+          else onStatus(status)
+        } catch {
+          if (!cancelled) interruptCamera('library')
+        }
+      }
+      start()
+
+      return () => {
+        cancelled = true
+        unlisteners.forEach(unlisten => unlisten?.())
+        // A generation restart only replaces WebView listeners. The Rust worker
+        // is either recoverably waiting for AVFoundation or already finished;
+        // start() handles both without a stop/start command race. Real unmount
+        // still relinquishes camera ownership.
+        if (!nativeRestartPendingRef.current) stopNativeCameraMeasurement().catch(() => {})
+      }
+    }
+
+    if (!videoRef.current) return
     // FaceMesh is bundled and served from this app's own origin (see
     // index.html). If that local runtime fails to load, do not run on with a
     // frozen default score — surface it instead. We no longer need MediaPipe's
@@ -2400,7 +2526,7 @@ export default function SessionScreen({
     }
     // cameraEpoch is the restart trigger: bumping it tears this down and
     // rebuilds a fresh FaceMesh + camera against a live MediaStream.
-  }, [cameraEpoch, handleFaceResults, interruptCamera, restartCamera])
+  }, [cameraEpoch, handleFaceResults, interruptCamera, nativeCameraV2Enabled, restartCamera])
 
   // ── Countdown + per-second stats ──────────────────────────────────────────
   useEffect(() => {
@@ -2409,6 +2535,10 @@ export default function SessionScreen({
       const now = Date.now()
       const previousSampleAt = statsSampleAtRef.current
       statsSampleAtRef.current = now
+      if (!isPausedRef.current) {
+        const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
+        setTimeLeft(sessionTimerSeconds(duration, elapsedExact))
+      }
       if (!cameraReadyRef.current) {
         const connectingSince = lastRecoverAtRef.current || startTimeRef.current
         if (
@@ -2424,7 +2554,6 @@ export default function SessionScreen({
 
       const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
       const elapsedSecs = Math.round(elapsedExact)
-      setTimeLeft(sessionTimerSeconds(duration, elapsedExact))
       const calibrating = elapsedSecs < CALIBRATION_SECS
 
       // ── Camera health ────────────────────────────────────────────────────
@@ -2471,9 +2600,9 @@ export default function SessionScreen({
         setCameraFault(fault)
       }
       if (cameraFaultRef.current) {
-        // No trustworthy signal: pause the session itself. This prevents both
-        // focus accumulation and wall-clock progress until a new pipeline has
-        // delivered a frame and the user explicitly resumes.
+        // No trustworthy signal: withhold measurement, but never manufacture a
+        // user pause. Blocking and wall-clock progress remain active while a
+        // fresh native frame is allowed to heal tracking automatically.
         goodStreakSecsRef.current = 0        // don't let a streak survive a blackout (R4)
         if (currentStreakRef.current !== 0) {
           currentStreakRef.current = 0
@@ -2623,7 +2752,7 @@ export default function SessionScreen({
           backdropFilter: 'blur(3px)',
         }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: 'var(--warn)', textTransform: 'uppercase' }}>
-            Tracking paused
+            Tracking unavailable
           </span>
           <p style={{ fontSize: 21, fontWeight: 500, color: 'var(--text)', margin: 0, maxWidth: 460, lineHeight: 1.4 }}>
             {CAMERA_FAULT_COPY[cameraFault]?.title || CAMERA_FAULT_COPY.stalled.title}
@@ -2993,23 +3122,45 @@ export default function SessionScreen({
           </div>
         )}
         <div style={{ position: 'relative', display: 'inline-block' }}>
-          <video
-            ref={videoRef}
-            className="webcam-feed"
-            onClick={() => !camHidden && setCamSize(s => s === 'full' ? 'mini' : 'full')}
-            style={{
-              opacity: camHidden ? 0 : 1,
-              width: camHidden ? 0 : camSize === 'mini' ? 32 : 160,
-              height: camHidden ? 0 : camSize === 'mini' ? 32 : 120,
-              borderRadius: camSize === 'mini' ? '50%' : 8,
-              marginBottom: camHidden ? 0 : undefined,
-              transition: 'opacity 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease',
-              display: 'block',
-              cursor: camHidden ? 'default' : 'pointer',
-              objectFit: 'cover',
-            }}
-            autoPlay muted playsInline
-          />
+          {nativeCameraV2Enabled ? (
+            <div
+              className="webcam-feed"
+              onClick={() => !camHidden && setCamSize(s => s === 'full' ? 'mini' : 'full')}
+              style={{
+                opacity: camHidden ? 0 : 1,
+                width: camHidden ? 0 : camSize === 'mini' ? 32 : 160,
+                height: camHidden ? 0 : camSize === 'mini' ? 32 : 120,
+                borderRadius: camSize === 'mini' ? '50%' : 8,
+                marginBottom: camHidden ? 0 : undefined,
+                transition: 'opacity 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease',
+                display: 'grid', placeItems: 'center',
+                cursor: camHidden ? 'default' : 'pointer',
+                background: 'rgba(7,11,26,0.92)',
+                color: 'var(--text-muted)', fontSize: 10, fontWeight: 800,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}
+            >
+              {camSize === 'full' ? 'Native V2' : ''}
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              className="webcam-feed"
+              onClick={() => !camHidden && setCamSize(s => s === 'full' ? 'mini' : 'full')}
+              style={{
+                opacity: camHidden ? 0 : 1,
+                width: camHidden ? 0 : camSize === 'mini' ? 32 : 160,
+                height: camHidden ? 0 : camSize === 'mini' ? 32 : 120,
+                borderRadius: camSize === 'mini' ? '50%' : 8,
+                marginBottom: camHidden ? 0 : undefined,
+                transition: 'opacity 0.25s ease, width 0.25s ease, height 0.25s ease, border-radius 0.25s ease',
+                display: 'block',
+                cursor: camHidden ? 'default' : 'pointer',
+                objectFit: 'cover',
+              }}
+              autoPlay muted playsInline
+            />
+          )}
           {!camHidden && camSize === 'full' && !isCalibrating && gazePos && (
             <svg
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}

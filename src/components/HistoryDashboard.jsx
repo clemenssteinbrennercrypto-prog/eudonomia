@@ -7,6 +7,7 @@ import {
   aggregateFocusMeasurements,
   buildHistoryTrend,
   hasMeasuredFocus,
+  isComparableFocusGeneration,
   measuredSessionDayStreak,
   sessionFocusMeasurement,
   sessionFocusPct,
@@ -29,7 +30,7 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
       const d = new Date(s.timestamp)
       if (d.getFullYear() !== year || d.getMonth() !== month) continue
       const key = d.getDate()
-      if (!sessionFocusMeasurement(s)) continue
+      if (!isComparableFocusGeneration(s) || !sessionFocusMeasurement(s)) continue
       if (!map[key]) map[key] = []
       map[key].push(s)
     }
@@ -314,7 +315,9 @@ function SessionNote({ session, onNoteUpdate }) {
 // ── Session card ──────────────────────────────────────────────────────────────
 function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNoteUpdate }) {
   const focusPct = sessionFocusPct(session)
-  const prevFocusPct = sessionFocusPct(prevSession)
+  const sameGeneration = prevSession &&
+    (prevSession.attentionScoringVersion ?? 1) === (session.attentionScoringVersion ?? 1)
+  const prevFocusPct = sameGeneration ? sessionFocusPct(prevSession) : null
   const color = focusColor(focusPct)
   const outcomeLabel = session.goalOutcome === 'yes'
     ? 'Goal reached'
@@ -387,6 +390,9 @@ function SessionCard({ session, prevSession, onDelete, onExpand, expanded, onNot
         <span>{session.distractionEvents ?? 0} alert{(session.distractionEvents ?? 0) !== 1 ? 's' : ''}</span>
         <span>{fmt(session.longestFocusedStreak)} streak</span>
         {session.energyLevel && <span>{session.energyLevel} energy</span>}
+        {session.attentionMeasurementSource === 'native_mediapipe_v2' && (
+          <span style={{ color: 'var(--ultra-bright)', fontWeight: 800 }}>Native ruler · V2</span>
+        )}
         {outcomeLabel && <span>{outcomeLabel}</span>}
         {session.completed && <span style={{ color: 'var(--good)' }}>Completed</span>}
       </div>

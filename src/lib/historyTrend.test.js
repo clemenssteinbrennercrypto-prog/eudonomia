@@ -69,6 +69,18 @@ describe('session focus measurement', () => {
     })
   })
 
+  it('does not blend the opt-in native V2 ruler into V1 history', () => {
+    const webviewV1 = sessionAt(NOW, 80, { attentionScoringVersion: 1 })
+    const nativeV2 = sessionAt(NOW, 10, { attentionScoringVersion: 2 })
+    expect(sessionFocusPct(nativeV2)).toBe(10)
+    expect(aggregateFocusMeasurements([webviewV1, nativeV2])).toMatchObject({
+      sessionCount: 1,
+      focusPct: 80,
+    })
+    expect(buildHistoryTrend([webviewV1, nativeV2], { range: 'week', now: NOW }).buckets[0])
+      .toMatchObject({ count: 1, avgFocus: 80 })
+  })
+
   it('keeps yesterday\'s measured streak alive while today is still pending', () => {
     const monday = new Date(2026, 7, 17, 12)
     const tuesday = new Date(2026, 7, 18, 12)

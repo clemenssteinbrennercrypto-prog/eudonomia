@@ -1,9 +1,19 @@
+import { WEBVIEW_CAMERA_MEASUREMENT } from './cameraMeasurement'
+
 export const HISTORY_TREND_RANGES = [
   { value: 'week', label: 'Week' },
   { value: '30days', label: '30 days' },
   { value: 'year', label: '1 year' },
   { value: 'all', label: 'All' },
 ]
+
+// V2 is intentionally a different ruler. Until it is promoted after the live
+// gate, cross-session history and calibration remain on the historical WebView
+// generation. Missing versions are pre-versioning V1 records.
+export function isComparableFocusGeneration(session) {
+  return session?.attentionScoringVersion == null ||
+    session.attentionScoringVersion === WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+}
 
 export function sessionFocusMeasurement(session) {
   if (!session || session.scoreMeasured === false) return null
@@ -41,7 +51,7 @@ export function sessionFocusPct(session) {
 }
 
 export function aggregateFocusMeasurements(sessions) {
-  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safeSessions = Array.isArray(sessions) ? sessions.filter(isComparableFocusGeneration) : []
   const totals = safeSessions.reduce((sum, session) => {
     const measurement = sessionFocusMeasurement(session)
     if (!measurement) return sum
@@ -64,6 +74,7 @@ export function measuredSessionDayStreak(sessions, now = Date.now()) {
   if (Number.isNaN(current.getTime())) return 0
   const safeSessions = Array.isArray(sessions) ? sessions : []
   const activeDays = new Set(safeSessions
+    .filter(isComparableFocusGeneration)
     .filter(hasMeasuredFocus)
     .map(session => {
       const date = new Date(session.timestamp)
@@ -206,7 +217,9 @@ function createBuckets(start, endExclusive, unit) {
 }
 
 export function buildHistoryTrend(sessions, options = {}) {
-  const safeSessions = Array.isArray(sessions) ? sessions.filter(Boolean) : []
+  const safeSessions = Array.isArray(sessions)
+    ? sessions.filter(Boolean).filter(isComparableFocusGeneration)
+    : []
   const range = HISTORY_TREND_RANGES.some(option => option.value === options.range)
     ? options.range
     : 'week'
