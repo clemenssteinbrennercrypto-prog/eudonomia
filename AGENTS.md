@@ -40,7 +40,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 266 tests — must stay green
+npm test           # vitest, currently 270 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -48,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 39 tests (10 library + 29 app)
+cargo test         # currently 40 tests (11 library + 29 app)
 cargo check
 ```
 
@@ -272,7 +272,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 266 JS tests and 39 Rust tests (10 native-camera library
+There are currently 270 JS tests and 40 Rust tests (11 native-camera library
 tests plus 29 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -492,13 +492,17 @@ cargo run --manifest-path companion/src-tauri/Cargo.toml \
 npm run camera:parity:compare -- <facemesh-js.jsonl> <native.jsonl>
 ```
 
-The comparator refuses to pass while replay scores are absent. A three-image
-third-party smoke run found landmark mean/p95/max
-`0.001255/0.002782/0.004885`, yaw p95 `0.848°` and pitch p95 `0.280°`; this is
-not Clemens' parity result. His multi-minute clip, score parity, CPU/battery
-comparison, live-session minimize/close score test and hard camera-removal test
-are still outstanding. **Do not switch the session source or claim the
-background bug fixed.**
+The comparator replays both landmark streams through the same camera-only JS
+scorer. Clemens' 4:51 / 4,376-frame run on 30 Aug 2026 **failed** the fixed
+gate: landmark mean/p95/max `0.001283/0.004537/0.088413`, yaw p95 `2.311°`,
+pitch p95 `0.627°`, score p95 `6.799`, and focused-classification parity
+`97.2806%` (119 mismatches). Replicated landmark-crop borders match the legacy
+graph and improved the result, but lossless PNG, isolated re-detection, Metal,
+WebGL-mediump emulation and PNG colour-profile normalization did not close the
+remaining gap. Full numbers and eliminated hypotheses are in
+`docs/native-camera-prototype.md`. CPU/battery, live-session minimize/close
+score and hard camera-removal tests remain outstanding. **Do not switch the
+session source or claim the background bug fixed.**
 
 ### Verifying it — the traps that already cost real time
 

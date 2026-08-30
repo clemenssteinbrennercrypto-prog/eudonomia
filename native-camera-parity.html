@@ -22,7 +22,7 @@
     <main>
       <h1>FaceMesh.js parity reference</h1>
       <p>Select the local reference-frame directory. Files are processed in name order by the unchanged WebView engine. Pixels and results stay in this browser; the only output is the JSONL file you download.</p>
-      <p class="warning">This page does not record frames and does not produce a score yet. A null score keeps the parity gate closed.</p>
+      <p class="warning">This page does not record frames. It dumps landmarks only; the comparator replays both streams through the same camera-only JavaScript scorer.</p>
       <label>
         Reference frames (PNG/JPEG)
         <input id="frames" type="file" accept="image/png,image/jpeg" webkitdirectory multiple />

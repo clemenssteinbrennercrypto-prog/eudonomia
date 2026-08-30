@@ -1,10 +1,11 @@
 //! Legacy FaceMesh preprocessing and postprocessing.
 //!
-//! The constants and transforms in this file mirror MediaPipe v0.8.9's
+//! The constants and transforms in this file mirror MediaPipe v0.8.8's
 //! `face_detection_short_range_common.pbtxt`, `face_landmark_cpu.pbtxt`, and
 //! `tensors_to_face_landmarks_with_attention.pbtxt`. That release matches the
-//! timestamped @mediapipe/face_mesh package used by the WebView. Do not tune
-//! these values to make parity pass; a mismatch belongs in the transform.
+//! 6 October 2021 build timestamp of the @mediapipe/face_mesh package used by
+//! the WebView. Do not tune these values to make parity pass; a mismatch
+//! belongs in the transform.
 
 use serde::Serialize;
 
@@ -90,6 +91,12 @@ struct Detection {
     values: [f32; 16],
 }
 
+#[derive(Clone, Copy)]
+enum BorderMode {
+    Zero,
+    Replicate,
+}
+
 pub(super) struct NativeFacePipeline {
     detector: NativeModel,
     landmarker: NativeModel,
@@ -127,7 +134,18 @@ impl NativeFacePipeline {
             },
         };
 
-        let tensor = image_to_tensor(frame, roi, LANDMARK_SIZE, 0.0, 1.0);
+        // The legacy face-landmark graph leaves border_mode unset, whose
+        // documented ImageToTensor default is BORDER_REPLICATE. This matters
+        // when a tracked face ROI crosses an image edge: zero-filling changes
+        // the model input and can produce confident but incompatible geometry.
+        let tensor = image_to_tensor(
+            frame,
+            roi,
+            LANDMARK_SIZE,
+            0.0,
+            1.0,
+            BorderMode::Replicate,
+        );
         let outputs = self.landmarker.invoke_f32(&tensor)?;
         let face_score = sigmoid(outputs[6][0]);
         if face_score < FACE_CONFIDENCE_THRESHOLD {
@@ -142,7 +160,16 @@ impl NativeFacePipeline {
 
     fn detect_roi(&mut self, frame: &RgbFrame) -> Result<Option<Roi>, String> {
         let full_image_roi = square_long_roi(frame.width, frame.height);
-        let tensor = image_to_tensor(frame, full_image_roi, DETECTOR_SIZE, -1.0, 1.0);
+        // Unlike the landmark graph, the detector explicitly requests
+        // BORDER_ZERO for its aspect-ratio letterbox.
+        let tensor = image_to_tensor(
+            frame,
+            full_image_roi,
+            DETECTOR_SIZE,
+            -1.0,
+            1.0,
+            BorderMode::Zero,
+        );
         let outputs = self.detector.invoke_f32(&tensor)?;
         let detections = decode_detections(&outputs, full_image_roi)?;
         Ok(weighted_nms(detections)
@@ -188,6 +215,7 @@ fn image_to_tensor(
     output_size: usize,
     range_min: f32,
     range_max: f32,
+    border_mode: BorderMode,
 ) -> Vec<f32> {
     let mut tensor = vec![0.0; output_size * output_size * 3];
     let sin = roi.rotation.sin();
@@ -204,7 +232,7 @@ fn image_to_tensor(
                 roi.y_center + relative_x * roi.width * sin + relative_y * roi.height * cos;
             let source_x = source_x_normalized * frame.width as f32 - 0.5;
             let source_y = source_y_normalized * frame.height as f32 - 0.5;
-            let rgb = bilinear_rgb(frame, source_x, source_y);
+            let rgb = bilinear_rgb(frame, source_x, source_y, border_mode);
             let offset = (output_y * output_size + output_x) * 3;
             for channel in 0..3 {
                 tensor[offset + channel] = rgb[channel] * range_scale + range_min;
@@ -214,7 +242,14 @@ fn image_to_tensor(
     tensor
 }
 
-fn bilinear_rgb(frame: &RgbFrame, x: f32, y: f32) -> [f32; 3] {
+fn bilinear_rgb(frame: &RgbFrame, x: f32, y: f32, border_mode: BorderMode) -> [f32; 3] {
+    let (x, y) = match border_mode {
+        BorderMode::Zero => (x, y),
+        BorderMode::Replicate => (
+            x.clamp(0.0, frame.width.saturating_sub(1) as f32),
+            y.clamp(0.0, frame.height.saturating_sub(1) as f32),
+        ),
+    };
     let x0 = x.floor() as isize;
     let y0 = y.floor() as isize;
     let x_fraction = x - x0 as f32;
@@ -577,7 +612,14 @@ mod tests {
             height: 1,
             pixels: vec![255, 0, 0, 0, 0, 255],
         };
-        let tensor = image_to_tensor(&frame, square_long_roi(2, 1), 2, 0.0, 1.0);
+        let tensor = image_to_tensor(
+            &frame,
+            square_long_roi(2, 1),
+            2,
+            0.0,
+            1.0,
+            BorderMode::Zero,
+        );
         assert_eq!(tensor.len(), 12);
         // Both rows straddle the image boundary equally. Red remains on the
         // left and blue on the right; no mirror is introduced by preprocessing.
@@ -585,6 +627,26 @@ mod tests {
         assert!(tensor[5] > tensor[3]);
         assert_eq!(tensor[0], tensor[6]);
         assert_eq!(tensor[5], tensor[11]);
+    }
+
+    #[test]
+    fn landmark_crop_replicates_pixels_beyond_the_image_edge() {
+        let frame = RgbFrame {
+            width: 2,
+            height: 1,
+            pixels: vec![255, 0, 0, 0, 0, 255],
+        };
+        let roi = Roi {
+            x_center: 0.0,
+            y_center: 0.5,
+            width: 1.0,
+            height: 1.0,
+            rotation: 0.0,
+        };
+        let tensor = image_to_tensor(&frame, roi, 2, 0.0, 1.0, BorderMode::Replicate);
+        assert_eq!(tensor.len(), 12);
+        assert_eq!(&tensor[0..3], &[1.0, 0.0, 0.0]);
+        assert_eq!(&tensor[6..9], &[1.0, 0.0, 0.0]);
     }
 
     #[test]

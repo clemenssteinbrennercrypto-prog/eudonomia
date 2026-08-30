@@ -11,7 +11,7 @@ import {
   isProductiveDownwardRole,
   isScreenRole,
   normalizeWorkspaceObjects,
-} from './workspaceObjects'
+} from './workspaceObjects.js'
 
 // ── FaceMesh landmark indices ────────────────────────────────────────────────
 export const RIGHT_EYE   = [33,  160, 158, 133, 153, 144]

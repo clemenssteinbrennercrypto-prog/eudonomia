@@ -53,6 +53,27 @@ import {
 } from '../lib/attentionSampling'
 import { createCameraController } from '../lib/cameraController'
 import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/sessionWindowLifecycle'
+import {
+  BLINK_WIN_MS,
+  CONF_UNCERTAIN_MAX,
+  DISTRACTION_DOWN_HOLD_MS,
+  EARLY_MICROSLEEP_MS,
+  EAR_PROLONGED_CLOSE,
+  EAR_RECALIB_INTERVAL,
+  EYES_OFF_HOLD_SECS,
+  FACE_ABSENT_HOLD_MS,
+  HEAD_DOWN_HOLD,
+  HEAD_DRIFT_THRESH,
+  HEAD_DRIFT_WIN_MS,
+  HEAD_TURN_HOLD,
+  IRIS_OFF_H,
+  MAR_YAWN,
+  PERCLOS_WIN_MS,
+  PHONE_HOLD_MS,
+  PROLONGED_CLOSE_MS,
+  UNCERTAIN_HOLD_MS,
+  YAWN_HOLD_MS,
+} from '../lib/cameraScoringConstants'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // Science sources:
@@ -65,34 +86,16 @@ import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/se
 //    Wierwille (1994) 60s was for highway driving. 30s validated in PMC10108649.
 const EAR_BLINK              = 0.20
 const EAR_HEAVY              = 0.15
-const EAR_PROLONGED_CLOSE    = 0.18
-const PROLONGED_CLOSE_MS     = 1500  // confirmed fatigue/microsleep penalty threshold
-const EARLY_MICROSLEEP_MS    = 800   // 500ms+ closures = drowsiness signal (PMC3836343)
-const MAR_YAWN               = 0.50  // Weng et al. MDPI 2022: 0.5 in consecutive frames
-const YAWN_HOLD_MS           = 1500
-const BLINK_WIN_MS           = 20_000
-const PERCLOS_WIN_MS         = 30_000 // shortened: 30s catches fatigue faster for desk work
 const PITCH_UP_THRESH     = 15
-const PHONE_HOLD_MS       = 4000
-const DISTRACTION_DOWN_HOLD_MS = 2500  // hold time before a classified distraction-device
-                                        // glance triggers the severe penalty (avoid 1-frame flicker)
-const HEAD_DOWN_HOLD      = 10
-const HEAD_TURN_HOLD      = 5
-const FACE_ABSENT_HOLD_MS = 4000
-const HEAD_DRIFT_WIN_MS   = 3000
-const HEAD_DRIFT_THRESH   = 0.035
 const ALERT_COOLDOWN_MS      = 60_000
 const GENTLE_REMINDER_DELAY_MS = 60_000
 const GENTLE_REMINDER_COOLDOWN_MS = 5 * 60_000
 const GENTLE_REMINDER_SEVERE_BUFFER_MS = 15_000
 const SCORE_UPDATE_SECS      = 5
-const EAR_RECALIB_INTERVAL   = 600_000  // re-calibrate EAR baseline every 10 min
 // Real horizontal gaze: iris deflection past the personal neutral, normalized by
 // eye width. Beyond normal on-screen scanning (~±0.10) but not full deflection.
 // Conservative to protect trust — combined with a 3-frame deadzone + hold, a
 // side glance or saccade never triggers a false "distracted".
-const IRIS_OFF_H             = 0.07   // eye deflection past neutral = off-screen (live data: neutral ~0.00, full look-away ~0.10)
-const EYES_OFF_HOLD_SECS     = 1.5    // sustained eyes-off before the (mild) penalty
 const CAMERA_STALL_MS        = 10_000 // no camera frame for this long = pipeline fault (generous: MediaPipe WASM cold-start)
 const CAMERA_RECOVER_MS      = 3_000  // frames stopped AFTER having flowed = try rebuilding the pipeline (sleep/wake)
 const CAMERA_RECOVER_TRIES   = 3      // silent rebuild attempts before surfacing a fault
@@ -122,8 +125,6 @@ const CAMERA_FAULT_COPY = {
     hint: 'The camera was allowed, but the local tracking engine never began analysing. Try again; if it persists, reinstall or rebuild the app bundle.',
   },
 }
-const CONF_UNCERTAIN_MAX     = 0.55   // detection confidence at/below this = tracking unreliable (Stage 2 trust)
-const UNCERTAIN_HOLD_MS      = 700    // sustained low confidence before surfacing "signal weak" (anti-flicker)
 const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000

@@ -46,8 +46,8 @@ as interchangeable would silently change the ruler.
 
 ## Native preprocessing
 
-The implementation follows the MediaPipe v0.8.9 graphs matching the timestamp
-of the npm package:
+The implementation follows the MediaPipe v0.8.8 graphs from 6 October 2021,
+matching the timestamp embedded in the npm package version:
 
 1. Convert the unmirrored AVFoundation BGRA frame to in-memory RGB.
 2. Letterbox the complete frame to 128×128 with zero border and range `[-1, 1]`.
@@ -55,7 +55,9 @@ of the npm package:
    NMS at IoU 0.3.
 4. Build a square-long face ROI from the two eye keypoints, scale it by 1.5 and
    rotate it so the eyes are horizontal.
-5. Bilinearly sample that ROI to 192×192 in range `[0, 1]`.
+5. Bilinearly sample that ROI to 192×192 in range `[0, 1]`, replicating edge
+   pixels when the ROI leaves the image. `BORDER_REPLICATE` is the legacy
+   landmark graph's default; only the detector explicitly uses zero border.
 6. Decode the 468-point mesh and replace lips/eyes with the Attention tensors;
    append five points per iris and inherit iris depth from the matching eye.
 7. Project x/y/z back into normalized full-frame coordinates. A successful
@@ -132,10 +134,67 @@ derived signal. Fixed gates are landmark p95 `< 0.005`, landmark max `< 0.02`,
 yaw/pitch p95 `< 1.5°`, score p95 `< 2`, and 99% `FOCUSED_SCORE`
 classification parity.
 
-Both current runners deliberately write `attentionScore: null`: the exact
-stateful session scorer has not yet been extracted into a shared replay unit.
-The comparator therefore exits non-zero even if landmark deltas are zero. This
-is intentional—landmark parity alone may not authorize a source switch.
+Both recorded-frame runners deliberately write `attentionScore: null`. The
+comparator feeds both landmark streams through the same camera-only JavaScript
+replay: 20-second personal calibration, rolling EAR/PERCLOS/head histories,
+all existing holds and deadzones, trust gating, smoothing and the sustained
+focus ramp. Activity scoring is disabled equally for both streams because it
+is not an input to camera parity. Stateful constants are imported from the
+same module as `SessionScreen`; `FOCUSED_SCORE` comes directly from
+`attention.js`. Unit tests pin calibration, determinism and the distinction
+between an explicitly unmeasured frame and a measured no-face result.
+
+### Clemens' recorded parity result (30 August 2026)
+
+Clemens recorded 4:51 of representative movement, blinks, deliberate gaze,
+partial face loss and lighting variation on the target MacBook Air. The clip
+was converted locally to 4,376 lossless 640×480 PNG frames at 15 fps. Both
+engines processed those files in name order; no frame or result entered the
+repository.
+
+| Metric | Samples | Mean absolute delta | p95 | Maximum | Gate |
+|---|---:|---:|---:|---:|---|
+| 3D normalized landmark distance | 1,978,920 | 0.001283 | 0.004537 | 0.088413 | **Fail:** max must be `< 0.02` |
+| `yawSigned` (degrees) | 4,140 | 0.595 | 2.311 | 32.959 | **Fail:** p95 must be `< 1.5°` |
+| `pitchDeg` (degrees) | 4,140 | 0.125 | 0.627 | 7.958 | Pass |
+| right EAR | 4,140 | 0.011982 | 0.034130 | 0.459698 | Diagnostic |
+| left EAR | 4,140 | 0.015339 | 0.036166 | 2.023709 | Diagnostic |
+| average EAR | 4,140 | 0.010360 | 0.028123 | 0.992915 | Diagnostic |
+| `irisH` | 4,140 | 0.012227 | 0.026947 | 1.346746 | Diagnostic |
+| attention score | 4,376 | 1.413 | 6.799 | 23.070 | **Fail:** p95 must be `< 2` |
+
+Face-presence parity was 99.8629%: six frames disagreed, concentrated where
+the face was deliberately moved partly out of frame. Focused classification
+parity was **97.2806%** (119 of 4,376 frames disagreed), below the required
+99%. This is the decisive failure because it would change `focusedSeconds`.
+
+The landmark p95 passes narrowly, while edge/out-of-frame maxima, saturated
+large-yaw estimates and stateful score consequences do not. Changing the
+landmark crop from zero padding to the graph's required replicated border
+improved mean, p95 and maximum from approximately
+`0.00155 / 0.00483 / 0.18596` to the values above, but did not pass the gate.
+
+The following hypotheses were checked without weakening any threshold:
+
+- Lossy JPEG input was replaced by lossless PNG; the result remained outside
+  the gate.
+- Tracked sequences and isolated re-detection frames both showed deltas, so
+  the result is not only accumulated ROI drift.
+- The native Metal delegate and a WebGL-mediump emulation did not improve the
+  result and were reverted.
+- The PNGs' BT.709 profile was changed to sRGB without changing decoded RGB
+  checksums. Safari produced the exact same parity statistics, excluding image
+  colour-profile conversion as the explanation.
+- The legacy v0.8.8 detector/landmark graphs, ROI transforms, refinement maps,
+  projection, thresholds and lack of graph smoothing were checked against the
+  official source.
+
+The remaining measured difference is consistent with WebGL versus native CPU
+model execution becoming amplified at pose/score boundaries; this is an
+inference from the eliminated causes, not proof of one exact floating-point
+operation. The correct product state is therefore unchanged: **the source does
+not switch**. Continue matching the execution path, or choose a separately
+versioned scoring generation; never relax the gate or blend the histories.
 
 ### Early smoke result (not the parity gate)
 
@@ -151,14 +210,14 @@ still images do not exercise sustained tracking, blinks, deliberate gaze
 changes, lighting changes, score holds, or the focused classification boundary.
 They must not be reported as Clemens' required multi-minute parity result.
 
-Reference frames and JSONL outputs are local user data. They must stay outside
-the repository and can be deleted after review.
+Reference frames and JSONL outputs are local user data. They remain outside the
+repository and can be deleted after review.
 
 ## Still outstanding
 
-- Record Clemens' multi-minute reference sequence on the MacBook Air.
-- Extract/replay the exact stateful scorer for both landmark streams.
-- Publish the actual parity table; align preprocessing if any fixed gate fails.
+- Continue aligning the native execution path, or obtain Clemens' explicit
+  product decision for a separately versioned scoring generation. Do not
+  switch the source with the measured 97.2806% classification parity.
 - Measure CPU/energy impact for old and native paths on the same MacBook.
 - Run the live-session yellow-minimize and red-close score tests after the
   parity-gated source switch.

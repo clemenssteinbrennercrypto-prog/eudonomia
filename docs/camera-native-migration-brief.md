@@ -160,9 +160,13 @@ versioned scoring generation; that is a product decision.
 5. Remove the JavaScript camera path only after real-use confirmation.
 
 Step 1 is implemented and its minimize/close lifecycle was verified on the
-target MacBook. Step 2 is implemented as a harness but is still blocked on the
-multi-minute user recording and stateful score replay. No live-session source
-switch has occurred.
+target MacBook. Step 2 has now run on Clemens' 4:51 reference clip, including a
+shared stateful JavaScript score replay, and **failed** the fixed gate:
+landmark p95/max `0.004537 / 0.088413`, yaw p95 `2.311°`, pitch p95 `0.627°`,
+score p95 `6.799`, and focused classification parity `97.2806%` (119 of 4,376
+frames differed). No live-session source switch has occurred. See
+`docs/native-camera-prototype.md` for the complete table and eliminated
+preprocessing hypotheses.
 
 ## 9. Two-machine boundary
 
@@ -184,13 +188,13 @@ the tag and the displayed build ID before asking the user to test.
 
 ## 10. Verification
 
-Current automated baseline after the native prototype:
+Current automated baseline after the parity replay:
 
 ```bash
-npm test -- --run                 # 266 tests
+npm test -- --run                 # 270 tests
 npm run build
 cd companion/src-tauri
-cargo test                        # 39 tests: 10 library + 29 app
+cargo test                        # 40 tests: 11 library + 29 app
 cargo check
 ```
 
