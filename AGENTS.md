@@ -48,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 40 tests (11 library + 29 app)
+cargo test         # currently 41 tests (12 library + 29 app)
 cargo check
 ```
 
@@ -272,7 +272,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 279 JS tests and 40 Rust tests (11 native-camera library
+There are currently 279 JS tests and 41 Rust tests (12 native-camera library
 tests plus 29 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -485,9 +485,21 @@ not acquired. Turning the toggle off restores WebView V1.
 On 29 Aug 2026 Clemens verified this prototype on the target MacBook Air: the
 native frame sequence continued advancing both while the window was yellow-
 minimized and while it was red-closed/hidden, until he pressed Stop. This passes
-the Step 1 native-lifecycle test. It does **not** verify the V2 live session
-score; yellow-minimize, red-close and camera-loss tests remain user work on the
-MacBook.
+the Step 1 native-lifecycle test. At that point it did **not** verify the V2 live
+session score; the later result is recorded below.
+
+On 31 Aug 2026 Clemens then verified the opt-in V2 live session on that MacBook:
+the score/timeline changed after deliberate movement and looking away during
+both yellow minimize and red close/hide, no window action created a pause or
+manual-resume requirement, and the saved debrief identified the native V2
+ruler. This passes the live minimize/close gate. It does not cover hard camera
+loss, system sleep/lid close, or CPU/energy impact; keep those claims open.
+
+V2 deliberately shows a non-video `Native V2` tile. Sending preview pixels over
+Tauri would violate the native-process frame boundary and add encoding/copying
+cost. If a live preview returns, implement it as a native
+`AVCaptureVideoPreviewLayer` sharing the existing `AVCaptureSession`, never as
+frame bytes emitted to React.
 
 The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
 to bundle extra binaries and the Universal build then fails for the arm64-only
@@ -521,9 +533,9 @@ score/classification gates (`4.000` p95, `98.8574%`). Identical weights do not
 make execution backends interchangeable. Full numbers and eliminated
 hypotheses are in
 `docs/native-camera-prototype.md`. The failed parity is why V2 must stay
-versioned. CPU/battery, live-session minimize/close score and hard
-camera-removal tests remain outstanding. **Do not claim the background bug
-fixed until Clemens runs those tests.**
+versioned. The live minimize/close gate has since passed as recorded above;
+CPU/battery and hard camera-removal tests remain outstanding. Do not claim
+those separate boundaries have passed.
 
 ### Verifying it — the traps that already cost real time
 

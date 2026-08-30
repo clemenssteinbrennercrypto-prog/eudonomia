@@ -262,9 +262,30 @@ repository and can be deleted after review.
 ## Still outstanding
 
 - Measure CPU/energy impact for old and native paths on the same MacBook.
-- Run the opt-in V2 live-session yellow-minimize and red-close score tests.
 - Remove/occupy the real camera and prove session coverage becomes absent.
-- Decide whether V2 becomes the stable generation only after those live tests.
+- Decide whether V2 becomes the stable generation only after the remaining
+  energy and camera-loss tests.
 
 System sleep, lid close and camera contention remain unverified. No claim about
 those cases is warranted yet.
+
+### Live V2 result (31 August 2026)
+
+Clemens verified the internal V2 session source on the target MacBook Air. With
+deliberate looking away and movement while the window was yellow-minimized and
+red-closed/hidden, the reopened score and timeline changed; neither window
+action paused the session or required a manual resume. The debrief carried the
+native V2 ruler label. This passes the live minimize/close gate that the earlier
+frame-counter diagnostic did not cover.
+
+The V2 tile is intentionally not a camera preview. Live pixels remain in the
+native process. A future preview must use a native `AVCaptureVideoPreviewLayer`
+on the existing capture session rather than sending encoded frames through
+Tauri IPC.
+
+Before energy comparison, native capture was capped at 15 fps at the
+AVFoundation connection. The WebView V1 pump samples every 67 ms and the parity
+clip is 15 fps; processing faster adds no scoring resolution while increasing
+sensor, RGB-copy, TFLite and IPC work. Compare the optimized build on the same
+MacBook under the same brightness, power and foreground conditions. Hard camera
+loss, system sleep/lid close and CPU/energy measurements remain open.

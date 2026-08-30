@@ -205,7 +205,7 @@ Current automated baseline after the opt-in V2 wiring:
 npm test -- --run                 # 279 tests
 npm run build
 cd companion/src-tauri
-cargo test                        # 40 tests: 11 library + 29 app
+cargo test                        # 41 tests: 12 library + 29 app
 cargo check
 ```
 
