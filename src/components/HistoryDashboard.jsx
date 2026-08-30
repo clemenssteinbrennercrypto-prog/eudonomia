@@ -113,6 +113,7 @@ function MonthCalendar({ sessions, onDayClick, selectedDay }) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(seconds) {
   if (!seconds || seconds < 0) return '0s'
+  seconds = Math.round(seconds)
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
