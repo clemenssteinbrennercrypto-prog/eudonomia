@@ -47,6 +47,12 @@ jobs:
         with:
           workspaces: companion/src-tauri
 
+      # The Rust unit tests (session database, blocking, output, updater) were
+      # previously only ever run by hand — the build below compiles the crate
+      # but never executes them, so a broken invariant could ship unnoticed.
+      - name: Run Rust unit tests
+        run: cargo test --manifest-path companion/src-tauri/Cargo.toml
+
       - name: Set internal build identity
         run: |
           set -euo pipefail

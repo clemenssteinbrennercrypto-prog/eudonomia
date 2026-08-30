@@ -10,6 +10,7 @@
 mod activity;
 mod app_nap;
 mod blocking;
+mod db;
 mod native;
 mod output;
 
@@ -262,6 +263,16 @@ fn main() {
             native_camera::get_native_camera_status,
             native_camera::start_native_camera_prototype,
             native_camera::stop_native_camera_prototype,
+            db::db_load_all,
+            db::db_list_session_summaries,
+            db::db_get_session,
+            db::db_save_session,
+            db::db_update_session,
+            db::db_delete_session,
+            db::db_clear_all,
+            db::db_load_focus_ledger,
+            db::db_export_archive,
+            db::db_migrate_legacy,
             pick_output_folder,
             install_native_update,
             quit_app
@@ -284,6 +295,14 @@ fn main() {
                 output_baseline: std::sync::Arc::new(std::sync::Mutex::new(None)),
                 app_nap: std::sync::Arc::new(std::sync::Mutex::new(None)),
             };
+
+            // Session history lives beside the app's other data, not in the
+            // WebView's storage — that is the whole point of the native store:
+            // a file the browser storage manager cannot evict.
+            let database_path = app.path().app_data_dir()?.join("sessions.db");
+            let connection = db::open(&database_path)
+                .map_err(|error| format!("failed to open session database: {error}"))?;
+            app.manage(db::DbState(std::sync::Mutex::new(connection)));
 
             app.manage(native_state.clone());
             app.manage(native_camera::NativeCameraState::default());
