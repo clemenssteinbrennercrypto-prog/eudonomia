@@ -5,7 +5,7 @@ const ITEMS = [
   ['session-setup', 'Session'],
   ['setup', 'Workspace Setup'],
   ['ai-companion', 'AI Companion'],
-  ['history', 'Analytics'],
+  ['analytics', 'Analytics'],
 ]
 
 function Clock() {

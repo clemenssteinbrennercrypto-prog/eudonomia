@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { loadSessions } from '../lib/storage'
 import { buildRecentSessionSetups, normalizeSessionTags, QUICK_SESSION_TAGS } from '../lib/sessionSetups'
 import { countWords, limitWords, SESSION_PLAN_WORD_LIMIT } from '../lib/sessionPlan'
 import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuration'
@@ -7,6 +6,9 @@ import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuratio
 const DURATIONS = [15, 30, 60, 90]
 
 export default function SessionIntentScreen({
+  // Past sessions, used only for the "reuse a recent setup" shortcuts. Owned
+  // and loaded by App so this screen stays a pure render.
+  recentSessions = [],
   task,
   setTask,
   goal,
@@ -26,7 +28,7 @@ export default function SessionIntentScreen({
   const [customTag, setCustomTag] = useState('')
   const [planOpen, setPlanOpen] = useState(false)
   const [customDurationOpen, setCustomDurationOpen] = useState(false)
-  const recentSetups = useMemo(() => buildRecentSessionSetups(loadSessions()), [])
+  const recentSetups = useMemo(() => buildRecentSessionSetups(recentSessions), [recentSessions])
   const normalizedTags = normalizeSessionTags(tags)
   const canStart = task.trim().length > 0
   const planWordCount = countWords(goal)

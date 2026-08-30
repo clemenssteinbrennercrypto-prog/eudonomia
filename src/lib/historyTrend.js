@@ -59,6 +59,25 @@ export function aggregateFocusMeasurements(sessions) {
   }
 }
 
+function normalizedOutcome(session) {
+  if (session?.goalOutcome) return session.goalOutcome
+  if (session?.goalAchieved === true) return 'yes'
+  if (session?.goalAchieved === false) return 'no'
+  return null
+}
+
+/** Counts of yes/partly/no/unrated across a set of sessions — the raw material
+ *  for Overview's outcome distribution. Unrated is its own bucket rather than
+ *  dropped, since "you didn't say" is a real, visible state. */
+export function outcomeDistribution(sessions) {
+  const counts = { yes: 0, partly: 0, no: 0, unrated: 0 }
+  for (const session of Array.isArray(sessions) ? sessions : []) {
+    const outcome = normalizedOutcome(session)
+    counts[outcome || 'unrated'] += 1
+  }
+  return counts
+}
+
 export function measuredSessionDayStreak(sessions, now = Date.now()) {
   const current = new Date(now)
   if (Number.isNaN(current.getTime())) return 0

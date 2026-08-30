@@ -4,6 +4,7 @@ import {
   buildHistoryTrend,
   hasMeasuredFocus,
   measuredSessionDayStreak,
+  outcomeDistribution,
   sessionFocusPct,
 } from './historyTrend'
 
@@ -147,5 +148,31 @@ describe('history trend ranges', () => {
       avgFocus: 5,
       count: 2,
     })
+  })
+})
+
+describe('outcomeDistribution', () => {
+  it('counts each outcome and buckets everything else as unrated', () => {
+    const sessions = [
+      sessionAt(NOW, 70, { goalOutcome: 'yes' }),
+      sessionAt(NOW, 70, { goalOutcome: 'yes' }),
+      sessionAt(NOW, 70, { goalOutcome: 'partly' }),
+      sessionAt(NOW, 70, { goalOutcome: 'no' }),
+      sessionAt(NOW, 70, {}),
+    ]
+    expect(outcomeDistribution(sessions)).toEqual({ yes: 2, partly: 1, no: 1, unrated: 1 })
+  })
+
+  it('normalizes a legacy goalAchieved boolean', () => {
+    const sessions = [
+      sessionAt(NOW, 70, { goalAchieved: true }),
+      sessionAt(NOW, 70, { goalAchieved: false }),
+    ]
+    expect(outcomeDistribution(sessions)).toEqual({ yes: 1, partly: 0, no: 1, unrated: 0 })
+  })
+
+  it('handles an empty or missing session list', () => {
+    expect(outcomeDistribution([])).toEqual({ yes: 0, partly: 0, no: 0, unrated: 0 })
+    expect(outcomeDistribution(undefined)).toEqual({ yes: 0, partly: 0, no: 0, unrated: 0 })
   })
 })

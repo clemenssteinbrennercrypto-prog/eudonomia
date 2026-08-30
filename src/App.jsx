@@ -9,8 +9,9 @@ import WorkspaceManager from './components/WorkspaceManager'
 import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
-import HistoryDashboard from './components/HistoryDashboard'
-import { backfillFocusLedgerFromSessions, loadFocusModeEnabled, saveFocusModeEnabled, saveSession } from './lib/storage'
+import AnalyticsShell from './components/analytics/AnalyticsShell'
+import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
+import { sessionRepository } from './lib/sessionRepository'
 import {
   getActiveWorkspace,
   loadWorkspaceState,
@@ -19,7 +20,7 @@ import {
   workspaceSnapshot,
 } from './lib/workspaceStore'
 import { useAppUpdateStatus } from './lib/useUpdateAvailable'
-import { withSessionFocusMetric } from './lib/focusMetric'
+import { emptyFocusLedger, withSessionFocusMetric } from './lib/focusMetric'
 import { durationFromSetup } from './lib/sessionDuration'
 
 const isNativeRuntime = () => Boolean(window.__TAURI__?.core?.invoke)
@@ -169,19 +170,43 @@ export default function App() {
   const [duration, setDuration] = useState(30)
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
+  const [saveError, setSaveError] = useState(null)
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const updateStatus = useAppUpdateStatus()
 
-  // Runs once per app start, before Home's first read of the ledger — catches
-  // up any already-stored session that qualifies for the score but never made
-  // it into the ledger (e.g. saved by a build older than this ledger).
+  // Session history lives here rather than inside each screen: App already
+  // owned `sessionRevision` to tell the dashboard when to re-read, so it is
+  // the natural owner of the data that revision refers to. LabDashboard and
+  // SessionIntentScreen render whatever they are handed.
+  const [history, setHistory] = useState({ sessions: [], ledger: emptyFocusLedger() })
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([sessionRepository.loadAll(), sessionRepository.loadFocusLedger()])
+      .then(([sessions, ledger]) => { if (!cancelled) setHistory({ sessions, ledger }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [sessionRevision])
+
+  // Runs once per app start — catches up any already-stored session that
+  // qualifies for the score but never made it into the ledger (e.g. saved by
+  // a build older than this ledger). Bumping the revision on completion makes
+  // the load above pick the caught-up ledger back up.
+  // On the native build this first imports any localStorage history into
+  // SQLite (idempotent, and it never deletes the old copy), then catches the
+  // ledger up. Both are no-ops once there is nothing left to do.
   const backfilledRef = useRef(false)
-  if (!backfilledRef.current) {
+  useEffect(() => {
+    if (backfilledRef.current) return
     backfilledRef.current = true
-    backfillFocusLedgerFromSessions()
-  }
+    let cancelled = false
+    sessionRepository.migrateLegacyIfNeeded()
+      .then(() => sessionRepository.backfillFocusLedger())
+      .then(() => { if (!cancelled) setSessionRevision(value => value + 1) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const activeWorkspace = getActiveWorkspace(workspaceState)
   const devices = workspaceDevices(activeWorkspace)
@@ -201,6 +226,24 @@ export default function App() {
 
   const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
 
+  // A finished session must never be lost to a failed write. The record is put
+  // on screen from memory first; persistence is attempted after, and a failure
+  // leaves a retry rather than silently discarding work the user just did.
+  const persistSession = useCallback(async (enriched) => {
+    try {
+      const saved = await sessionRepository.saveSession(enriched)
+      setSessionData(saved)
+      setSaveError(null)
+      // LabDashboard caches its storage snapshot while mounted. Bump this after
+      // every completed session so returning to Lab cannot show a stale ledger.
+      setSessionRevision(value => value + 1)
+      return true
+    } catch (error) {
+      setSaveError({ pending: enriched, message: String(error?.message || error) })
+      return false
+    }
+  }, [])
+
   const handleEnd = useCallback((data) => {
     const enriched = withSessionFocusMetric({
       ...data,
@@ -210,13 +253,10 @@ export default function App() {
       tags,
       workspace: workspaceSnapshot(activeWorkspace),
     })
-    const saved = saveSession(enriched)
-    setSessionData(saved)
-    // LabDashboard caches its storage snapshot while mounted. Bump this after
-    // every completed session so returning to Lab cannot show a stale ledger.
-    setSessionRevision(value => value + 1)
+    setSessionData(enriched)
     setScreen('end')
-  }, [task, goal, energyLevel, tags, activeWorkspace])
+    persistSession(enriched)
+  }, [task, goal, energyLevel, tags, activeWorkspace, persistSession])
 
   const handleRestart = (prefill = null) => {
     setTask(prefill?.task ?? '')
@@ -251,14 +291,16 @@ export default function App() {
       {screen === 'lab' && (
         <LabDashboard
           focusModeEnabled={focusModeEnabled}
-          sessionRevision={sessionRevision}
+          sessions={history.sessions}
+          ledger={history.ledger}
           onSession={() => setScreen('session-setup')}
           onProtection={() => setScreen('focus-apps')}
-          onAnalytics={() => setScreen('history')}
+          onAnalytics={() => setScreen('analytics')}
         />
       )}
       {screen === 'session-setup' && (
         <SessionIntentScreen
+          recentSessions={history.sessions}
           task={task}
           setTask={setTask}
           goal={goal}
@@ -304,20 +346,33 @@ export default function App() {
         />
       )}
       {screen === 'end' && (
-        <EndScreen
-          sessionData={sessionData}
-          onRestart={handleRestart}
-          onShowHistory={() => setScreen('history')}
-        />
+        <>
+          {saveError && (
+            <div className="session-save-error" role="alert">
+              <span>
+                This session could not be saved ({saveError.message}). It is still
+                here, but it will be lost if you close the app.
+              </span>
+              <button type="button" onClick={() => persistSession(saveError.pending)}>
+                Retry save
+              </button>
+            </div>
+          )}
+          <EndScreen
+            sessionData={sessionData}
+            onRestart={handleRestart}
+            onPrimaryAction={() => setScreen('analytics')}
+          />
+        </>
       )}
-      {screen === 'history' && (
-        <HistoryDashboard onClose={() => setScreen('lab')} />
+      {screen === 'analytics' && (
+        <AnalyticsShell onClose={() => setScreen('lab')} />
       )}
     </div>
   )
 
   const navigate = (destination) => {
-    if (destination === 'lab' || destination === 'session-setup' || destination === 'setup' || destination === 'history') {
+    if (destination === 'lab' || destination === 'session-setup' || destination === 'setup' || destination === 'analytics') {
       setScreen(destination)
     }
   }

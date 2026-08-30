@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import {
   MIN_SESSIONS,
+  activityAlignmentFit,
   calibrate,
+  driftRecoveryFit,
   durationFit,
+  energyFit,
   isUsable,
+  outcomeFit,
+  outputEvidenceFit,
   planningFit,
   suggestNextSession,
   timeOfDayFit,
+  weekdayFit,
+  workspaceFit,
 } from './calibration'
 
 // A session that ENDED at `hour` today, having run `mins` minutes with
@@ -162,6 +169,127 @@ describe('duration fit', () => {
       ...many(4, { planned: 90, mins: 90, pct: 72 }),
     ]
     expect(durationFit(s).shorterIsBetter).toBeNull()
+  })
+})
+
+// Fixed timestamp, not `hour`-relative like session() above — these axes
+// bucket by calendar day, workspace, energy, drift, activity, and output,
+// none of which session()'s helper parameterizes.
+function sessionAt(timestamp, pct, extra = {}) {
+  const actualSeconds = 40 * 60
+  return {
+    timestamp,
+    actualSeconds,
+    focusedSeconds: Math.round(actualSeconds * (pct / 100)),
+    trackingFaulted: false,
+    ...extra,
+  }
+}
+
+describe('new Patterns axes', () => {
+  it('weekdayFit finds a real day-of-week pattern', () => {
+    const dayA = new Date(2026, 0, 5).getTime()
+    const dayB = new Date(2026, 0, 6).getTime() // adjacent day -> different weekday
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(dayA, 88)),
+      ...Array.from({ length: 5 }, () => sessionAt(dayB, 40)),
+    ]
+    const { best, worst } = weekdayFit(sessions)
+    expect(best.focusPct).toBe(88)
+    expect(worst.focusPct).toBe(40)
+    expect(best.n).toBe(5)
+  })
+
+  it('workspaceFit finds a real per-workspace pattern', () => {
+    const office = { id: 'ws1', name: 'Office', revision: 0 }
+    const home = { id: 'ws2', name: 'Home', revision: 0 }
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { workspace: office })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { workspace: home })),
+    ]
+    const { best, worst } = workspaceFit(sessions)
+    expect(best.label).toBe('Office')
+    expect(worst.label).toBe('Home')
+  })
+
+  it('workspaceFit ignores sessions with no workspace recorded', () => {
+    const sessions = Array.from({ length: 5 }, () => sessionAt(Date.now(), 70))
+    expect(workspaceFit(sessions).ranked).toEqual([])
+  })
+
+  it('energyFit compares self-reported energy levels', () => {
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { energyLevel: 'fresh' })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { energyLevel: 'tired' })),
+    ]
+    const { best, worst } = energyFit(sessions)
+    expect(best.label).toBe('fresh energy')
+    expect(worst.label).toBe('tired energy')
+  })
+
+  it('driftRecoveryFit compares sessions with and without drift-risk cues', () => {
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { preDriftEvents: 2 })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { preDriftEvents: 0 })),
+    ]
+    const { best, worst } = driftRecoveryFit(sessions)
+    expect(best.label).toBe('sessions without drift-risk cues')
+    expect(worst.label).toBe('sessions with drift-risk cues')
+  })
+
+  it('activityAlignmentFit compares aligned vs drifted activity', () => {
+    const aligned = { secondsByKind: { aligned: 100, supportive: 0, off_goal: 0, distraction: 0, unclear: 0, blocked: 0 } }
+    const drifted = { secondsByKind: { aligned: 20, supportive: 0, off_goal: 80, distraction: 0, unclear: 0, blocked: 0 } }
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { activityAlignment: aligned })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { activityAlignment: drifted })),
+    ]
+    const { best, worst } = activityAlignmentFit(sessions)
+    expect(best.label).toBe('activity mostly matched the goal')
+    expect(worst.label).toBe('activity drifted off the goal')
+  })
+
+  it('activityAlignmentFit ignores sessions with too little observed activity to mean anything', () => {
+    const sparse = { secondsByKind: { aligned: 10, supportive: 0, off_goal: 0, distraction: 0, unclear: 0, blocked: 0 } }
+    const sessions = Array.from({ length: 5 }, () => sessionAt(Date.now(), 70, { activityAlignment: sparse }))
+    expect(activityAlignmentFit(sessions).ranked).toEqual([])
+  })
+
+  it('outputEvidenceFit compares sessions where the watched folder did or did not change', () => {
+    const changed = { watched: true, filesChanged: 3, filesCreated: 0, commits: 0 }
+    const unchanged = { watched: true, filesChanged: 0, filesCreated: 0, commits: 0 }
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { outputEvidence: changed })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { outputEvidence: unchanged })),
+    ]
+    const { best, worst } = outputEvidenceFit(sessions)
+    expect(best.label).toBe('the watched folder changed')
+    expect(worst.label).toBe('the watched folder did not change')
+  })
+
+  it('outputEvidenceFit excludes sessions where no folder was watched at all', () => {
+    const sessions = Array.from({ length: 5 }, () => sessionAt(Date.now(), 70))
+    expect(outputEvidenceFit(sessions).ranked).toEqual([])
+  })
+
+  it('calibrate() surfaces every new axis by kind and includes qualified ones in insights', () => {
+    const office = { id: 'ws1', name: 'Office', revision: 0 }
+    const home = { id: 'ws2', name: 'Home', revision: 0 }
+    const sessions = [
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 85, { workspace: office })),
+      ...Array.from({ length: 5 }, () => sessionAt(Date.now(), 40, { workspace: home })),
+    ]
+    const c = calibrate(sessions)
+    expect(c.ready).toBe(true)
+    expect(c.workspace.best.label).toBe('Office')
+    expect(c.insights.some(i => i.kind === 'workspace')).toBe(true)
+  })
+
+  it('outcomeFit works on any subset of sessions, not just calibrate()\'s full usable set', () => {
+    const bucket = [
+      { goalOutcome: 'yes' }, { goalOutcome: 'yes' }, { goalOutcome: 'no' },
+    ]
+    expect(outcomeFit(bucket)).toEqual({ n: 3, hitRate: 67 })
   })
 })
 

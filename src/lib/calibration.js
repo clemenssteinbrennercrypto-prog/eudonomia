@@ -11,6 +11,7 @@
 // is made below the thresholds below.
 
 import { sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { summarizeSessionAlignment } from './sessionIntent'
 
 /** Nothing at all is claimed under this many usable sessions. */
 export const MIN_SESSIONS = 8
@@ -77,20 +78,12 @@ export function timeOfDayFit(sessions) {
     const part = partOfDay(startHour(s))
     const pct = focusPct(s)
     if (pct == null) continue
-    if (!buckets.has(part.id)) buckets.set(part.id, { part, values: [] })
-    buckets.get(part.id).values.push(pct)
+    if (!buckets.has(part.id)) buckets.set(part.id, { id: part.id, label: part.label, values: [], sessions: [] })
+    const bucket = buckets.get(part.id)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
   }
-
-  const ranked = [...buckets.values()]
-    .filter(b => b.values.length >= MIN_PER_BUCKET)
-    .map(b => ({ id: b.part.id, label: b.part.label, focusPct: Math.round(mean(b.values)), n: b.values.length }))
-    .sort((a, b) => b.focusPct - a.focusPct)
-
-  if (ranked.length < 2) return { ranked, best: null, worst: null }
-  const best = ranked[0]
-  const worst = ranked[ranked.length - 1]
-  const meaningful = best.focusPct - worst.focusPct >= MIN_MEANINGFUL_GAP_PCT
-  return { ranked, best: meaningful ? best : null, worst: meaningful ? worst : null }
+  return rankBuckets(buckets)
 }
 
 /** Do you plan more than fits? Compares planned minutes with what actually ran.
@@ -145,7 +138,10 @@ export function durationFit(sessions) {
 }
 
 /** Rate of sessions the user themselves called a success. The only ground truth
- *  in the system — everything else is inference. */
+ *  in the system — everything else is inference. Deliberately takes any subset
+ *  of sessions, not just the whole qualified history: Patterns crosses this
+ *  against each condition bucket below to answer "outcome vs condition", not
+ *  just "outcome overall". */
 export function outcomeFit(sessions) {
   const rated = sessions.filter(s => s.goalOutcome)
   if (rated.length < MIN_PER_BUCKET) return null
@@ -153,9 +149,239 @@ export function outcomeFit(sessions) {
   return { n: rated.length, hitRate: Math.round((hit / rated.length) * 100) }
 }
 
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+// Every *Fit function below shares one shape — {ranked, best, worst} — and one
+// rule: a bucket needs MIN_PER_BUCKET sessions to be ranked at all, and best/
+// worst are only ever named when they clear MIN_MEANINGFUL_GAP_PCT. Two people
+// who both worked out patterns that turned out to be noise built this the hard
+// way; this helper exists so every new axis inherits the same refusal for free
+// instead of re-deriving it.
+//
+// Each ranked entry also carries its raw `sessions` — Patterns.jsx crosses
+// these against outcomeFit() to answer "goal outcome vs condition", the
+// priority the spec asks for, not just "focus % vs condition".
+function rankBuckets(buckets) {
+  const ranked = [...buckets.values()]
+    .filter(b => b.values.length >= MIN_PER_BUCKET)
+    .map(b => ({ id: b.id, label: b.label, focusPct: Math.round(mean(b.values)), n: b.values.length, sessions: b.sessions }))
+    .sort((a, b) => b.focusPct - a.focusPct)
+  if (ranked.length < 2) return { ranked, best: null, worst: null }
+  const best = ranked[0]
+  const worst = ranked[ranked.length - 1]
+  const meaningful = best.focusPct - worst.focusPct >= MIN_MEANINGFUL_GAP_PCT
+  return { ranked, best: meaningful ? best : null, worst: meaningful ? worst : null }
+}
+
+/** Sessions are stamped at end; the start moment is where the work happened —
+ *  same reasoning as startHour, one level up to the calendar day. */
+function startDate(session) {
+  return new Date(session.timestamp - (session.actualSeconds || 0) * 1000)
+}
+
+/** Does the day of the week predict your focus? */
+export function weekdayFit(sessions) {
+  const buckets = new Map()
+  for (const s of sessions) {
+    const pct = focusPct(s)
+    if (pct == null) continue
+    const day = startDate(s).getDay()
+    if (!buckets.has(day)) buckets.set(day, { id: day, label: WEEKDAY_LABELS[day], values: [], sessions: [] })
+    const bucket = buckets.get(day)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+/** Does the workspace (and which revision of its setup) predict your focus? */
+export function workspaceFit(sessions) {
+  const buckets = new Map()
+  for (const s of sessions) {
+    const ws = s.workspace
+    const pct = focusPct(s)
+    if (!ws?.id || pct == null) continue
+    const key = `${ws.id}:${ws.revision ?? 0}`
+    if (!buckets.has(key)) buckets.set(key, { id: key, label: ws.name || ws.id, values: [], sessions: [] })
+    const bucket = buckets.get(key)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+/** Does self-reported energy at the start predict focus? Energy is still never
+ *  a scoring input (see sessionAnalysis.js) — this only asks whether it
+ *  correlates with the measured outcome after the fact. */
+export function energyFit(sessions) {
+  const buckets = new Map()
+  for (const s of sessions) {
+    const pct = focusPct(s)
+    if (!s.energyLevel || pct == null) continue
+    if (!buckets.has(s.energyLevel)) buckets.set(s.energyLevel, { id: s.energyLevel, label: `${s.energyLevel} energy`, values: [], sessions: [] })
+    const bucket = buckets.get(s.energyLevel)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+/** Do sessions with an early drift-risk cue end up different from ones
+ *  without? Compares the two groups' overall focus, not just the flagged
+ *  stretch — a real answer needs the whole session as context. */
+export function driftRecoveryFit(sessions) {
+  const buckets = new Map([
+    [true, { id: true, label: 'sessions with drift-risk cues', values: [], sessions: [] }],
+    [false, { id: false, label: 'sessions without drift-risk cues', values: [], sessions: [] }],
+  ])
+  for (const s of sessions) {
+    const pct = focusPct(s)
+    if (pct == null) continue
+    const bucket = buckets.get((s.preDriftEvents || 0) > 0)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+/** Sessions with actually-observed activity, bucketed by whether that activity
+ *  mostly matched the stated goal. Requires real observed seconds — a
+ *  near-empty activity log is not evidence either way, see MIN_OBSERVED_SECONDS
+ *  below (kept local: this is the only place in calibration.js that reads
+ *  activityAlignment). */
+const MIN_OBSERVED_SECONDS_FOR_PATTERN = 60
+
+function alignmentBand(session) {
+  const alignment = summarizeSessionAlignment(session.activityAlignment, session.actualSeconds || 0)
+  if (alignment.observedSeconds < MIN_OBSERVED_SECONDS_FOR_PATTERN || alignment.alignedPct == null) return null
+  return alignment.alignedPct >= 70 ? 'aligned' : 'drifted'
+}
+
+export function activityAlignmentFit(sessions) {
+  const buckets = new Map([
+    ['aligned', { id: 'aligned', label: 'activity mostly matched the goal', values: [], sessions: [] }],
+    ['drifted', { id: 'drifted', label: 'activity drifted off the goal', values: [], sessions: [] }],
+  ])
+  for (const s of sessions) {
+    const band = alignmentBand(s)
+    const pct = focusPct(s)
+    if (!band || pct == null) continue
+    const bucket = buckets.get(band)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+/** Sessions with a watched output folder, bucketed by whether anything
+ *  actually changed. Null (folder not watched) is excluded rather than
+ *  treated as "no output" — those are different situations. */
+function hadOutputChange(session) {
+  const evidence = session.outputEvidence
+  if (!evidence?.watched) return null
+  return ((evidence.filesChanged || 0) + (evidence.filesCreated || 0) + (evidence.commits || 0)) > 0
+}
+
+export function outputEvidenceFit(sessions) {
+  const buckets = new Map([
+    [true, { id: true, label: 'the watched folder changed', values: [], sessions: [] }],
+    [false, { id: false, label: 'the watched folder did not change', values: [], sessions: [] }],
+  ])
+  for (const s of sessions) {
+    const had = hadOutputChange(s)
+    const pct = focusPct(s)
+    if (had == null || pct == null) continue
+    const bucket = buckets.get(had)
+    bucket.values.push(pct)
+    bucket.sessions.push(s)
+  }
+  return rankBuckets(buckets)
+}
+
+// One entry per Patterns axis: how to compute it and how to phrase it as one
+// insight sentence. `calibrate()` runs every entry and keeps whichever ones
+// clear their refusal bar; Overview shows only the single strongest, Patterns
+// shows all of them plus every axis that did NOT clear the bar (as an honest
+// "not enough data" state) — see analytics/Patterns.jsx.
+const INSIGHT_DEFINITIONS = [
+  {
+    kind: 'time_of_day',
+    compute: timeOfDayFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Your ${r.best.label} sessions average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% in the ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'weekday',
+    compute: weekdayFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Your ${r.best.label}s average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% on ${r.worst.label}s.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'planning',
+    compute: planningFit,
+    describe: (p) => p && p.ratio < 0.7
+      ? { text: `You plan ${p.plannedMedian} minutes but typically run ${p.actualMedian}. Planning the length you actually work would make the number mean something.`, n: p.n }
+      : null,
+  },
+  {
+    kind: 'duration',
+    compute: durationFit,
+    describe: (d) => d?.shorterIsBetter
+      ? { text: `${d.shorterIsBetter.best.minutes}-minute sessions hold ${d.shorterIsBetter.best.focusPct}% focus; your ${d.shorterIsBetter.longest.minutes}-minute ones drop to ${d.shorterIsBetter.longest.focusPct}%. The longer block buys time, not attention.`, n: d.shorterIsBetter.best.n + d.shorterIsBetter.longest.n }
+      : null,
+  },
+  {
+    kind: 'workspace',
+    compute: workspaceFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `${r.best.label} sessions average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% in ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'energy',
+    compute: energyFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Your ${r.best.label} sessions average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% at ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'drift_recovery',
+    compute: driftRecoveryFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Your ${r.best.label} average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% for ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'activity_alignment',
+    compute: activityAlignmentFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Sessions where ${r.best.label} average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% when ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'output_evidence',
+    compute: outputEvidenceFit,
+    describe: (r) => r.best && r.worst
+      ? { text: `Sessions where ${r.best.label} average ${r.best.focusPct}% focused, against ${r.worst.focusPct}% when ${r.worst.label}.`, n: r.best.n + r.worst.n }
+      : null,
+  },
+  {
+    kind: 'outcome',
+    compute: outcomeFit,
+    describe: (o) => o
+      ? { text: `You reach the goal you set in ${o.hitRate}% of sessions you rated.`, n: o.n }
+      : null,
+  },
+]
+
 /**
  * The whole picture. Returns `ready: false` — with how many sessions are still
- * needed — rather than guessing from thin data.
+ * needed — rather than guessing from thin data. Every axis in
+ * INSIGHT_DEFINITIONS is computed and exposed by kind (Patterns reads the raw
+ * result to show sample sizes even for axes that didn't clear the refusal
+ * bar); `insights` carries only the ones that did.
  */
 export function calibrate(sessions = []) {
   const usable = sessions.filter(isUsable)
@@ -168,53 +394,29 @@ export function calibrate(sessions = []) {
     }
   }
 
-  const time = timeOfDayFit(usable)
-  const planning = planningFit(usable)
-  const duration = durationFit(usable)
-  const outcome = outcomeFit(usable)
+  const results = {}
   const insights = []
-
-  if (time.best && time.worst) {
-    insights.push({
-      kind: 'time_of_day',
-      text: `Your ${time.best.label} sessions average ${time.best.focusPct}% focused, against ${time.worst.focusPct}% in the ${time.worst.label}.`,
-      n: time.best.n + time.worst.n,
-    })
-  }
-
-  if (planning && planning.ratio < 0.7) {
-    insights.push({
-      kind: 'planning',
-      text: `You plan ${planning.plannedMedian} minutes but typically run ${planning.actualMedian}. Planning the length you actually work would make the number mean something.`,
-      n: planning.n,
-    })
-  }
-
-  if (duration?.shorterIsBetter) {
-    const { best, longest } = duration.shorterIsBetter
-    insights.push({
-      kind: 'duration',
-      text: `${best.minutes}-minute sessions hold ${best.focusPct}% focus; your ${longest.minutes}-minute ones drop to ${longest.focusPct}%. The longer block buys time, not attention.`,
-      n: best.n + longest.n,
-    })
-  }
-
-  if (outcome) {
-    insights.push({
-      kind: 'outcome',
-      text: `You reach the goal you set in ${outcome.hitRate}% of sessions you rated.`,
-      n: outcome.n,
-    })
+  for (const def of INSIGHT_DEFINITIONS) {
+    const computed = def.compute(usable)
+    results[def.kind] = computed
+    const described = def.describe(computed)
+    if (described) insights.push({ kind: def.kind, ...described })
   }
 
   return {
     ready: true,
     sessionsAnalysed: usable.length,
     needMore: 0,
-    timeOfDay: time,
-    planning,
-    duration,
-    outcome,
+    timeOfDay: results.time_of_day,
+    planning: results.planning,
+    duration: results.duration,
+    outcome: results.outcome,
+    weekday: results.weekday,
+    workspace: results.workspace,
+    energy: results.energy,
+    driftRecovery: results.drift_recovery,
+    activityAlignment: results.activity_alignment,
+    outputEvidence: results.output_evidence,
     insights,
   }
 }

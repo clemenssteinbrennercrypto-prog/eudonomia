@@ -46,14 +46,17 @@ describe('SessionIntentScreen', () => {
   })
 
   it('reuses honest fields from recent session history', () => {
-    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{
-      task: 'Draft essay',
-      goal: 'Write 800 words',
-      duration: 60,
-      tags: ['Writing'],
-      energyLevel: 'fresh',
-    }]))
-    const html = renderIntent({ task: 'Current task' })
+    // History arrives as a prop — App owns loading it from the repository.
+    const html = renderIntent({
+      task: 'Current task',
+      recentSessions: [{
+        task: 'Draft essay',
+        goal: 'Write 800 words',
+        duration: 60,
+        tags: ['Writing'],
+        energyLevel: 'fresh',
+      }],
+    })
     expect(html).toContain('Draft essay')
     expect(html).toContain('Write 800 words')
     expect(html).toContain('60 min')

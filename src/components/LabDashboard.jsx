@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { loadFocusAppsConfig, loadFocusLedger, loadSessions } from '../lib/storage'
+import { loadFocusAppsConfig } from '../lib/storage'
+import { emptyFocusLedger } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { fetchCompanionDebug } from '../lib/nativeCompanion'
 
@@ -73,15 +74,19 @@ function AttentionField({ bins }) {
   )
 }
 
-export default function LabDashboard({ focusModeEnabled, sessionRevision = 0, onSession, onProtection, onAnalytics }) {
+export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
   const [scoreRange, setScoreRange] = useState('day')
   const [fieldRange, setFieldRange] = useState('day')
   const [nativeStatus, setNativeStatus] = useState({ checked: false, connected: false, helperInstalled: false })
+  // Sessions and the ledger arrive as props — App owns loading them and
+  // re-reads after every completed session, so this stays a pure render of
+  // whatever it is handed. focusConfig is a local settings key, not session
+  // history, so it is still read directly.
   const source = useMemo(() => ({
-    ledger: loadFocusLedger(),
-    sessions: loadSessions(),
+    ledger: ledger || emptyFocusLedger(),
+    sessions,
     focusConfig: loadFocusAppsConfig(),
-  }), [sessionRevision])
+  }), [ledger, sessions])
   const data = useMemo(() => buildDashboardData({
     ...source,
     focusModeEnabled,

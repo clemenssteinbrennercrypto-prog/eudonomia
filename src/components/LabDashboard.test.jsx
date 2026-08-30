@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import LabDashboard from './LabDashboard'
 import { ATTENTION_SCORING_VERSION, FOCUS_METRIC_V1 } from '../lib/focusMetric'
-import { saveSession } from '../lib/storage'
+import { loadFocusLedger, saveSession } from '../lib/storage'
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -22,7 +22,10 @@ afterEach(() => vi.useRealTimers())
 
 describe('LabDashboard metric labels', () => {
   it('keeps measured time and efficiency semantically distinct', () => {
-    saveSession({
+    // saveSession still runs so the focus ledger is built by the real code
+    // path; sessions and ledger are then handed to the component as props,
+    // which is how App supplies them at runtime.
+    const saved = saveSession({
       task: 'Measured work',
       startedAt: Date.now() - 620_000,
       actualSeconds: 620,
@@ -39,6 +42,8 @@ describe('LabDashboard metric labels', () => {
 
     const html = renderToString(React.createElement(LabDashboard, {
       focusModeEnabled: false,
+      sessions: [saved],
+      ledger: loadFocusLedger(),
       onSession() {},
       onProtection() {},
       onAnalytics() {},
