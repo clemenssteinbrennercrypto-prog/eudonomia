@@ -7,7 +7,7 @@
 //! the WebView. Do not tune these values to make parity pass; a mismatch
 //! belongs in the transform.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{attention_landmark_model, short_range_detector_model, NativeModel};
 
@@ -54,7 +54,7 @@ pub(super) struct RgbFrame {
     pub pixels: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Landmark {
     pub x: f32,
@@ -122,6 +122,23 @@ impl NativeFacePipeline {
 
     pub fn reset(&mut self) {
         self.previous_roi = None;
+    }
+
+    /// Diagnostic-only parity hook. It replaces the tracking ROI with the ROI
+    /// produced from the reference engine's preceding-frame landmarks. The
+    /// production capture path never calls this: it exists solely to separate
+    /// recursive ROI drift from pixel-to-tensor differences in recorded runs.
+    pub(super) fn set_reference_roi(
+        &mut self,
+        landmarks: &[Landmark],
+        image_width: usize,
+        image_height: usize,
+    ) -> Result<(), String> {
+        self.previous_roi = roi_from_landmarks(landmarks, image_width, image_height);
+        if self.previous_roi.is_none() {
+            return Err("reference landmarks cannot form a face ROI".into());
+        }
+        Ok(())
     }
 
     pub fn process(&mut self, frame: &RgbFrame) -> Result<Option<Vec<Landmark>>, String> {

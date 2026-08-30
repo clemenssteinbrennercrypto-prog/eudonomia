@@ -12,6 +12,7 @@
       h1 { margin: 0 0 10px; font-size: 26px; }
       p { color: #9eaad9; line-height: 1.5; }
       label { display: block; margin: 24px 0 16px; padding: 18px; border: 1px dashed #6b8cff; border-radius: 12px; }
+      select { margin-left: 10px; }
       button { border: 0; border-radius: 10px; padding: 12px 18px; background: #2c46ff; color: white; font-weight: 700; cursor: pointer; }
       button:disabled { opacity: .45; cursor: default; }
       #status { min-height: 24px; margin-top: 18px; font-family: ui-monospace, monospace; color: #2fe3a8; }
@@ -26,6 +27,13 @@
       <label>
         Reference frames (PNG/JPEG)
         <input id="frames" type="file" accept="image/png,image/jpeg" webkitdirectory multiple />
+      </label>
+      <label>
+        Inference backend
+        <select id="backend">
+          <option value="gpu">GPU/WebGL (historical session ruler)</option>
+          <option value="cpu">CPU diagnostic (backend isolation only)</option>
+        </select>
       </label>
       <button id="run" disabled>Run FaceMesh.js reference</button>
       <div id="status" aria-live="polite"></div>

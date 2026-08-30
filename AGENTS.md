@@ -488,7 +488,10 @@ The recorded-frame tools are:
 ```bash
 cargo run --manifest-path companion/src-tauri/Cargo.toml \
   --example native_camera_reference -- <frames-dir> <native.jsonl>
-# Run npm dev, open /native-camera-parity.html, select the same directory.
+# Optional ROI isolation only:
+# append --roi-oracle <facemesh-js-cpu.jsonl>
+# Run npm dev, open /native-camera-parity.html, select the same directory and
+# GPU/WebGL. CPU is an explicit backend diagnostic, not the historical ruler.
 npm run camera:parity:compare -- <facemesh-js.jsonl> <native.jsonl>
 ```
 
@@ -499,7 +502,13 @@ pitch p95 `0.627°`, score p95 `6.799`, and focused-classification parity
 `97.2806%` (119 mismatches). Replicated landmark-crop borders match the legacy
 graph and improved the result, but lossless PNG, isolated re-detection, Metal,
 WebGL-mediump emulation and PNG colour-profile normalization did not close the
-remaining gap. Full numbers and eliminated hypotheses are in
+remaining gap. Further full-clip isolation proved that the exact v0.8.8 CPU
+runtime is effectively identical to the pinned v0.10.35 native runtime, that
+driving native tracking from the preceding JS landmarks barely changes the
+failure, and that FaceMesh.js WebGL versus FaceMesh.js CPU itself misses the
+score/classification gates (`4.000` p95, `98.8574%`). Identical weights do not
+make execution backends interchangeable. Full numbers and eliminated
+hypotheses are in
 `docs/native-camera-prototype.md`. CPU/battery, live-session minimize/close
 score and hard camera-removal tests remain outstanding. **Do not switch the
 session source or claim the background bug fixed.**

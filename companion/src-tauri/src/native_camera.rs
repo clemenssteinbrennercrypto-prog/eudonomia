@@ -24,7 +24,9 @@ mod capture;
 mod pipeline;
 mod reference;
 
-pub use reference::{run_reference_harness, ReferenceHarnessSummary};
+pub use reference::{
+    run_reference_harness, run_reference_harness_with_roi_oracle, ReferenceHarnessSummary,
+};
 
 const NATIVE_CAMERA_STALE_AFTER: Duration = Duration::from_secs(1);
 const NATIVE_CAMERA_EVENT: &str = "native-camera-landmarks";

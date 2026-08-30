@@ -1,6 +1,7 @@
 import { analyzeFrame, eyeAspectRatio, LEFT_EYE, RIGHT_EYE } from './lib/attention'
 
 const framesInput = document.querySelector('#frames')
+const backendInput = document.querySelector('#backend')
 const runButton = document.querySelector('#run')
 const status = document.querySelector('#status')
 
@@ -17,22 +18,25 @@ framesInput.addEventListener('change', () => {
 runButton.addEventListener('click', async () => {
   runButton.disabled = true
   framesInput.disabled = true
+  backendInput.disabled = true
   try {
-    const records = await runReference(selectedFrames, (done, total) => {
+    const backend = backendInput.value
+    const records = await runReference(selectedFrames, backend, (done, total) => {
       status.textContent = `Processing ${done}/${total}`
     })
-    downloadJsonLines(records, 'facemesh-js-reference.jsonl')
+    downloadJsonLines(records, `facemesh-js-${backend}-reference.jsonl`)
     const faces = records.filter(record => record.facePresent).length
     status.textContent = `Done: ${records.length} frames, ${faces} with a face`
   } catch (error) {
     status.textContent = `Failed: ${error?.message || error}`
   } finally {
     framesInput.disabled = false
+    backendInput.disabled = false
     runButton.disabled = selectedFrames.length === 0
   }
 })
 
-async function runReference(files, onProgress) {
+async function runReference(files, backend, onProgress) {
   if (!window.FaceMesh) throw new Error('Bundled FaceMesh.js did not load')
   const faceMesh = new window.FaceMesh({
     locateFile: file => new URL(`mediapipe/${file}`, document.baseURI).href,
@@ -42,6 +46,10 @@ async function runReference(files, onProgress) {
     refineLandmarks: true,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5,
+    // GPU is the historical macOS session ruler. CPU exists only to isolate
+    // backend drift from preprocessing drift; it may never authorize a source
+    // switch against GPU-recorded history.
+    useCpuInference: backend === 'cpu',
   })
 
   let resolveResults = null
@@ -61,6 +69,7 @@ async function runReference(files, onProgress) {
     records.push({
       frameIndex,
       fileName: file.name,
+      inferenceBackend: backend,
       frameMeasured: true,
       facePresent: Boolean(landmarks),
       landmarks,

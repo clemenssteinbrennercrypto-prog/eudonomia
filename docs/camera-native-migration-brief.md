@@ -166,7 +166,12 @@ landmark p95/max `0.004537 / 0.088413`, yaw p95 `2.311°`, pitch p95 `0.627°`,
 score p95 `6.799`, and focused classification parity `97.2806%` (119 of 4,376
 frames differed). No live-session source switch has occurred. See
 `docs/native-camera-prototype.md` for the complete table and eliminated
-preprocessing hypotheses.
+preprocessing hypotheses. Subsequent full-clip isolation also ruled out the
+modern TFLite runtime and recursive ROI drift as the main cause; neither the
+exact v0.8.8 CPU runtime nor the native Metal delegate reproduces the historical
+WebGL ruler. FaceMesh.js WebGL versus its own CPU inference already misses the
+score/classification gates. This strengthens, rather than removes, the need for
+an explicit product decision if exact WebGL-path parity cannot be reproduced.
 
 ## 9. Two-machine boundary
 

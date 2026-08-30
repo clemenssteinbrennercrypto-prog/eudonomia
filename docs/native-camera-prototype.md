@@ -114,12 +114,21 @@ cargo run --manifest-path companion/src-tauri/Cargo.toml \
   --example native_camera_reference -- /path/to/frames /path/to/native.jsonl
 ```
 
+ROI-isolation diagnostic (not a parity result by itself):
+
+```bash
+cargo run --manifest-path companion/src-tauri/Cargo.toml \
+  --example native_camera_reference -- /path/to/frames /path/to/native-oracle.jsonl \
+  --roi-oracle /path/to/facemesh-js-cpu-reference.jsonl
+```
+
 JavaScript reference:
 
 ```bash
 npm run dev
 # Open the printed origin plus /native-camera-parity.html.
-# Select the same frame directory and download facemesh-js-reference.jsonl.
+# Select the same directory and the GPU/WebGL backend, then download the JSONL.
+# GPU/WebGL is the historical ruler; the CPU option is diagnostic only.
 ```
 
 Comparison:
@@ -189,12 +198,44 @@ The following hypotheses were checked without weakening any threshold:
   projection, thresholds and lack of graph smoothing were checked against the
   official source.
 
-The remaining measured difference is consistent with WebGL versus native CPU
-model execution becoming amplified at pose/score boundaries; this is an
-inference from the eliminated causes, not proof of one exact floating-point
-operation. The correct product state is therefore unchanged: **the source does
-not switch**. Continue matching the execution path, or choose a separately
-versioned scoring generation; never relax the gate or blend the histories.
+#### Backend, runtime and ROI isolation
+
+Further full-clip runs used the same 4,376 PNGs and the same shared score
+replay. These are diagnostic comparisons; none authorizes a source switch.
+
+| Comparison | Landmark mean / p95 / max | Yaw p95 | Score p95 | Focused parity |
+|---|---:|---:|---:|---:|
+| FaceMesh.js WebGL vs FaceMesh.js CPU inference | 0.000298 / 0.000618 / 0.048729 | 0.259° | 4.000 | 98.8574% |
+| FaceMesh.js CPU vs native CPU | 0.001238 / 0.004512 / 0.087683 | 2.344° | 7.785 | 97.5548% |
+| FaceMesh.js CPU vs native CPU with the preceding JS landmarks driving the native ROI | 0.001181 / 0.004430 / 0.040202 | 2.281° | 7.776 | 96.5951% |
+| Native MediaPipe 0.10.35 CPU vs exact v0.8.8 TFLite CPU runtime | 0.000013 / 0.0000003 / 0.010332 | 0.0001° | 0.000 | 100.0000% |
+| FaceMesh.js WebGL vs native Metal delegate | 0.001344 / 0.004561 / 0.088269 | 2.402° | 7.912 | 97.3492% |
+
+The exact historical v0.8.8 CPU runtime was built locally from MediaPipe tag
+`v0.8.8` (`33d683c67100ef3db37d9752fcf65d30bea440c4`). Its output is effectively
+identical to the pinned 0.10.35 native runtime, while being substantially
+slower. A runtime downgrade therefore adds cost without closing parity and was
+not added to the repository.
+
+The ROI-oracle run replaces every native tracking ROI with one derived from the
+preceding FaceMesh.js landmarks. Its small landmark improvement and unchanged
+yaw/score failure show that recursive ROI drift is not the main discrepancy.
+The harness exposes this only as `--roi-oracle`; it validates frame count,
+index and filename before processing and is never called by live capture.
+
+FaceMesh.js WebGL versus its own CPU inference also fails the score and focused
+classification gates despite sharing the browser graph and preprocessing.
+Conversely, using the official Metal delegate does not reproduce WebGL output.
+Identical weights therefore do **not** imply an identical historical ruler
+across execution backends. The unresolved delta is now bounded to the
+WebGL-specific pixel-to-tensor/inference path, especially during motion blur,
+large pose and partial face loss; it is not attributed to one unmeasured
+floating-point operation.
+
+The correct product state is unchanged: **the source does not switch**.
+Continue reproducing the historical WebGL execution path, or obtain Clemens'
+decision for a separately versioned scoring generation; never relax the gate
+or blend the histories.
 
 ### Early smoke result (not the parity gate)
 
