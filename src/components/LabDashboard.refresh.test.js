@@ -15,6 +15,11 @@ describe('lab data stays fresh after a session', () => {
     expect(appSource).toContain('}, [sessionRevision])')
   })
 
+  it('does not turn a repository failure into an empty-history screen', () => {
+    expect(appSource).toContain('setHistoryLoadError(String(error?.message || error))')
+    expect(appSource).toContain('Retry history')
+  })
+
   it('App bumps the revision after a session is persisted', () => {
     expect(appSource).toContain('setSessionRevision(value => value + 1)')
   })

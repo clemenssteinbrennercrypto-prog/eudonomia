@@ -273,6 +273,7 @@ fn main() {
             db::db_clear_all,
             db::db_load_focus_ledger,
             db::db_replace_focus_ledger,
+            db::db_apply_focus_backfill,
             db::db_export_archive,
             db::db_migrate_legacy,
             pick_output_folder,

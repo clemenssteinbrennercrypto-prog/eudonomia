@@ -222,7 +222,10 @@ describe('never shows an empty app while history is still in the old store', () 
     })
     repo = createNativeSessionRepository()
 
-    await expect(repo.migrateLegacyIfNeeded()).rejects.toThrow('database locked')
+    await expect(repo.migrateLegacyIfNeeded()).resolves.toMatchObject({
+      verified: false,
+      reason: 'database locked',
+    })
     expect((await repo.loadAll()).map(s => s.id)).toEqual(['a', 'b'])
   })
 
@@ -310,6 +313,19 @@ describe('never shows an empty app while history is still in the old store', () 
     expect(imports).toHaveLength(1)
   })
 
+  it('runs the import once when startup migration and the first reads overlap', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({ migrated: true, importedCount: 2, verified: true }),
+      db_load_all: () => [{ id: 'from-sqlite' }],
+    })
+    repo = createNativeSessionRepository()
+
+    await Promise.all([repo.migrateLegacyIfNeeded(), repo.loadAll(), repo.loadFocusLedger()])
+    const imports = invoked.filter(call => call.command === 'db_migrate_legacy')
+    expect(imports).toHaveLength(1)
+  })
+
   it('keeps reads on the legacy store when that one import fails', async () => {
     withLegacyHistory()
     globalThis.window.__TAURI__.core.invoke = fakeInvoke({
@@ -320,6 +336,18 @@ describe('never shows an empty app while history is still in the old store', () 
     // The failure must not propagate out of an ordinary read.
     const all = await repo.loadAll()
     expect(all.map(s => s.id)).toEqual(['a', 'b'])
+  })
+
+  it('rebuilds the legacy ledger in the legacy store when import fails', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => { throw new Error('database locked') },
+    })
+    repo = createNativeSessionRepository()
+
+    const ledger = await repo.backfillFocusLedger()
+    expect(ledger.schemaVersion).toBe(1)
+    expect(called('db_apply_focus_backfill')).toBe(false)
   })
 
   it('serves the ledger and session detail from the legacy store too', async () => {
@@ -370,7 +398,7 @@ describe('re-deriving stored sessions after a scoring rule changes', () => {
 
     await repo.backfillFocusLedger()
 
-    const patch = sent('db_update_session').patch
+    const patch = sent('db_apply_focus_backfill').updates[0].patch
     expect(patch.focusMetricRejection).toBeNull()
     expect(patch.sessionEfficiency).toBeGreaterThan(0)
     expect(patch.scoringGeneration).toBe(2)
@@ -389,17 +417,30 @@ describe('re-deriving stored sessions after a scoring rule changes', () => {
     // A contribution, not the "unmeasured" marker it carried before.
     expect(day.sessions['v2-old'].status).toBeUndefined()
     expect(day.sessions['v2-old'].measuredSeconds).toBe(1800)
-    expect(called('db_replace_focus_ledger')).toBe(true)
+    expect(called('db_apply_focus_backfill')).toBe(true)
   })
 
-  it('writes nothing when every session already derives the same way', async () => {
+  it('sends a large changed history through one native transaction', async () => {
+    const sessions = Array.from({ length: 75 }, (_, index) => storedV2Session(`v2-${index}`))
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_load_all: () => sessions })
+    repo = createNativeSessionRepository()
+
+    await repo.backfillFocusLedger()
+
+    const batches = invoked.filter(call => call.command === 'db_apply_focus_backfill')
+    expect(batches).toHaveLength(1)
+    expect(batches[0].args.updates).toHaveLength(75)
+    expect(called('db_update_session')).toBe(false)
+  })
+
+  it('sends no per-session updates when every session already derives the same way', async () => {
     const settled = { ...storedV2Session('v2-old'), focusMetricRejection: null, sessionEfficiency: 78, deepFocusMinutes: 30 }
     globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_load_all: () => [settled] })
     repo = createNativeSessionRepository()
 
     await repo.backfillFocusLedger()
-    // Idempotent: it runs on every start, so a settled history must be quiet.
-    expect(called('db_update_session')).toBe(false)
+    // The ledger still lands atomically, but settled rows need no rewrites.
+    expect(sent('db_apply_focus_backfill').updates).toHaveLength(0)
   })
 })
 

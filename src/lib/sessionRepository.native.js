@@ -75,6 +75,30 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
   let migrated = false
   let readyPromise = null
 
+  async function migrateLegacyOnce() {
+    const legacySessions = loadLegacySessions()
+    const legacyLedger = loadLegacyFocusLedger()
+    if (legacySessions.length === 0) {
+      // Nothing to carry over, so SQLite is authoritative from the start.
+      migrated = true
+      return { migrated: false, importedCount: 0, reason: 'nothing_to_migrate' }
+    }
+    // Upgrade recoverable legacy measurements the same way the web build
+    // does on startup, so migrated sessions carry the metric they qualify
+    // for rather than being frozen as unmeasured.
+    const upgraded = legacySessions.map(withSessionFocusMetric)
+    const result = await invoke('db_migrate_legacy', {
+      sessions: upgraded,
+      summaries: upgraded.map(buildSessionSummary),
+      ledger: legacyLedger,
+    })
+    // Only hand over to SQLite once Rust confirms every id landed. Anything
+    // else — a rollback, a partial import, a thrown error — leaves reads on
+    // the legacy store, where the data demonstrably still is.
+    if (result?.verified) migrated = true
+    return result
+  }
+
   /**
    * Settle which store is authoritative, once, before anything reads.
    *
@@ -91,7 +115,12 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
    */
   function ensureReady() {
     if (!readyPromise) {
-      readyPromise = repository.migrateLegacyIfNeeded().catch(() => null)
+      readyPromise = migrateLegacyOnce().catch(error => ({
+        migrated: false,
+        importedCount: 0,
+        verified: false,
+        reason: String(error?.message || error),
+      }))
     }
     return readyPromise
   }
@@ -202,15 +231,26 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
      * only applies to sessions recorded after the rule changed is not a fixed
      * metric.
      *
-     * Cheap and idempotent once settled: a pass where nothing re-derives
-     * differently writes nothing. Safe to run on every start, which is where
-     * it is called from.
+     * Idempotent once settled. Native persistence receives one atomic batch
+     * per start regardless of history size, instead of one IPC transaction per
+     * changed session. Safe to run on every start, which is where it is called
+     * from.
      */
     async backfillFocusLedger() {
+      // If the verified handover failed, every operation stays on the legacy
+      // adapter. Rebuilding SQLite in that state would make the ledger and the
+      // sessions come from different stores — the same split-brain failure the
+      // migration guard exists to prevent.
+      if (await servedByLegacy()) return legacy.backfillFocusLedger()
+
       const sessions = await repository.loadAll()
       const upgraded = sessions.map(withSessionFocusMetric)
+      const updates = []
 
-      // Persist only the records whose derivation actually changed.
+      // Prepare only the records whose derivation actually changed. Rust
+      // applies this batch and the rebuilt ledger in one transaction: a bad
+      // historical row can no longer leave half the sessions re-derived while
+      // the old ledger remains on screen.
       for (let index = 0; index < sessions.length; index += 1) {
         const before = sessions[index]
         const after = upgraded[index]
@@ -220,7 +260,7 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
           before.deepFocusMinutes !== after.deepFocusMinutes ||
           before.focusMetricVersion !== after.focusMetricVersion
         if (!changed) continue
-        await invoke('db_update_session', {
+        updates.push({
           id: before.id,
           patch: {
             focusMetricVersion: after.focusMetricVersion,
@@ -238,8 +278,9 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
 
       // Rebuilt from scratch rather than patched, so a contribution that is no
       // longer valid disappears instead of lingering from an earlier ruleset.
+      // The native transaction lands it together with every changed record.
       const ledger = rebuildFocusLedger(emptyFocusLedger(), upgraded)
-      await invoke('db_replace_focus_ledger', { ledger })
+      await invoke('db_apply_focus_backfill', { updates, ledger })
       return ledger
     },
 
@@ -257,28 +298,7 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
      * run simply retries next launch.
      */
     async migrateLegacyIfNeeded() {
-      // Called by ensureReady(); must never await it back.
-      const legacySessions = loadLegacySessions()
-      const legacyLedger = loadLegacyFocusLedger()
-      if (legacySessions.length === 0) {
-        // Nothing to carry over, so SQLite is authoritative from the start.
-        migrated = true
-        return { migrated: false, importedCount: 0, reason: 'nothing_to_migrate' }
-      }
-      // Upgrade recoverable legacy measurements the same way the web build
-      // does on startup, so migrated sessions carry the metric they qualify
-      // for rather than being frozen as unmeasured.
-      const upgraded = legacySessions.map(withSessionFocusMetric)
-      const result = await invoke('db_migrate_legacy', {
-        sessions: upgraded,
-        summaries: upgraded.map(buildSessionSummary),
-        ledger: legacyLedger,
-      })
-      // Only hand over to SQLite once Rust confirms every id landed. Anything
-      // else — a rollback, a partial import, a thrown error — leaves reads on
-      // the legacy store, where the data demonstrably still is.
-      if (result?.verified) migrated = true
-      return result
+      return ensureReady()
     },
   }
 

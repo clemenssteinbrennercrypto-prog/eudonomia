@@ -24,6 +24,7 @@ export default function AnalyticsShell({ onClose }) {
   const [focusLedger, setFocusLedger] = useState(() => emptyFocusLedger())
   const [selectedSessionId, setSelectedSessionId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   // Overview and Patterns both run over the full history (calibration needs
   // every qualifying session), so the shell loads once and shares the result
@@ -41,10 +42,25 @@ export default function AnalyticsShell({ onClose }) {
     let cancelled = false
     setLoading(true)
     refresh()
-      .catch(() => {})
+      .then(() => { if (!cancelled) setLoadError(null) })
+      .catch(error => {
+        if (!cancelled) setLoadError(String(error?.message || error))
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [refresh])
+
+  const retryLoad = async () => {
+    setLoading(true)
+    try {
+      await refresh()
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(String(error?.message || error))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleDeleteSession = async (id) => {
     await sessionRepository.deleteSession(id)
@@ -99,7 +115,22 @@ export default function AnalyticsShell({ onClose }) {
           ))}
         </div>
 
-        {loading ? (
+        {loadError ? (
+          <div role="alert" style={{ padding: '40px 0', color: 'var(--text)' }}>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Session history could not be loaded.</p>
+            <p style={{ margin: '8px 0 18px', fontSize: 13, color: 'var(--text-muted)' }}>
+              No data has been deleted. The local database reported: {loadError}
+            </p>
+            <button
+              type="button"
+              onClick={retryLoad}
+              disabled={loading}
+              style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--ultra)', color: 'var(--text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {loading ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        ) : loading ? (
           <p style={{ fontSize: 14, color: 'var(--text-muted)', padding: '40px 0' }}>Loading…</p>
         ) : sessions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>

@@ -173,6 +173,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null)
   const [saveError, setSaveError] = useState(null)
   const [migrationError, setMigrationError] = useState(null)
+  const [historyLoadError, setHistoryLoadError] = useState(null)
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
@@ -186,8 +187,15 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     Promise.all([sessionRepository.loadAll(), sessionRepository.loadFocusLedger()])
-      .then(([sessions, ledger]) => { if (!cancelled) setHistory({ sessions, ledger }) })
-      .catch(() => {})
+      .then(([sessions, ledger]) => {
+        if (!cancelled) {
+          setHistory({ sessions, ledger })
+          setHistoryLoadError(null)
+        }
+      })
+      .catch(error => {
+        if (!cancelled) setHistoryLoadError(String(error?.message || error))
+      })
     return () => { cancelled = true }
   }, [sessionRevision])
 
@@ -417,6 +425,17 @@ export default function App() {
             still being read from their original storage, and the app will try
             the import again next launch.
           </span>
+        </div>
+      )}
+      {historyLoadError && screen !== 'session' && (
+        <div className="session-save-error" role="alert">
+          <span>
+            Your session history could not be loaded ({historyLoadError}). No data
+            has been deleted. Retry after the local database becomes available.
+          </span>
+          <button type="button" onClick={() => setSessionRevision(value => value + 1)}>
+            Retry history
+          </button>
         </div>
       )}
       {/* Hidden during a session: a reload tears down all in-memory session

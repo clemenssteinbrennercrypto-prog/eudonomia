@@ -142,6 +142,17 @@ pub struct MigrationOutcome {
     pub reason: Option<String>,
 }
 
+/// One re-derived session record sent by the JavaScript scoring authority.
+/// The whole batch lands with its rebuilt ledger in a single transaction.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusBackfillUpdate {
+    pub id: String,
+    pub patch: Value,
+    pub summary: SessionSummary,
+    pub analysis: Option<Value>,
+}
+
 fn to_err(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
@@ -681,6 +692,59 @@ pub fn replace_focus_ledger(connection: &mut Connection, ledger: &Value) -> Resu
     Ok(())
 }
 
+/// Apply every changed focus derivation and replace the ledger atomically.
+///
+/// Re-derivation used to make one IPC call and one transaction per session,
+/// followed by a separate ledger transaction. A single malformed historical
+/// row could therefore leave some records updated while the old ledger stayed
+/// in place until another launch. This boundary makes that impossible and
+/// reduces a large history to one IPC round trip.
+pub fn apply_focus_backfill(
+    connection: &mut Connection,
+    updates: &[FocusBackfillUpdate],
+    ledger: &Value,
+) -> Result<(), String> {
+    let tx = connection.transaction().map_err(to_err)?;
+
+    for update in updates {
+        if update.summary.id != update.id {
+            return Err(format!(
+                "focus backfill id mismatch: {} != {}",
+                update.id, update.summary.id
+            ));
+        }
+        let Some(mut merged) = get_session(&tx, &update.id)? else {
+            return Err(format!("focus backfill session not found: {}", update.id));
+        };
+        let Some(target) = merged.as_object_mut() else {
+            return Err(format!(
+                "focus backfill session is not an object: {}",
+                update.id
+            ));
+        };
+        let Some(patch) = update.patch.as_object() else {
+            return Err(format!(
+                "focus backfill patch is not an object: {}",
+                update.id
+            ));
+        };
+        for (key, value) in patch {
+            target.insert(key.clone(), value.clone());
+        }
+        write_session(&tx, &merged, &update.summary, update.analysis.as_ref())?;
+    }
+
+    tx.execute("DELETE FROM focus_ledger_days", [])
+        .map_err(to_err)?;
+    if let Some(days) = ledger.get("days").and_then(Value::as_object) {
+        for (day_key, entry) in days {
+            write_ledger_day(&tx, day_key, entry)?;
+        }
+    }
+    tx.commit().map_err(to_err)?;
+    Ok(())
+}
+
 pub fn export_archive(connection: &Connection) -> Result<Value, String> {
     Ok(json!({
         "schemaVersion": SCHEMA_VERSION,
@@ -892,6 +956,17 @@ pub fn db_replace_focus_ledger(
     ledger: Value,
 ) -> Result<(), String> {
     with_connection(&state, |connection| replace_focus_ledger(connection, &ledger))
+}
+
+#[tauri::command]
+pub fn db_apply_focus_backfill(
+    state: tauri::State<'_, DbState>,
+    updates: Vec<FocusBackfillUpdate>,
+    ledger: Value,
+) -> Result<(), String> {
+    with_connection(&state, |connection| {
+        apply_focus_backfill(connection, &updates, &ledger)
+    })
 }
 
 #[tauri::command]
@@ -1320,6 +1395,88 @@ mod tests {
         assert_eq!(stored["days"]["2026-08-16"]["sessions"]["b"]["version"], 1);
         // The sessions themselves are untouched by a ledger rebuild.
         assert_eq!(load_all(&connection).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn focus_backfill_lands_session_derivations_and_ledger_together() {
+        let mut connection = db();
+        let first = json!({ "sessions": { "a": { "status": "unmeasured" } } });
+        save_session(
+            &mut connection,
+            &session_value("a"),
+            &summary("a", 1),
+            None,
+            Some(("2026-08-15", &first)),
+        )
+        .unwrap();
+
+        let updates = vec![FocusBackfillUpdate {
+            id: "a".into(),
+            patch: json!({ "focusMetricRejection": null, "sessionEfficiency": 78 }),
+            summary: summary("a", 1),
+            analysis: Some(json!({ "version": 1, "status": "ready" })),
+        }];
+        let rebuilt = json!({
+            "schemaVersion": 1,
+            "days": { "2026-08-16": { "sessions": { "a": { "version": 1, "measuredSeconds": 1800 } } } }
+        });
+
+        apply_focus_backfill(&mut connection, &updates, &rebuilt).unwrap();
+
+        let stored = get_session(&connection, "a").unwrap().unwrap();
+        assert_eq!(stored["sessionEfficiency"], 78);
+        assert!(stored["focusMetricRejection"].is_null());
+        assert_eq!(stored["analysisSnapshot"]["status"], "ready");
+        let ledger = load_ledger(&connection).unwrap();
+        assert!(ledger["days"]["2026-08-15"].is_null());
+        assert_eq!(
+            ledger["days"]["2026-08-16"]["sessions"]["a"]["version"],
+            1
+        );
+    }
+
+    #[test]
+    fn focus_backfill_rolls_back_everything_when_one_row_is_bad() {
+        let mut connection = db();
+        let first = json!({ "sessions": { "a": { "status": "unmeasured" } } });
+        save_session(
+            &mut connection,
+            &session_value("a"),
+            &summary("a", 1),
+            None,
+            Some(("2026-08-15", &first)),
+        )
+        .unwrap();
+
+        let updates = vec![
+            FocusBackfillUpdate {
+                id: "a".into(),
+                patch: json!({ "sessionEfficiency": 78 }),
+                summary: summary("a", 1),
+                analysis: None,
+            },
+            FocusBackfillUpdate {
+                id: "missing".into(),
+                patch: json!({ "sessionEfficiency": 90 }),
+                summary: summary("missing", 2),
+                analysis: None,
+            },
+        ];
+        let rebuilt = json!({
+            "schemaVersion": 1,
+            "days": { "2026-08-16": { "sessions": { "a": { "version": 1 } } } }
+        });
+
+        assert!(apply_focus_backfill(&mut connection, &updates, &rebuilt).is_err());
+
+        let stored = get_session(&connection, "a").unwrap().unwrap();
+        assert!(stored["sessionEfficiency"].is_null());
+        let ledger = load_ledger(&connection).unwrap();
+        assert_eq!(
+            ledger["days"]["2026-08-15"]["sessions"]["a"]["status"],
+            "unmeasured"
+        );
+        assert!(ledger["days"]["2026-08-16"].is_null());
     }
 
     #[test]
