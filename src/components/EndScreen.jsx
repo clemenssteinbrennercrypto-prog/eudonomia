@@ -5,13 +5,17 @@ import { durationFromSession } from '../lib/sessionDuration'
 import SessionReport from './SessionReport'
 
 /**
- * Thin wrapper: compute this session's analysis, keep it in sync as the
- * check-in is filled in, and hand everything to the shared SessionReport. All
- * the actual report logic/markup lives there and in sessionAnalysis.js —
- * this file only owns local state and post-session navigation.
+ * Thin wrapper: analyse the session App hands down and render the shared
+ * SessionReport. All report logic/markup lives there and in
+ * sessionAnalysis.js.
+ *
+ * This deliberately keeps NO copy of the session. It used to, seeded once via
+ * useState — and because the record reaches this screen before its save has
+ * resolved, that copy never saw the storage id arrive and every check-in was
+ * silently dropped. The session is a prop, the check-in goes back up to App,
+ * and there is no second copy to fall out of step.
  */
-export default function EndScreen({ sessionData, onRestart, onPrimaryAction }) {
-  const [session, setSession] = useState(sessionData)
+export default function EndScreen({ sessionData, onOutcomeChange, onRestart, onPrimaryAction }) {
   const [priorSessions, setPriorSessions] = useState([])
 
   // History is only needed for the personal-baseline sample size, which is a
@@ -22,42 +26,33 @@ export default function EndScreen({ sessionData, onRestart, onPrimaryAction }) {
     let cancelled = false
     sessionRepository.loadAll()
       .then(all => {
-        if (!cancelled) setPriorSessions(all.filter(s => s.id !== session.id))
+        if (!cancelled) setPriorSessions(all.filter(s => s.id !== sessionData.id))
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [session.id])
+  }, [sessionData.id])
 
   const analysis = useMemo(
-    () => analyzeSession(session, { priorSessions }),
-    [session, priorSessions]
+    () => analyzeSession(sessionData, { priorSessions }),
+    [sessionData, priorSessions]
   )
-
-  const handleOutcomeChange = (patch) => {
-    // Applied locally first so the check-in feels instant and the session read
-    // updates without waiting on the write.
-    setSession(prev => ({ ...prev, ...patch }))
-    if (session.id) {
-      sessionRepository.updateSession(session.id, patch).catch(() => {})
-    }
-  }
 
   return (
     <div className="screen-center">
       <div className="end-content">
         <SessionReport
-          session={session}
+          session={sessionData}
           analysis={analysis}
           mode="post-session"
-          onOutcomeChange={handleOutcomeChange}
+          onOutcomeChange={onOutcomeChange}
           onPrimaryAction={onPrimaryAction}
           onSecondaryAction={() => onRestart()}
           onRepeat={() => onRestart({
-            task: session.task,
-            goal: session.goal,
-            energyLevel: session.energyLevel,
-            duration: durationFromSession(session),
-            tags: session.tags,
+            task: sessionData.task,
+            goal: sessionData.goal,
+            energyLevel: sessionData.energyLevel,
+            duration: durationFromSession(sessionData),
+            tags: sessionData.tags,
           })}
         />
       </div>

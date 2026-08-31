@@ -21,20 +21,35 @@ export function sessionOutcome(session) {
   return null
 }
 
-function matchesDateRange(session, range, now) {
-  if (!range || range === 'all') return true
-  const timestamp = session?.timestamp
-  if (!Number.isFinite(timestamp)) return false
+/**
+ * The earliest timestamp a named range admits, or null when it admits
+ * everything.
+ *
+ * Exported because the native adapter needs the same boundary as an absolute
+ * value to hand to SQL. Both adapters calling this is what stops "this month"
+ * from quietly meaning two different things depending on where the query ran.
+ */
+export function dateRangeCutoff(range, now = Date.now()) {
+  if (!range || range === 'all') return null
   const cutoff = new Date(now)
   if (range === 'week') {
     cutoff.setDate(cutoff.getDate() - 7)
-  } else if (range === 'month') {
+    return cutoff.getTime()
+  }
+  if (range === 'month') {
     cutoff.setDate(1)
     cutoff.setHours(0, 0, 0, 0)
-  } else {
-    return true
+    return cutoff.getTime()
   }
-  return timestamp >= cutoff.getTime()
+  return null
+}
+
+function matchesDateRange(session, range, now) {
+  const cutoff = dateRangeCutoff(range, now)
+  if (cutoff == null) return true
+  const timestamp = session?.timestamp
+  if (!Number.isFinite(timestamp)) return false
+  return timestamp >= cutoff
 }
 
 function matchesSearch(session, search) {

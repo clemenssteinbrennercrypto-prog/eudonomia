@@ -398,6 +398,15 @@ fn load_ledger(connection: &Connection) -> Result<Value, String> {
     Ok(json!({ "schemaVersion": 1, "days": days }))
 }
 
+/// Neutralise LIKE's wildcards so a search term is matched literally. The
+/// backslash is escaped first, or it would corrupt the escapes added after it.
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 /// Build the WHERE clause for a summary listing. Returns the SQL fragment plus
 /// its bound values, so the count and page queries cannot drift apart.
 fn summary_filters(query: &SummaryQuery) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
@@ -434,8 +443,11 @@ fn summary_filters(query: &SummaryQuery) -> (String, Vec<Box<dyn rusqlite::ToSql
     if let Some(search) = query.search.as_deref() {
         let trimmed = search.trim();
         if !trimmed.is_empty() {
-            clauses.push(format!("search_text LIKE ?{}", binds.len() + 1));
-            binds.push(Box::new(format!("%{}%", trimmed.to_lowercase())));
+            // Searching for "50%" must look for a literal percent sign, not
+            // "anything after 50". LIKE's own wildcards have to be escaped or
+            // the in-memory filter and this one disagree on such queries.
+            clauses.push(format!("search_text LIKE ?{} ESCAPE '\\'", binds.len() + 1));
+            binds.push(Box::new(format!("%{}%", escape_like(&trimmed.to_lowercase()))));
         }
     }
 
@@ -1023,6 +1035,39 @@ mod tests {
         )
         .unwrap();
         assert_eq!(searched.total, 1);
+    }
+
+    #[test]
+    fn search_treats_like_wildcards_as_literal_characters() {
+        let mut connection = db();
+        let mut percent = summary("percent", 1);
+        percent.search_text = "hit 50% target".into();
+        let mut other = summary("other", 2);
+        other.search_text = "hit 50 targets".into();
+        save_session(&mut connection, &session_value("percent"), &percent, None, None).unwrap();
+        save_session(&mut connection, &session_value("other"), &other, None, None).unwrap();
+
+        // Unescaped, "50%" would match both rows because % is LIKE's wildcard.
+        let page = list_summaries(
+            &connection,
+            &SummaryQuery { search: Some("50%".into()), ..Default::default() },
+        )
+        .unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0]["id"], "percent");
+
+        // The single-character wildcard needs the same treatment.
+        let mut underscore = summary("underscore", 3);
+        underscore.search_text = "deep_work".into();
+        save_session(&mut connection, &session_value("underscore"), &underscore, None, None)
+            .unwrap();
+        let page = list_summaries(
+            &connection,
+            &SummaryQuery { search: Some("deep_".into()), ..Default::default() },
+        )
+        .unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0]["id"], "underscore");
     }
 
     #[test]

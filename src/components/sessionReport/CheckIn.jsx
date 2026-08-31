@@ -8,12 +8,15 @@ import { GOAL_OUTCOMES } from './constants'
  * is always optional, unlike the outcome itself.
  */
 export default function CheckIn({ session, analysis, onOutcomeChange }) {
-  const [selectedOutcome, setSelectedOutcome] = useState(analysis.goalOutcome)
+  // The chosen outcome is read straight off the analysis rather than copied
+  // into local state: the owner above re-analyses after every change, so a
+  // second copy here could only ever go stale. The note fields keep local
+  // state because they are typed into and saved on blur.
+  const selectedOutcome = analysis.goalOutcome
   const [completedText, setCompletedText] = useState(session.completedText || '')
   const [blockerText, setBlockerText] = useState(session.blockerText || '')
 
   const selectOutcome = (nextOutcome) => {
-    setSelectedOutcome(nextOutcome)
     onOutcomeChange({
       goalOutcome: nextOutcome,
       goalAchieved: nextOutcome === 'yes' ? true : nextOutcome === 'no' ? false : null,

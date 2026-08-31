@@ -12,6 +12,7 @@ import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
 import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
 import { sessionRepository } from './lib/sessionRepository'
+import { createSessionPersister } from './lib/sessionPersistence'
 import {
   getActiveWorkspace,
   loadWorkspaceState,
@@ -226,13 +227,20 @@ export default function App() {
 
   const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
 
+  // Owns the save and the check-in answers together, because only one place
+  // can know whether the session has a stored row yet. See sessionPersistence.js.
+  const persisterRef = useRef(null)
+  if (!persisterRef.current) {
+    persisterRef.current = createSessionPersister(sessionRepository)
+  }
+
   // A finished session must never be lost to a failed write. The record is put
   // on screen from memory first; persistence is attempted after, and a failure
   // leaves a retry rather than silently discarding work the user just did.
   const persistSession = useCallback(async (enriched) => {
     try {
-      const saved = await sessionRepository.saveSession(enriched)
-      setSessionData(saved)
+      // Comes back with any answers given while the write was in flight.
+      setSessionData(await persisterRef.current.save(enriched))
       setSaveError(null)
       // LabDashboard caches its storage snapshot while mounted. Bump this after
       // every completed session so returning to Lab cannot show a stale ledger.
@@ -244,6 +252,14 @@ export default function App() {
     }
   }, [])
 
+  // The post-session check-in. Owned here rather than in EndScreen because a
+  // component holding its own copy of the record cannot see the storage id
+  // arrive — which is precisely how these answers used to get dropped.
+  const handleOutcomeChange = useCallback(async (patch) => {
+    setSessionData(previous => (previous ? { ...previous, ...patch } : previous))
+    await persisterRef.current.edit(patch)
+  }, [])
+
   const handleEnd = useCallback((data) => {
     const enriched = withSessionFocusMetric({
       ...data,
@@ -253,6 +269,8 @@ export default function App() {
       tags,
       workspace: workspaceSnapshot(activeWorkspace),
     })
+    // A new session starts with no stored row and no carried-over answers.
+    persisterRef.current.reset()
     setSessionData(enriched)
     setScreen('end')
     persistSession(enriched)
@@ -360,6 +378,7 @@ export default function App() {
           )}
           <EndScreen
             sessionData={sessionData}
+            onOutcomeChange={handleOutcomeChange}
             onRestart={handleRestart}
             onPrimaryAction={() => setScreen('analytics')}
           />

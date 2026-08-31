@@ -19,6 +19,7 @@ beforeEach(() => {
 function render(sessionData) {
   return renderToString(React.createElement(EndScreen, {
     sessionData: { id: 'sess-1', ...sessionData },
+    onOutcomeChange() {},
     onRestart() {},
     onPrimaryAction() {},
   })).replaceAll('<!-- -->', '')
@@ -92,5 +93,31 @@ describe('EndScreen has no path to a model call', () => {
   it('never imports the session verdict or model client modules', () => {
     const source = readFileSync(fileURLToPath(new URL('./EndScreen.jsx', import.meta.url)), 'utf8')
     expect(source).not.toMatch(/sessionVerdict|modelClient/)
+  })
+})
+
+// This screen is mounted with a record whose save has not resolved yet, so its
+// storage id arrives on a later render. A copy of the session taken at mount
+// never sees that id — which is how every post-session check-in came to be
+// silently dropped. Persistence belongs to the owner; this screen renders the
+// prop it is handed. The behavioural guarantee is covered by
+// sessionPersistence.test.js; this guards the shape that made it possible.
+describe('EndScreen keeps no copy of the session', () => {
+  const source = readFileSync(fileURLToPath(new URL('./EndScreen.jsx', import.meta.url)), 'utf8')
+
+  it('does not seed component state from the session prop', () => {
+    expect(source).not.toMatch(/useState\(\s*sessionData\s*\)/)
+  })
+
+  it('does not write to storage itself', () => {
+    expect(source).not.toMatch(/updateSession|saveSession/)
+  })
+
+  it('renders the outcome the prop carries, so a later update is reflected', () => {
+    const html = render({
+      actualSeconds: 1800, measuredSeconds: 1800, focusedSeconds: 1500, avgFocusScore: 83,
+      goalOutcome: 'partly',
+    })
+    expect(html).toContain('What got in the way?')
   })
 })

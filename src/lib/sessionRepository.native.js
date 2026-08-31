@@ -21,7 +21,7 @@ import {
 import { addSessionToFocusLedger, localDayKey, withSessionFocusMetric } from './focusMetric'
 import { buildSessionSummary } from './sessionSummary'
 import { analyzeSession } from './sessionAnalysis'
-import { DEFAULT_PAGE_SIZE } from './sessionQuery'
+import { DEFAULT_PAGE_SIZE, dateRangeCutoff } from './sessionQuery'
 
 export const ARCHIVE_SCHEMA_VERSION = 1
 
@@ -29,27 +29,12 @@ function invoke(command, args) {
   return globalThis.window.__TAURI__.core.invoke(command, args)
 }
 
-/** The JS filter names a range ("week"); SQL needs an absolute bound. Resolve
- *  it here, where the user's timezone and calendar are already known, rather
- *  than reimplementing month arithmetic in Rust. */
-function dateBoundFor(dateRange, now = Date.now()) {
-  if (!dateRange || dateRange === 'all') return null
-  const cutoff = new Date(now)
-  if (dateRange === 'week') {
-    cutoff.setDate(cutoff.getDate() - 7)
-    return cutoff.getTime()
-  }
-  if (dateRange === 'month') {
-    cutoff.setDate(1)
-    cutoff.setHours(0, 0, 0, 0)
-    return cutoff.getTime()
-  }
-  return null
-}
-
 function toNativeQuery(query = {}) {
   return {
-    dateFrom: dateBoundFor(query.dateRange, query.now),
+    // The same cutoff the in-memory filter uses, resolved to an absolute bound
+    // for SQL. Shared rather than reimplemented so "this month" cannot come to
+    // mean two different things depending on which adapter answered.
+    dateFrom: dateRangeCutoff(query.dateRange, query.now ?? Date.now()),
     dateTo: null,
     outcome: query.outcome && query.outcome !== 'all' ? query.outcome : null,
     workspaceId: query.workspaceId && query.workspaceId !== 'all' ? query.workspaceId : null,
