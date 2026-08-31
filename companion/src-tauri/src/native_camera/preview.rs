@@ -23,6 +23,7 @@ pub struct NativeCameraPreviewBounds {
     y: f64,
     width: f64,
     height: f64,
+    viewport_height: f64,
     visible: bool,
     corner_radius: f64,
 }
@@ -34,9 +35,18 @@ impl NativeCameraPreviewBounds {
             && self.y.is_finite()
             && self.width.is_finite()
             && self.height.is_finite()
+            && self.viewport_height.is_finite()
             && self.corner_radius.is_finite()
             && self.width >= 1.0
             && self.height >= 1.0
+    }
+
+    fn layer_y(self, geometry_flipped: bool) -> f64 {
+        if geometry_flipped {
+            self.y
+        } else {
+            self.viewport_height - self.y - self.height
+        }
     }
 }
 
@@ -95,12 +105,11 @@ pub(super) fn update(app: &AppHandle, bounds: NativeCameraPreviewBounds) -> Resu
             CATransaction::begin();
             CATransaction::setDisableActions(true);
             if bounds.is_drawable() {
-                let root_height = root.bounds().size.height;
-                let y = if root.isGeometryFlipped() {
-                    bounds.y
-                } else {
-                    root_height - bounds.y - bounds.height
-                };
+                // WKWebView's native layer can extend beneath the macOS title
+                // bar while DOM coordinates start at the page viewport. Using
+                // the layer's full height shifts the preview upward by exactly
+                // that title-bar inset.
+                let y = bounds.layer_y(root.isGeometryFlipped());
                 preview.setFrame(CGRect::new(
                     CGPoint::new(bounds.x, y),
                     CGSize::new(bounds.width, bounds.height),
@@ -154,15 +163,30 @@ mod tests {
             y: 20.0,
             width: 160.0,
             height: 120.0,
+            viewport_height: 800.0,
             visible: true,
             corner_radius: 8.0,
         }
         .is_drawable());
+        assert_eq!(
+            NativeCameraPreviewBounds {
+                x: 10.0,
+                y: 600.0,
+                width: 160.0,
+                height: 120.0,
+                viewport_height: 800.0,
+                visible: true,
+                corner_radius: 8.0,
+            }
+            .layer_y(false),
+            80.0
+        );
         assert!(!NativeCameraPreviewBounds {
             x: 10.0,
             y: 20.0,
             width: 0.0,
             height: 120.0,
+            viewport_height: 800.0,
             visible: true,
             corner_radius: 8.0,
         }
@@ -172,6 +196,7 @@ mod tests {
             y: 20.0,
             width: 160.0,
             height: 120.0,
+            viewport_height: 800.0,
             visible: false,
             corner_radius: 8.0,
         }

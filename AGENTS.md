@@ -40,7 +40,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 279 tests — must stay green
+npm test           # vitest, currently 421 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -48,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 42 tests (13 library + 29 app)
+cargo test         # currently 67 tests (13 library + 54 app)
 cargo check
 ```
 
@@ -272,8 +272,8 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 279 JS tests and 42 Rust tests (13 native-camera library
-tests plus 29 app tests). Both suites must stay green. Treat these counts as a
+There are currently 421 JS tests and 67 Rust tests (13 native-camera library
+tests plus 54 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
 Test the **refusals and the boundaries**, not just the happy path. The valuable
