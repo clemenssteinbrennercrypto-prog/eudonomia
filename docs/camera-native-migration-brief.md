@@ -160,9 +160,24 @@ versioned scoring generation; that is a product decision.
 5. Remove the JavaScript camera path only after real-use confirmation.
 
 Step 1 is implemented and its minimize/close lifecycle was verified on the
-target MacBook. Step 2 is implemented as a harness but is still blocked on the
-multi-minute user recording and stateful score replay. No live-session source
-switch has occurred.
+target MacBook. Step 2 has now run on Clemens' 4:51 reference clip, including a
+shared stateful JavaScript score replay, and **failed** the fixed gate:
+landmark p95/max `0.004537 / 0.088413`, yaw p95 `2.311°`, pitch p95 `0.627°`,
+score p95 `6.799`, and focused classification parity `97.2806%` (119 of 4,376
+frames differed). At that gate, no live-session source switch occurred. See
+`docs/native-camera-prototype.md` for the complete table and eliminated
+preprocessing hypotheses. Subsequent full-clip isolation also ruled out the
+modern TFLite runtime and recursive ROI drift as the main cause; neither the
+exact v0.8.8 CPU runtime nor the native Metal delegate reproduces the historical
+WebGL ruler. FaceMesh.js WebGL versus its own CPU inference already misses the
+score/classification gates. This strengthens, rather than removes, the need for
+an explicit product decision if exact WebGL-path parity cannot be reproduced.
+
+Clemens made that decision on 30 August: ship the native path to internal-test
+as a separately versioned V2 ruler, never as a passing V1 parity result. Steps 3
+and 4 are now implemented behind an opt-in internal toggle. V2 sessions carry
+their own scoring version/source and are excluded from stable V1 history and
+calibration. Step 5 remains blocked on the real MacBook live tests.
 
 ## 9. Two-machine boundary
 
@@ -184,18 +199,18 @@ the tag and the displayed build ID before asking the user to test.
 
 ## 10. Verification
 
-Current automated baseline after the native prototype:
+Current automated baseline after the opt-in V2 wiring:
 
 ```bash
-npm test -- --run                 # 266 tests
+npm test -- --run                 # 279 tests
 npm run build
 cd companion/src-tauri
-cargo test                        # 39 tests: 10 library + 29 app
+cargo test                        # 41 tests: 12 library + 29 app
 cargo check
 ```
 
-A green build is not runtime verification. After the parity-gated source
-switch, manually test with a real camera:
+A green build is not runtime verification. With the internal V2 source enabled,
+manually test with a real camera:
 
 1. Start a session, fixate and note the score.
 2. Yellow-minimize, deliberately look away and move for about two minutes.

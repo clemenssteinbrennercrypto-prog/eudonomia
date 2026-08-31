@@ -57,6 +57,14 @@ export default function MeasuredFacts({ session, analysis }) {
             {measurement.aboveThresholdPct == null ? '--' : `${measurement.aboveThresholdPct}%`}
           </span>
           <span className="stat-label">{measurement.aboveThresholdPct == null ? 'focus not measured' : 'time above threshold'}</span>
+          {/* Which ruler produced this number. V2 is a different measurement
+              generation held out of cross-session comparison, so the figure is
+              labelled rather than silently mixed in with V1 history. */}
+          {measurement.measurementSource === 'native_mediapipe_v2' && (
+            <span style={{ fontSize: 10, color: 'var(--ultra-bright)', fontWeight: 800, marginTop: 4, display: 'block', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Native ruler · V2
+            </span>
+          )}
         </div>
         <div className="stat-divider" />
         <div className="stat">

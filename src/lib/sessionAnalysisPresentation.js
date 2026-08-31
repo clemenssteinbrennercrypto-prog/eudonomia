@@ -5,6 +5,8 @@
 // history detail view render through these same functions so they can never
 // drift apart.
 
+// Durations are rounded to whole seconds before splitting into minutes and
+// seconds — a fractional accumulator otherwise renders as "12m 3.0000001s".
 export function fmtDuration(seconds) {
   const s = Math.max(0, Math.round(seconds || 0))
   if (s < 60) return `${s}s`
@@ -46,8 +48,10 @@ export function describeConclusion(conclusion, facts) {
         note: 'The read below reflects what you reported, independent of the camera.',
       }
     case 'SCORING_VERSION_INCOMPATIBLE':
+      // Deliberately not "older": the native V2 ruler is newer, just measured
+      // differently, and is held out of comparison until it is promoted.
       return {
-        headline: 'This session used an older scoring version, so its attention read is not shown.',
+        headline: 'This session was measured with a different scoring version, so its attention read is not compared here.',
         note: 'The read below still reflects what you reported.',
       }
     case 'HIGH_FOCUS_GOAL_MISSED':

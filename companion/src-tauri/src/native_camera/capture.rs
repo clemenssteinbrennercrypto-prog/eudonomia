@@ -19,7 +19,7 @@ use objc2_av_foundation::{
     AVCaptureSession, AVCaptureSessionPreset640x480, AVCaptureVideoDataOutput,
     AVCaptureVideoDataOutputSampleBufferDelegate, AVMediaTypeVideo,
 };
-use objc2_core_media::CMSampleBuffer;
+use objc2_core_media::{CMSampleBuffer, CMTime};
 use objc2_core_video::{
     kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferGetBaseAddress,
     CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight, CVPixelBufferGetWidth,
@@ -28,6 +28,11 @@ use objc2_core_video::{
 use objc2_foundation::{NSDictionary, NSNumber, NSObjectProtocol, NSString};
 
 use super::pipeline::RgbFrame;
+
+// The historical WebView path samples one frame every 67 ms and the parity
+// clip is 15 fps. Asking AVFoundation for more frames only burns camera,
+// conversion, inference and IPC work; it does not add scoring resolution.
+const NATIVE_CAMERA_MAX_FPS: i32 = 15;
 
 struct CaptureDelegateIvars {
     sender: SyncSender<RgbFrame>,
@@ -121,6 +126,13 @@ impl NativeCapture {
             output.setAlwaysDiscardsLateVideoFrames(true);
             session.addInput(&input as &AVCaptureInput);
             session.addOutput(&output);
+            if let Some(connection) = output.connectionWithMediaType(media_type) {
+                #[allow(deprecated)]
+                if connection.isVideoMinFrameDurationSupported() {
+                    #[allow(deprecated)]
+                    connection.setVideoMinFrameDuration(CMTime::new(1, NATIVE_CAMERA_MAX_FPS));
+                }
+            }
             output.setSampleBufferDelegate_queue(Some(delegate_protocol), Some(&queue));
             session.commitConfiguration();
             session.startRunning();
@@ -143,6 +155,16 @@ impl NativeCapture {
             self.output.setSampleBufferDelegate_queue(None, None);
             self.session.stopRunning();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NATIVE_CAMERA_MAX_FPS;
+
+    #[test]
+    fn native_capture_does_not_outrun_the_historical_sampling_rate() {
+        assert_eq!(NATIVE_CAMERA_MAX_FPS, 15);
     }
 }
 

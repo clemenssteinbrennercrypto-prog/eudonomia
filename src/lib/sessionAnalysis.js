@@ -16,8 +16,7 @@
 // verdict feature is a separate, still-isolated concern for future AI
 // Companion work.
 
-import { sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
-import { ATTENTION_SCORING_VERSION } from './focusMetric'
+import { isComparableFocusGeneration, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
 import { calibrate } from './calibration'
 
@@ -114,7 +113,13 @@ function buildMeasurement(session) {
     scored,
     scoringVersion,
     accumulationVersion: session.attentionAccumulationVersion ?? null,
-    compatible: scoringVersion === ATTENTION_SCORING_VERSION,
+    // Whether this session's focus number can be read against the thresholds
+    // the conclusion codes use. Delegated to historyTrend so there is one
+    // definition of "same ruler": a missing version is pre-versioning V1 and
+    // comparable, while the native V2 ruler is deliberately held out of
+    // cross-session reads until it is promoted.
+    compatible: isComparableFocusGeneration(session),
+    measurementSource: session.attentionMeasurementSource ?? null,
     actualSeconds,
     measuredSeconds,
     coveragePct,

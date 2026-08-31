@@ -15,6 +15,7 @@ import {
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
 } from '../lib/nativeCompanion'
+import { loadNativeCameraV2Enabled, saveNativeCameraV2Enabled } from '../lib/cameraMeasurement'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
@@ -633,6 +634,7 @@ function NativeCameraPrototypeStatus() {
   const [facePresent, setFacePresent] = useState(null)
   const [landmarkCount, setLandmarkCount] = useState(0)
   const [actionError, setActionError] = useState('')
+  const [sessionSourceEnabled, setSessionSourceEnabled] = useState(loadNativeCameraV2Enabled)
 
   useEffect(() => {
     let cancelled = false
@@ -734,14 +736,27 @@ function NativeCameraPrototypeStatus() {
     }}>
       <div>
         <div style={{ color: 'var(--ultra-bright)', fontSize: 13, fontWeight: 900 }}>
-          Internal test · native camera prototype
+          Internal test · native camera V2
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
-          Diagnostic only—this does not feed the session score. Start it outside a session,
-          note the frame number, minimize or close the window, then reopen it. A larger frame
-          number proves AVFoundation and native FaceMesh kept running.
+          V2 is a separate scoring generation because recorded parity with the historical
+          WebGL ruler reached 97.28%, below the fixed 99% gate. Enable it only for the live
+          minimize/close test; switching it off restores the WebView V1 source.
         </div>
       </div>
+
+      <label style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+        border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px',
+        color: 'var(--text-secondary)', fontSize: 12, fontWeight: 800,
+      }}>
+        <span>Use native V2 for new sessions</span>
+        <input
+          type="checkbox"
+          checked={sessionSourceEnabled}
+          onChange={event => setSessionSourceEnabled(saveNativeCameraV2Enabled(event.target.checked))}
+        />
+      </label>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ color: statusTone, fontSize: 12, fontWeight: 900 }}>
@@ -784,6 +799,10 @@ function NativeCameraPrototypeStatus() {
         >
           Stop
         </button>
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 10.5, lineHeight: 1.45 }}>
+        The buttons below remain a capture diagnostic. Leaving this screen stops it before a
+        session takes ownership of the camera.
       </div>
       {actionError && (
         <div style={{ color: 'var(--bad)', fontSize: 11, fontWeight: 800 }}>{actionError}</div>

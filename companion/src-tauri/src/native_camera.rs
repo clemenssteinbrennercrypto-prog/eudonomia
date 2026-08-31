@@ -1,9 +1,9 @@
-//! Native camera measurement prototype.
+//! Native camera capture and legacy FaceMesh inference for scoring V2.
 //!
-//! This module deliberately stops at the native model boundary. The WebView
-//! remains the scoring source until a recorded-frame parity run passes. The
-//! models below are byte-for-byte slices of the legacy FaceMesh package that
-//! the current JavaScript path uses; they are not replacement Tasks models.
+//! Recorded parity did not pass the historical WebGL ruler, so this output is
+//! never relabelled as V1. Internal builds can opt into the separately versioned
+//! V2 session source. The models below are byte-for-byte slices of the legacy
+//! FaceMesh package; they are not replacement Tasks models.
 
 use std::{
     ffi::{c_char, c_void, CStr},
@@ -24,7 +24,9 @@ mod capture;
 mod pipeline;
 mod reference;
 
-pub use reference::{run_reference_harness, ReferenceHarnessSummary};
+pub use reference::{
+    run_reference_harness, run_reference_harness_with_roi_oracle, ReferenceHarnessSummary,
+};
 
 const NATIVE_CAMERA_STALE_AFTER: Duration = Duration::from_secs(1);
 const NATIVE_CAMERA_EVENT: &str = "native-camera-landmarks";

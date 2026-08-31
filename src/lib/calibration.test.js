@@ -55,6 +55,11 @@ describe('refuses to speak from thin data', () => {
     expect(isUsable(faulted[0])).toBe(false)
   })
 
+  it('does not calibrate V1 history with the separate native V2 ruler', () => {
+    const nativeV2 = many(MIN_SESSIONS, { extra: { attentionScoringVersion: 2 } })
+    expect(calibrate(nativeV2)).toMatchObject({ ready: false, needMore: MIN_SESSIONS })
+  })
+
   it('ignores sessions too short to mean anything', () => {
     expect(isUsable(session({ mins: 1 }))).toBe(false)
     expect(isUsable(session({ mins: 10 }))).toBe(true)

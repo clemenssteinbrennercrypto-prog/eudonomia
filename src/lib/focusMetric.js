@@ -368,7 +368,14 @@ export function deriveSessionFocusMetric(session) {
   })
 
   if (measurement?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
-    return reject('legacy_scoring_version')
+    const eligibleSeconds = finiteNonNegative(actualSeconds)
+      ? Math.max(0, actualSeconds - FOCUS_METRIC_V1.calibrationSeconds)
+      : null
+    const coverage = eligibleSeconds != null && eligibleSeconds > 0 &&
+      finiteNonNegative(measuredSeconds) && measuredSeconds <= eligibleSeconds + 1
+      ? clamp(measuredSeconds / eligibleSeconds, 0, 1)
+      : null
+    return reject('legacy_scoring_version', coverage == null ? null : Math.round(coverage * 1000) / 1000)
   }
   if (!finiteNonNegative(actualSeconds) || !finiteNonNegative(measuredSeconds) || !finiteNonNegative(scoreSum)) {
     return reject('invalid_measurement')
@@ -432,7 +439,7 @@ export function describeFocusMetricRejection(reason, { measuredSeconds } = {}) {
     case 'insufficient_duration':
       return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
     case 'legacy_scoring_version':
-      return 'This session used an older scoring version, so it is not counted toward your daily score.'
+      return 'This session used a different scoring generation, so it is not mixed into your daily score.'
     case 'invalid_measurement':
       return "This session's tracking data didn't validate, so it wasn't counted toward your daily score."
     default:

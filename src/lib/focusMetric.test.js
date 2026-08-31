@@ -141,6 +141,16 @@ describe('session focus metric refusals', () => {
     })
   })
 
+  it('reports coverage for a separate scoring generation without mixing its score', () => {
+    const nativeV2 = rawSession({ measuredSeconds: 300, actualSeconds: 420 })
+    nativeV2.attentionScoringVersion = ATTENTION_SCORING_VERSION + 1
+    expect(deriveSessionFocusMetric(nativeV2)).toMatchObject({
+      sessionEfficiency: null,
+      measurementCoverage: 0.75,
+      focusMetricRejection: 'legacy_scoring_version',
+    })
+  })
+
   it('requires five measured minutes', () => {
     const session = measuredSession({ measuredSeconds: 299, actualSeconds: 319 })
     expect(session.sessionEfficiency).toBeNull()

@@ -124,6 +124,37 @@ describe('measurement refusals', () => {
     expect(a.conclusion.evidence).not.toHaveProperty('focusPct')
   })
 
+  // The native V2 ruler is a different measurement generation, deliberately
+  // held out of comparison until promoted — so its number is shown as a fact
+  // but never read against thresholds calibrated on V1.
+  it('holds the native V2 ruler out of the focus-band conclusion', () => {
+    const a = analyzeSession(session({
+      actualSeconds: 1800,
+      pct: 90,
+      goalOutcome: 'yes',
+      extra: { attentionScoringVersion: 2, attentionMeasurementSource: 'native_mediapipe_v2' },
+    }))
+    expect(a.measurement.compatible).toBe(false)
+    expect(a.measurement.measurementSource).toBe('native_mediapipe_v2')
+    expect(a.conclusion.code).toBe('SCORING_VERSION_INCOMPATIBLE')
+    // The measured figure itself is still reported — it just is not compared.
+    expect(a.measurement.aboveThresholdPct).toBe(90)
+  })
+
+  // A record written before versioning existed is pre-versioning V1, not an
+  // incompatible ruler. Treating a missing version as incompatible would have
+  // refused a focus read on every session in someone's older history.
+  it('treats a pre-versioning record as comparable rather than incompatible', () => {
+    const a = analyzeSession(session({
+      actualSeconds: 1800,
+      pct: 85,
+      goalOutcome: 'yes',
+      extra: { attentionScoringVersion: undefined },
+    }))
+    expect(a.measurement.compatible).toBe(true)
+    expect(a.conclusion.code).toBe('HIGH_FOCUS_GOAL_MET')
+  })
+
   it('a completed outcome still gets a next action even when attention is not measured', () => {
     const a = analyzeSession(session({
       actualSeconds: 1800,

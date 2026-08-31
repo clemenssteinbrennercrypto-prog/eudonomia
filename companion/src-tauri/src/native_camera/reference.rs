@@ -2,11 +2,11 @@
 
 use std::{
     fs::{self, File},
-    io::{BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::pipeline::{analyze_landmarks, FrameSignals, Landmark, NativeFacePipeline, RgbFrame};
 
@@ -16,6 +16,16 @@ pub struct ReferenceHarnessSummary {
     pub frames: usize,
     pub frames_with_face: usize,
     pub output: PathBuf,
+    pub used_reference_roi: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoiOracleFrame {
+    frame_index: usize,
+    file_name: String,
+    face_present: bool,
+    landmarks: Option<Vec<Landmark>>,
 }
 
 #[derive(Serialize)]
@@ -36,8 +46,30 @@ pub fn run_reference_harness(
     frames_directory: impl AsRef<Path>,
     output_jsonl: impl AsRef<Path>,
 ) -> Result<ReferenceHarnessSummary, String> {
-    let frames_directory = frames_directory.as_ref();
-    let output_jsonl = output_jsonl.as_ref();
+    run_reference_harness_inner(frames_directory.as_ref(), output_jsonl.as_ref(), None)
+}
+
+/// Runs the recorded-frame harness while deriving each tracking ROI from the
+/// reference engine's preceding-frame landmarks. This is a diagnostic oracle,
+/// not an alternate production path or a valid standalone parity result.
+pub fn run_reference_harness_with_roi_oracle(
+    frames_directory: impl AsRef<Path>,
+    output_jsonl: impl AsRef<Path>,
+    oracle_jsonl: impl AsRef<Path>,
+) -> Result<ReferenceHarnessSummary, String> {
+    let oracle = read_roi_oracle(oracle_jsonl.as_ref())?;
+    run_reference_harness_inner(
+        frames_directory.as_ref(),
+        output_jsonl.as_ref(),
+        Some(&oracle),
+    )
+}
+
+fn run_reference_harness_inner(
+    frames_directory: &Path,
+    output_jsonl: &Path,
+    roi_oracle: Option<&[RoiOracleFrame]>,
+) -> Result<ReferenceHarnessSummary, String> {
     let mut paths: Vec<PathBuf> = fs::read_dir(frames_directory)
         .map_err(|error| format!("read {}: {error}", frames_directory.display()))?
         .filter_map(Result::ok)
@@ -60,6 +92,9 @@ pub fn run_reference_harness(
             frames_directory.display()
         ));
     }
+    if let Some(oracle) = roi_oracle {
+        validate_roi_oracle(&paths, oracle)?;
+    }
 
     let output = File::create(output_jsonl)
         .map_err(|error| format!("create {}: {error}", output_jsonl.display()))?;
@@ -78,6 +113,24 @@ pub fn run_reference_harness(
             height: decoded.height() as usize,
             pixels: decoded.into_raw(),
         };
+        if let Some(previous) =
+            roi_oracle.and_then(|oracle| frame_index.checked_sub(1).map(|i| &oracle[i]))
+        {
+            match (previous.face_present, previous.landmarks.as_deref()) {
+                (true, Some(landmarks)) => pipeline
+                    .set_reference_roi(landmarks, frame.width, frame.height)
+                    .map_err(|error| {
+                        format!("ROI oracle frame {}: {error}", previous.frame_index)
+                    })?,
+                (false, None) => pipeline.reset(),
+                _ => {
+                    return Err(format!(
+                        "ROI oracle frame {} has inconsistent facePresent/landmarks",
+                        previous.frame_index
+                    ));
+                }
+            }
+        }
         let landmarks = pipeline
             .process(&frame)
             .map_err(|error| format!("analyze {}: {error}", path.display()))?;
@@ -107,5 +160,45 @@ pub fn run_reference_harness(
         frames: paths.len(),
         frames_with_face,
         output: output_jsonl.to_path_buf(),
+        used_reference_roi: roi_oracle.is_some(),
     })
+}
+
+fn read_roi_oracle(path: &Path) -> Result<Vec<RoiOracleFrame>, String> {
+    let input = File::open(path).map_err(|error| format!("open {}: {error}", path.display()))?;
+    BufReader::new(input)
+        .lines()
+        .enumerate()
+        .map(|(line_index, line)| {
+            let line = line.map_err(|error| {
+                format!("read {} line {}: {error}", path.display(), line_index + 1)
+            })?;
+            serde_json::from_str(&line).map_err(|error| {
+                format!("parse {} line {}: {error}", path.display(), line_index + 1)
+            })
+        })
+        .collect()
+}
+
+fn validate_roi_oracle(paths: &[PathBuf], oracle: &[RoiOracleFrame]) -> Result<(), String> {
+    if paths.len() != oracle.len() {
+        return Err(format!(
+            "ROI oracle has {} frames; image directory has {}",
+            oracle.len(),
+            paths.len()
+        ));
+    }
+    for (frame_index, (path, reference)) in paths.iter().zip(oracle).enumerate() {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if reference.frame_index != frame_index || reference.file_name != file_name {
+            return Err(format!(
+                "ROI oracle frame {frame_index} is {}/{}; expected {frame_index}/{file_name}",
+                reference.frame_index, reference.file_name
+            ));
+        }
+    }
+    Ok(())
 }
