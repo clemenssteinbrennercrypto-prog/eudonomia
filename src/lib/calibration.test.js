@@ -66,15 +66,27 @@ describe('refuses to speak from thin data', () => {
     const nativeV2 = many(MIN_SESSIONS, { extra: { attentionScoringVersion: 2 } })
     expect(calibrate(nativeV2).ready).toBe(true)
 
-    // With both present, only the newer generation qualifies — the V1 sessions
-    // are kept but not counted toward a pattern measured on a different ruler.
-    const mixed = [...many(MIN_SESSIONS, { extra: { attentionScoringVersion: 1 } }), ...nativeV2]
-    expect(calibrate(mixed).sessionsAnalysed).toBe(MIN_SESSIONS)
+    // With both present, the ruler in recent use decides. V1 sessions are kept
+    // but not counted toward a pattern measured on a different ruler.
+    const day = (n) => new Date(2026, 7, n, 10).getTime()
+    const olderV1 = Array.from({ length: MIN_SESSIONS }, (_, i) =>
+      session({ extra: { attentionScoringVersion: 1, timestamp: day(1 + i) } }))
+    const recentV2 = Array.from({ length: MIN_SESSIONS }, (_, i) =>
+      session({ extra: { attentionScoringVersion: 2, timestamp: day(12 + i) } }))
+    expect(calibrate([...olderV1, ...recentV2]).sessionsAnalysed).toBe(MIN_SESSIONS)
 
-    // Too few of the newer ruler is a refusal, not a fallback to the old one.
-    const thinV2 = [...many(MIN_SESSIONS, { extra: { attentionScoringVersion: 1 } }),
-      ...many(2, { extra: { attentionScoringVersion: 2 } })]
+    // Too few of the ruler in recent use is a refusal, not a fallback to the
+    // older one — otherwise patterns would quietly answer on a different scale.
+    const thinV2 = [...olderV1,
+      ...Array.from({ length: 2 }, (_, i) =>
+        session({ extra: { attentionScoringVersion: 2, timestamp: day(12 + i) } }))]
     expect(calibrate(thinV2)).toMatchObject({ ready: false })
+
+    // And switching back restores the V1 evidence rather than stranding it.
+    const switchedBack = [...recentV2,
+      ...Array.from({ length: MIN_SESSIONS }, (_, i) =>
+        session({ extra: { attentionScoringVersion: 1, timestamp: day(20 + i) } }))]
+    expect(calibrate(switchedBack).sessionsAnalysed).toBe(MIN_SESSIONS)
   })
 
   it('ignores sessions too short to mean anything', () => {

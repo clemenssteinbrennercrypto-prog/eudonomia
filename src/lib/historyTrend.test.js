@@ -75,9 +75,11 @@ describe('session focus measurement', () => {
   // to V1 forever. The invariant that matters is unchanged — two generations
   // are never averaged together — but the survivor is now the newer one, and
   // V1 history is set aside rather than V2.
-  it('compares within one generation, keeping the newest rather than blending', () => {
-    const webviewV1 = sessionAt(NOW, 80, { attentionScoringVersion: 1 })
-    const nativeV2 = sessionAt(NOW, 10, { attentionScoringVersion: 2 })
+  it('compares within one generation, following the ruler most recently used', () => {
+    const earlier = new Date(2026, 7, 10, 9, 0, 0)
+    const later = new Date(2026, 7, 10, 11, 0, 0)
+    const webviewV1 = sessionAt(earlier, 80, { attentionScoringVersion: 1 })
+    const nativeV2 = sessionAt(later, 10, { attentionScoringVersion: 2 })
     expect(sessionFocusPct(nativeV2)).toBe(10)
     // A blend would land between 10 and 80; this must be V2's number alone.
     expect(aggregateFocusMeasurements([webviewV1, nativeV2])).toMatchObject({
@@ -86,6 +88,31 @@ describe('session focus measurement', () => {
     })
     expect(buildHistoryTrend([webviewV1, nativeV2], { range: 'week', now: NOW }).buckets[0])
       .toMatchObject({ count: 1, avgFocus: 10 })
+  })
+
+  // The toggle promises that switching V2 off restores the V1 source. Picking
+  // the highest version number present broke that promise: one old V2 session
+  // pinned every comparison to V2 forever and silently dropped the V1 sessions
+  // recorded afterwards. Recency is what makes switching back actually work.
+  it('returns to V1 once V1 is the ruler in recent use again', () => {
+    const strayV2 = sessionAt(new Date(2026, 7, 3, 9), 10, { attentionScoringVersion: 2 })
+    const laterV1 = [
+      sessionAt(new Date(2026, 7, 8, 9), 80, { attentionScoringVersion: 1 }),
+      sessionAt(new Date(2026, 7, 9, 9), 80, { attentionScoringVersion: 1 }),
+      sessionAt(new Date(2026, 7, 10, 9), 80, { attentionScoringVersion: 1 }),
+    ]
+    expect(aggregateFocusMeasurements([strayV2, ...laterV1])).toMatchObject({
+      sessionCount: 3,
+      focusPct: 80,
+    })
+  })
+
+  it('is unaffected by the order the sessions happen to arrive in', () => {
+    const older = sessionAt(new Date(2026, 7, 8, 9), 80, { attentionScoringVersion: 1 })
+    const newer = sessionAt(new Date(2026, 7, 10, 9), 10, { attentionScoringVersion: 2 })
+    // Newest-first and oldest-first must agree — callers pass both orderings.
+    expect(aggregateFocusMeasurements([newer, older]).focusPct).toBe(10)
+    expect(aggregateFocusMeasurements([older, newer]).focusPct).toBe(10)
   })
 
   it('leaves a single-generation history exactly as it was', () => {

@@ -18,13 +18,30 @@ export function focusGenerationOf(session) {
   return session?.attentionScoringVersion ?? WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
 }
 
-/** The generation a set of sessions should be compared on — the newest present. */
+/**
+ * The generation a set of sessions should be compared on: the one the most
+ * recent session was measured with.
+ *
+ * Deliberately recency, not the highest version number. Taking the maximum
+ * meant a single stray V2 session anywhere in a history pinned every
+ * comparison to V2 forever — discarding V1 sessions recorded long after the
+ * user had switched back, and flatly contradicting the toggle's own promise
+ * that turning it off restores the V1 source. Recency is also the honest
+ * reading of the question: the ruler you are using now is the one your recent
+ * numbers should be compared on, and switching cameras moves it either way.
+ */
 export function activeFocusGeneration(sessions) {
-  const versions = (Array.isArray(sessions) ? sessions : [])
-    .filter(Boolean)
-    .map(focusGenerationOf)
-    .filter(Number.isFinite)
-  return versions.length ? Math.max(...versions) : WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+  const safe = (Array.isArray(sessions) ? sessions : []).filter(Boolean)
+  if (safe.length === 0) return WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+
+  let newest = null
+  for (const session of safe) {
+    if (!Number.isFinite(session.timestamp)) continue
+    if (newest == null || session.timestamp > newest.timestamp) newest = session
+  }
+  // Records with no usable timestamp cannot establish recency; fall back to
+  // the first entry rather than inventing an order.
+  return focusGenerationOf(newest ?? safe[0])
 }
 
 // Takes an explicit generation. Never pass this straight to Array.filter —
