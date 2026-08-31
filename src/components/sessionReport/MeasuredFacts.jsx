@@ -93,6 +93,17 @@ export default function MeasuredFacts({ session, analysis }) {
             fontSize: 12.5, lineHeight: 1.5, color: 'var(--warn)',
           }}>
             Not counted toward your daily focus score: {notice}
+            {/* Without this, the internal-test camera reads as a malfunction:
+                the box appears on every session, the score never moves, and
+                nothing on screen says why or how to get out of it. */}
+            {measurement.measurementSource === 'native_mediapipe_v2' && (
+              <span style={{ display: 'block', marginTop: 6, color: 'var(--text-secondary)' }}>
+                This session used the native camera (V2), an internal test source that has not
+                yet met its parity gate against the established ruler. Sessions measured with it
+                are deliberately kept out of your score. Turn it off under Protection → Internal
+                test · native camera V2 to go back to measurements that count.
+              </span>
+            )}
           </div>
         )
       })()}
