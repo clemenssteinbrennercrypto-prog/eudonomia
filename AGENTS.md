@@ -48,7 +48,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 41 tests (12 library + 29 app)
+cargo test         # currently 42 tests (13 library + 29 app)
 cargo check
 ```
 
@@ -272,7 +272,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 279 JS tests and 41 Rust tests (12 native-camera library
+There are currently 279 JS tests and 42 Rust tests (13 native-camera library
 tests plus 29 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -495,11 +495,12 @@ manual-resume requirement, and the saved debrief identified the native V2
 ruler. This passes the live minimize/close gate. It does not cover hard camera
 loss, system sleep/lid close, or CPU/energy impact; keep those claims open.
 
-V2 deliberately shows a non-video `Native V2` tile. Sending preview pixels over
-Tauri would violate the native-process frame boundary and add encoding/copying
-cost. If a live preview returns, implement it as a native
-`AVCaptureVideoPreviewLayer` sharing the existing `AVCaptureSession`, never as
-frame bytes emitted to React.
+V2 renders its live preview with a native `AVCaptureVideoPreviewLayer` sharing
+the existing `AVCaptureSession`. React sends only the placeholder's geometry
+through the `set_native_camera_preview` command; preview pixels are never
+serialized or emitted into the WebView. Preview-layer failure is presentation
+only and must not fault otherwise valid landmark measurement. Do not replace
+this with frame bytes, data URLs, canvas copies, or a second capture session.
 
 The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
 to bundle extra binaries and the Universal build then fails for the arm64-only

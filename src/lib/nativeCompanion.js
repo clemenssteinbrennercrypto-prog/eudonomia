@@ -91,6 +91,12 @@ export async function stopNativeCameraMeasurement() {
   return invokeNative('stop_native_camera_prototype')
 }
 
+// Only geometry crosses IPC. AVFoundation renders the preview directly into a
+// native layer; no camera pixels are serialized into the WebView.
+export async function setNativeCameraPreview(bounds) {
+  return invokeNative('set_native_camera_preview', { bounds })
+}
+
 export const startNativeCameraPrototype = startNativeCameraMeasurement
 export const stopNativeCameraPrototype = stopNativeCameraMeasurement
 

@@ -773,9 +773,11 @@ dependencies = [
  "mediapipe",
  "objc2",
  "objc2-av-foundation",
+ "objc2-core-foundation",
  "objc2-core-media",
  "objc2-core-video",
  "objc2-foundation",
+ "objc2-quartz-core",
  "rusqlite",
  "semver",
  "serde",
@@ -2073,6 +2075,7 @@ dependencies = [
  "objc2",
  "objc2-core-media",
  "objc2-foundation",
+ "objc2-quartz-core",
 ]
 
 [[package]]

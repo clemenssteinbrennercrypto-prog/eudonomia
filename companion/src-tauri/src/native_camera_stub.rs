@@ -1,8 +1,8 @@
 //! Non-arm64 build stub. Native FaceMesh is intentionally arm64-only because
 //! the target machine and the pinned official MediaPipe binary are arm64.
 
-use serde::Serialize;
-use tauri::State;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, State};
 
 #[derive(Clone, Default)]
 pub struct NativeCameraState;
@@ -35,4 +35,25 @@ pub fn start_native_camera_prototype(
 #[tauri::command]
 pub fn stop_native_camera_prototype(_state: State<'_, NativeCameraState>) -> NativeCameraStatus {
     get_native_camera_status(_state)
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct NativeCameraPreviewBounds {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    visible: bool,
+    corner_radius: f64,
+}
+
+#[tauri::command]
+pub fn set_native_camera_preview(
+    _app: AppHandle,
+    bounds: NativeCameraPreviewBounds,
+) -> Result<(), String> {
+    let _ = bounds;
+    Err("native camera preview requires macOS arm64".into())
 }

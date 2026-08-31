@@ -263,6 +263,7 @@ fn main() {
             native_camera::get_native_camera_status,
             native_camera::start_native_camera_prototype,
             native_camera::stop_native_camera_prototype,
+            native_camera::set_native_camera_preview,
             db::db_load_all,
             db::db_list_session_summaries,
             db::db_get_session,

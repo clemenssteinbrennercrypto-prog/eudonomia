@@ -22,6 +22,7 @@ use self::{capture::NativeCapture, pipeline::NativeFacePipeline};
 
 mod capture;
 mod pipeline;
+mod preview;
 mod reference;
 
 pub use reference::{
@@ -170,6 +171,14 @@ pub fn stop_native_camera_prototype(state: State<'_, NativeCameraState>) -> Nati
         .clone()
 }
 
+#[tauri::command]
+pub fn set_native_camera_preview(
+    app: AppHandle,
+    bounds: preview::NativeCameraPreviewBounds,
+) -> Result<(), String> {
+    preview::update(&app, bounds)
+}
+
 fn run_native_camera(
     app: AppHandle,
     shared: Arc<Mutex<NativeCameraRuntime>>,
@@ -189,6 +198,11 @@ fn run_native_camera(
             return;
         }
     };
+    if let Err(error) = preview::attach(&app, capture.session()) {
+        // Preview is presentation only. A layer failure must never turn valid
+        // landmark measurement into a tracking fault.
+        eprintln!("native camera preview unavailable: {error}");
+    }
     set_camera_status(&app, &shared, "running", None);
 
     let mut last_frame = Instant::now();
@@ -242,6 +256,7 @@ fn run_native_camera(
         }
     }
 
+    preview::remove(&app);
     capture.stop();
     if !ended_with_fault {
         set_camera_status(&app, &shared, "stopped", None);
