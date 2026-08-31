@@ -664,6 +664,23 @@ pub fn clear_all(connection: &mut Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Replace the whole focus ledger in one transaction.
+///
+/// Used when a scoring rule changes and every stored session has to be
+/// re-derived: a partial rewrite would leave the ledger disagreeing with the
+/// records it was built from, so it lands whole or not at all.
+pub fn replace_focus_ledger(connection: &mut Connection, ledger: &Value) -> Result<(), String> {
+    let tx = connection.transaction().map_err(to_err)?;
+    tx.execute("DELETE FROM focus_ledger_days", []).map_err(to_err)?;
+    if let Some(days) = ledger.get("days").and_then(Value::as_object) {
+        for (day_key, entry) in days {
+            write_ledger_day(&tx, day_key, entry)?;
+        }
+    }
+    tx.commit().map_err(to_err)?;
+    Ok(())
+}
+
 pub fn export_archive(connection: &Connection) -> Result<Value, String> {
     Ok(json!({
         "schemaVersion": SCHEMA_VERSION,
@@ -867,6 +884,14 @@ pub fn db_clear_all(state: tauri::State<'_, DbState>) -> Result<(), String> {
 #[tauri::command]
 pub fn db_load_focus_ledger(state: tauri::State<'_, DbState>) -> Result<Value, String> {
     with_connection(&state, |connection| load_ledger(connection))
+}
+
+#[tauri::command]
+pub fn db_replace_focus_ledger(
+    state: tauri::State<'_, DbState>,
+    ledger: Value,
+) -> Result<(), String> {
+    with_connection(&state, |connection| replace_focus_ledger(connection, &ledger))
 }
 
 #[tauri::command]
@@ -1267,6 +1292,34 @@ mod tests {
         assert_eq!(archive["sessions"].as_array().unwrap().len(), 1);
         assert_eq!(archive["sessions"][0]["timeline"].as_array().unwrap().len(), 2);
         assert_eq!(archive["focusLedger"]["days"]["2026-08-15"]["sessions"]["a"]["version"], 1);
+    }
+
+    #[test]
+    fn replacing_the_ledger_swaps_every_day_at_once() {
+        let mut connection = db();
+        let first = json!({ "sessions": { "a": { "version": 1 } } });
+        save_session(
+            &mut connection,
+            &session_value("a"),
+            &summary("a", 1),
+            None,
+            Some(("2026-08-15", &first)),
+        )
+        .unwrap();
+
+        // A re-derivation produces a different ledger; the old days must not
+        // survive alongside the new ones.
+        let rebuilt = json!({
+            "schemaVersion": 1,
+            "days": { "2026-08-16": { "sessions": { "b": { "version": 1 } } } }
+        });
+        replace_focus_ledger(&mut connection, &rebuilt).unwrap();
+
+        let stored = load_ledger(&connection).unwrap();
+        assert!(stored["days"]["2026-08-15"].is_null());
+        assert_eq!(stored["days"]["2026-08-16"]["sessions"]["b"]["version"], 1);
+        // The sessions themselves are untouched by a ledger rebuild.
+        assert_eq!(load_all(&connection).unwrap().len(), 1);
     }
 
     #[test]

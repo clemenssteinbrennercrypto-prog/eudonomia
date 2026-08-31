@@ -288,6 +288,78 @@ describe('never shows an empty app while history is still in the old store', () 
   })
 })
 
+// Making V2 scoreable only helped sessions recorded afterwards: the ones
+// already on disk still carried the refusal they were written with, so the
+// daily score ignored the user's entire existing history. A rule change has to
+// reach stored data too.
+describe('re-deriving stored sessions after a scoring rule changes', () => {
+  function storedV2Session(id) {
+    const startedAt = new Date(2026, 7, 15, 10, 0, 0).getTime()
+    return {
+      id,
+      startedAt,
+      timestamp: startedAt + 1_800_000,
+      task: 'Thesis',
+      attentionScoringVersion: 2,
+      attentionMeasurementSource: 'native_mediapipe_v2',
+      actualSeconds: 1820,
+      measuredSeconds: 1800,
+      scoreSum: 140_000,
+      focusedSeconds: 1400,
+      avgFocusScore: 78,
+      scoreMeasured: true,
+      focusPhases: { seconds: { arrival: 0, ramp: 0, lock_in: 1800, fade: 0, recovery: 0, drift: 0 } },
+      // Written while V2 was refused outright.
+      focusMetricVersion: 1,
+      focusMetricRejection: 'legacy_scoring_version',
+      sessionEfficiency: null,
+      deepFocusMinutes: null,
+    }
+  }
+
+  it('clears the stale refusal and gives the session a score', async () => {
+    const stored = storedV2Session('v2-old')
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_load_all: () => [stored],
+      db_update_session: () => stored,
+    })
+    repo = createNativeSessionRepository()
+
+    await repo.backfillFocusLedger()
+
+    const patch = sent('db_update_session').patch
+    expect(patch.focusMetricRejection).toBeNull()
+    expect(patch.sessionEfficiency).toBeGreaterThan(0)
+    expect(patch.scoringGeneration).toBe(2)
+  })
+
+  it('rebuilds the ledger so the day actually scores', async () => {
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_load_all: () => [storedV2Session('v2-old')],
+      db_update_session: () => null,
+    })
+    repo = createNativeSessionRepository()
+
+    const ledger = await repo.backfillFocusLedger()
+    const day = ledger.days['2026-08-15']
+    expect(day).toBeTruthy()
+    // A contribution, not the "unmeasured" marker it carried before.
+    expect(day.sessions['v2-old'].status).toBeUndefined()
+    expect(day.sessions['v2-old'].measuredSeconds).toBe(1800)
+    expect(called('db_replace_focus_ledger')).toBe(true)
+  })
+
+  it('writes nothing when every session already derives the same way', async () => {
+    const settled = { ...storedV2Session('v2-old'), focusMetricRejection: null, sessionEfficiency: 78, deepFocusMinutes: 30 }
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_load_all: () => [settled] })
+    repo = createNativeSessionRepository()
+
+    await repo.backfillFocusLedger()
+    // Idempotent: it runs on every start, so a settled history must be quiet.
+    expect(called('db_update_session')).toBe(false)
+  })
+})
+
 describe('legacy migration', () => {
   it('does nothing when there is no localStorage history', async () => {
     const result = await repo.migrateLegacyIfNeeded()

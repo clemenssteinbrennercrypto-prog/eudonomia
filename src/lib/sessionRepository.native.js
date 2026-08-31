@@ -18,7 +18,13 @@ import {
   loadSessions as loadLegacySessions,
   loadFocusLedger as loadLegacyFocusLedger,
 } from './storage'
-import { addSessionToFocusLedger, localDayKey, withSessionFocusMetric } from './focusMetric'
+import {
+  addSessionToFocusLedger,
+  backfillFocusLedger as rebuildFocusLedger,
+  emptyFocusLedger,
+  localDayKey,
+  withSessionFocusMetric,
+} from './focusMetric'
 import { buildSessionSummary } from './sessionSummary'
 import { analyzeSession } from './sessionAnalysis'
 import { DEFAULT_PAGE_SIZE, dateRangeCutoff } from './sessionQuery'
@@ -161,11 +167,57 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
       return invoke('db_load_focus_ledger')
     },
 
-    // The native store is written through withSessionFocusMetric on save, so
-    // there is no pre-ledger history here to catch up. Legacy records are
-    // upgraded by the migration below instead.
+    /**
+     * Re-derive every stored session's focus metric and rebuild the ledger
+     * from the result.
+     *
+     * This exists because scoring rules change. When the native V2 camera
+     * became a scoreable ruler, every V2 session already on disk still carried
+     * the refusal it was written with — `focusMetricRejection` on the record,
+     * an "unmeasured" marker in the ledger — so new sessions counted while the
+     * user's existing ones stayed invisible to the daily score. A metric that
+     * only applies to sessions recorded after the rule changed is not a fixed
+     * metric.
+     *
+     * Cheap and idempotent once settled: a pass where nothing re-derives
+     * differently writes nothing. Safe to run on every start, which is where
+     * it is called from.
+     */
     async backfillFocusLedger() {
-      return repository.loadFocusLedger()
+      const sessions = await repository.loadAll()
+      const upgraded = sessions.map(withSessionFocusMetric)
+
+      // Persist only the records whose derivation actually changed.
+      for (let index = 0; index < sessions.length; index += 1) {
+        const before = sessions[index]
+        const after = upgraded[index]
+        if (!before?.id) continue
+        const changed = before.focusMetricRejection !== after.focusMetricRejection ||
+          before.sessionEfficiency !== after.sessionEfficiency ||
+          before.deepFocusMinutes !== after.deepFocusMinutes ||
+          before.focusMetricVersion !== after.focusMetricVersion
+        if (!changed) continue
+        await invoke('db_update_session', {
+          id: before.id,
+          patch: {
+            focusMetricVersion: after.focusMetricVersion,
+            focusMetricRejection: after.focusMetricRejection,
+            sessionEfficiency: after.sessionEfficiency,
+            deepFocusSeconds: after.deepFocusSeconds,
+            deepFocusMinutes: after.deepFocusMinutes,
+            measurementCoverage: after.measurementCoverage,
+            scoringGeneration: after.scoringGeneration ?? null,
+          },
+          summary: buildSessionSummary(after),
+          analysis: analyzeSession(after),
+        })
+      }
+
+      // Rebuilt from scratch rather than patched, so a contribution that is no
+      // longer valid disappears instead of lingering from an earlier ruleset.
+      const ledger = rebuildFocusLedger(emptyFocusLedger(), upgraded)
+      await invoke('db_replace_focus_ledger', { ledger })
+      return ledger
     },
 
     async exportArchive() {
