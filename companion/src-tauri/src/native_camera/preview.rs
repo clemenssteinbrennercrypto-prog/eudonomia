@@ -41,9 +41,12 @@ impl NativeCameraPreviewBounds {
             && self.height >= 1.0
     }
 
-    fn layer_y(self, geometry_flipped: bool) -> f64 {
+    fn layer_y(self, geometry_flipped: bool, native_layer_height: f64) -> f64 {
         if geometry_flipped {
-            self.y
+            // A flipped WKWebView layer starts above the DOM viewport when
+            // Tauri extends content beneath the title bar. Move DOM y down by
+            // that native-only top inset.
+            self.y + (native_layer_height - self.viewport_height).max(0.0)
         } else {
             self.viewport_height - self.y - self.height
         }
@@ -105,11 +108,7 @@ pub(super) fn update(app: &AppHandle, bounds: NativeCameraPreviewBounds) -> Resu
             CATransaction::begin();
             CATransaction::setDisableActions(true);
             if bounds.is_drawable() {
-                // WKWebView's native layer can extend beneath the macOS title
-                // bar while DOM coordinates start at the page viewport. Using
-                // the layer's full height shifts the preview upward by exactly
-                // that title-bar inset.
-                let y = bounds.layer_y(root.isGeometryFlipped());
+                let y = bounds.layer_y(root.isGeometryFlipped(), root.bounds().size.height);
                 preview.setFrame(CGRect::new(
                     CGPoint::new(bounds.x, y),
                     CGSize::new(bounds.width, bounds.height),
@@ -178,8 +177,21 @@ mod tests {
                 visible: true,
                 corner_radius: 8.0,
             }
-            .layer_y(false),
+            .layer_y(false, 830.0),
             80.0
+        );
+        assert_eq!(
+            NativeCameraPreviewBounds {
+                x: 10.0,
+                y: 600.0,
+                width: 160.0,
+                height: 120.0,
+                viewport_height: 800.0,
+                visible: true,
+                corner_radius: 8.0,
+            }
+            .layer_y(true, 830.0),
+            630.0
         );
         assert!(!NativeCameraPreviewBounds {
             x: 10.0,
