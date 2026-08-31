@@ -105,6 +105,10 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
     },
 
     async saveSession(sessionData) {
+      // Writing to SQLite while reads still come from localStorage would make
+      // a finished session vanish the moment it was saved. Both sides have to
+      // point at the same store.
+      if (await servedByLegacy()) return legacy.saveSession(sessionData)
       // id/timestamp are assigned here rather than in SQL so a record looks
       // the same whichever adapter wrote it.
       const entry = {
@@ -125,6 +129,7 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
     },
 
     async updateSession(id, patch) {
+      if (await servedByLegacy()) return legacy.updateSession(id, patch)
       const existing = await repository.getSession(id)
       if (!existing) return null
       const merged = { ...existing, ...patch }
@@ -139,10 +144,15 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
     },
 
     async deleteSession(id) {
+      // Deleting from an empty database silently succeeded while the row the
+      // user was looking at sat untouched in localStorage — so the session
+      // simply would not go away.
+      if (await servedByLegacy()) return legacy.deleteSession(id)
       await invoke('db_delete_session', { id })
     },
 
     async clearAll() {
+      if (await servedByLegacy()) return legacy.clearAll()
       await invoke('db_clear_all')
     },
 

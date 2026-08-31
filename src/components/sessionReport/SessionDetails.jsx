@@ -174,6 +174,15 @@ export default function SessionDetails({ session, analysis }) {
             )}
           </div>
         )}
+        {analysis.measurement.aboveThresholdPct != null && (
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Time above threshold</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+              {analysis.measurement.aboveThresholdPct}% of measured time sat above the focus threshold — a different
+              question from the average score, and reported separately for that reason.
+            </p>
+          </div>
+        )}
         <PhaseBreakdown phaseSeconds={facts.phases.seconds || {}} />
         <ActivityAlignment activity={facts.activity} sessionIntent={session.sessionIntent} />
         <OutputEvidence output={facts.output} />

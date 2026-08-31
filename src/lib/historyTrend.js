@@ -50,6 +50,63 @@ export function sessionFocusPct(session) {
     : null
 }
 
+/**
+ * The session's mean attention score, 0-100 — "how focused was I", as opposed
+ * to `sessionFocusPct`, which answers the narrower "what share of the time was
+ * I over the threshold".
+ *
+ * Both are honest, but a mean is the number people actually expect from a
+ * focus tracker, and it is the same quantity the daily Focus Score already
+ * reports as its efficiency term, so using it here makes one figure mean one
+ * thing across the app.
+ *
+ * Gated on the same measurement validity as everything else: a session with no
+ * usable measurement returns null rather than a misleading zero. `scoreSum` is
+ * preferred because it is the raw accumulator; `avgFocusScore` is the stored
+ * rounding of it and covers records written before scoreSum existed.
+ */
+export function sessionAverageFocus(session) {
+  const measurement = sessionFocusMeasurement(session)
+  if (!measurement) return null
+
+  // Preferred: the raw accumulator.
+  if (Number.isFinite(session.scoreSum) && measurement.measuredSeconds > 0) {
+    const mean = session.scoreSum / measurement.measuredSeconds
+    if (mean >= 0 && mean <= 100) return Math.round(mean)
+  }
+  // Its stored rounding, for records written before scoreSum existed.
+  if (Number.isFinite(session.avgFocusScore)) return Math.round(session.avgFocusScore)
+
+  // Older records can pass the measurement check on timeline evidence alone,
+  // carrying per-second scores but no summary field. Averaging those is a real
+  // computation, not a guess — and without it a session that was genuinely
+  // measured would start reporting "not measured" purely because this metric
+  // changed, which is a worse answer than the one it replaced.
+  const samples = Array.isArray(session.timeline)
+    ? session.timeline.map(sample => sample?.score).filter(score => Number.isFinite(score) && score >= 0 && score <= 100)
+    : []
+  if (samples.length > 0) {
+    return Math.round(samples.reduce((sum, score) => sum + score, 0) / samples.length)
+  }
+  return null
+}
+
+/** Mean attention across several sessions, weighted by measured time so a
+ *  five-minute session cannot outweigh a two-hour one. */
+export function aggregateAverageFocus(sessions) {
+  const safeSessions = Array.isArray(sessions) ? sessions.filter(isComparableFocusGeneration) : []
+  let scoreSeconds = 0
+  let measuredSeconds = 0
+  for (const session of safeSessions) {
+    const measurement = sessionFocusMeasurement(session)
+    const average = sessionAverageFocus(session)
+    if (!measurement || average == null) continue
+    scoreSeconds += average * measurement.measuredSeconds
+    measuredSeconds += measurement.measuredSeconds
+  }
+  return measuredSeconds > 0 ? Math.round(scoreSeconds / measuredSeconds) : null
+}
+
 export function aggregateFocusMeasurements(sessions) {
   const safeSessions = Array.isArray(sessions) ? sessions.filter(isComparableFocusGeneration) : []
   const totals = safeSessions.reduce((sum, session) => {
@@ -256,14 +313,17 @@ export function buildHistoryTrend(sessions, options = {}) {
     if (!bucket) continue
     bucket.count += 1
     const measurement = sessionFocusMeasurement(session)
-    if (!measurement) continue
-    bucket._focusedSeconds += measurement.focusedSeconds
+    const average = sessionAverageFocus(session)
+    if (!measurement || average == null) continue
+    // Weighted by measured time, so a five-minute session cannot swing a day
+    // as hard as a two-hour one.
+    bucket._focusedSeconds += average * measurement.measuredSeconds
     bucket._measuredSeconds += measurement.measuredSeconds
   }
 
   for (const bucket of buckets) {
     if (bucket._measuredSeconds > 0) {
-      bucket.avgFocus = Math.round((bucket._focusedSeconds / bucket._measuredSeconds) * 100)
+      bucket.avgFocus = Math.round(bucket._focusedSeconds / bucket._measuredSeconds)
     }
     delete bucket._focusedSeconds
     delete bucket._measuredSeconds

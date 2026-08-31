@@ -26,6 +26,9 @@ function session({ hour = 10, mins = 50, pct = 70, planned = 50, extra = {} } = 
     timestamp: end.getTime() + actualSeconds * 1000,
     actualSeconds,
     focusedSeconds: Math.round(actualSeconds * (pct / 100)),
+    // Real records carry the mean attention score, which is what patterns
+    // compare on; a fixture without it is not a session the app ever writes.
+    avgFocusScore: pct,
     plannedDuration: planned,
     completed: true,
     ...extra,
@@ -186,6 +189,7 @@ function sessionAt(timestamp, pct, extra = {}) {
     timestamp,
     actualSeconds,
     focusedSeconds: Math.round(actualSeconds * (pct / 100)),
+    avgFocusScore: pct,
     trackingFaulted: false,
     ...extra,
   }

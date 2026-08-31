@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { sessionFocusPct, hasMeasuredFocus } from '../../lib/historyTrend'
+import { sessionAverageFocus, sessionFocusPct, hasMeasuredFocus } from '../../lib/historyTrend'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import SessionDetailView from './sessions/SessionDetailView'
 
@@ -32,9 +32,9 @@ function focusColor(pct) {
 // exported everything regardless of what was on screen, which read as a bug
 // once Sessions became a filterable view.
 function exportCSV(sessions) {
-  const header = ['timestamp', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
+  const header = ['timestamp', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'averageFocus', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
   const rows = sessions.map(s => {
-    const pct = sessionFocusPct(s)
+    const pct = sessionAverageFocus(s)
     return [
       new Date(s.timestamp).toISOString(),
       `"${(s.task || '').replace(/"/g, '""')}"`,
@@ -48,6 +48,7 @@ function exportCSV(sessions) {
       s.actualSeconds ?? 0,
       s.measuredSeconds ?? '',
       pct ?? '',
+      sessionFocusPct(s) ?? '',
       s.distractionEvents ?? 0,
       s.longestFocusedStreak ?? 0,
     ].join(',')
@@ -92,7 +93,7 @@ function FilterPill({ active, onClick, children }) {
 }
 
 function SessionRow({ session, onSelect, onDelete }) {
-  const pct = sessionFocusPct(session)
+  const pct = sessionAverageFocus(session)
   const color = focusColor(pct)
   const outcome = normalizedOutcome(session)
   const outcomeLabel = outcome === 'yes' ? 'Goal reached' : outcome === 'partly' ? 'Partly reached' : outcome === 'no' ? 'Goal missed' : null

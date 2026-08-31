@@ -16,7 +16,7 @@
 // verdict feature is a separate, still-isolated concern for future AI
 // Companion work.
 
-import { isComparableFocusGeneration, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { isComparableFocusGeneration, sessionAverageFocus, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
 import { calibrate } from './calibration'
 
@@ -124,6 +124,10 @@ function buildMeasurement(session) {
     measuredSeconds,
     coveragePct,
     focusedSeconds: measurement?.focusedSeconds ?? null,
+    // The headline figure: mean attention over the measured time.
+    averageFocus: sessionAverageFocus(session),
+    // Kept alongside it as a secondary detail rather than dropped — it is a
+    // genuinely different question and Details still reports it.
     aboveThresholdPct: sessionFocusPct(session),
   }
 }
@@ -188,8 +192,8 @@ function buildConclusion(measurement, goalOutcome) {
       evidence: { outcome: goalOutcome, scoringVersion: measurement.scoringVersion },
     }
   }
-  const band = classifyFocusBand(measurement.aboveThresholdPct)
-  return { code: CONCLUSION_MATRIX[band][goalOutcome], evidence: { focusPct: measurement.aboveThresholdPct, outcome: goalOutcome } }
+  const band = classifyFocusBand(measurement.averageFocus)
+  return { code: CONCLUSION_MATRIX[band][goalOutcome], evidence: { focusPct: measurement.averageFocus, outcome: goalOutcome } }
 }
 
 // Exactly one next action — the spec's hardest constraint relative to the old
@@ -217,7 +221,7 @@ function buildNextAction({ session, measurement, goalOutcome, facts }) {
   const topDistraction = dominantEntry(countBy(distractionLog, ev => ev.reason))
   const lowestStretch = getLowestStretch(session.timeline)
   const phaseInterventions = session.phaseInterventions || null
-  const focusPct = measurement.aboveThresholdPct
+  const focusPct = measurement.averageFocus
 
   const phaseTotal = Object.values(phaseSeconds).reduce((sum, seconds) => sum + seconds, 0)
   const pct = (phase) => phaseTotal > 0 ? ((phaseSeconds[phase] || 0) / phaseTotal) * 100 : 0
@@ -227,7 +231,7 @@ function buildNextAction({ session, measurement, goalOutcome, facts }) {
   const rampSeconds = phaseSeconds.ramp || 0
   const interventionCount = (phaseInterventions?.gentleReminders || 0) + (phaseInterventions?.preDriftNudges || 0)
 
-  const measuredBand = measurement.scored && measurement.compatible ? classifyFocusBand(focusPct) : 'mixed'
+  const measuredBand = measurement.scored && measurement.compatible && focusPct != null ? classifyFocusBand(focusPct) : 'mixed'
   if (measuredBand !== 'mixed') {
     return { code: ACTION_MATRIX[measuredBand][goalOutcome], evidence: { outcome: goalOutcome, band: measuredBand } }
   }

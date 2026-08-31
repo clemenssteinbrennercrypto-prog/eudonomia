@@ -43,7 +43,7 @@ export default function TrendChart({ sessions }) {
     <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '20px 20px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
-          Time above threshold — trend
+          Average focus — trend
         </p>
         {range === 'week' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -98,7 +98,7 @@ export default function TrendChart({ sessions }) {
               const h = filled ? Math.max(4, Math.round((bucket.avgFocus / 100) * MAX_H)) : 4
               const color = filled ? focusColor(bucket.avgFocus) : 'var(--line)'
               const tooltip = filled
-                ? `${bucket.dateLabel} — ${bucket.avgFocus}% of measured time above threshold, ${bucket.count} session${bucket.count !== 1 ? 's' : ''}`
+                ? `${bucket.dateLabel} — ${bucket.avgFocus}% average focus, ${bucket.count} session${bucket.count !== 1 ? 's' : ''}`
                 : `${bucket.dateLabel} — ${bucket.count ? `${bucket.count} unmeasured session${bucket.count !== 1 ? 's' : ''}` : 'no sessions'}`
               const showLabel = i % labelEvery === 0 || i === buckets.length - 1
               return (

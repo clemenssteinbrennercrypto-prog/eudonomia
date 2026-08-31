@@ -1885,3 +1885,134 @@ html {
 .workspace-dimension-control>span{display:flex;justify-content:space-between;gap:8px}
 .workspace-dimension-control output{color:#b8c5f2;font-variant-numeric:tabular-nums;text-transform:none}
 .workspace-3d-error{position:absolute;inset:0;display:grid;place-items:center;padding:2rem;color:#b8c5f2;background:#070b1a;text-align:center;line-height:1.5}
+
+/* ── ANALYTICS / TERMINAL ──────────────────────────────────────────────────
+   Overview reads as an instrument panel rather than a set of cards: hard
+   edges, hairline rules, monospaced figures that stay column-aligned as they
+   change, and labels small enough that the numbers carry the page. Colours
+   are the existing ultramarine tokens — this is a density and typography
+   change, not a new palette. */
+
+.term {
+  --term-line: rgba(122, 152, 255, 0.22);
+  font-variant-numeric: tabular-nums;
+}
+
+.term-rule {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--term-line);
+}
+
+.term-rule h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.term-rule span {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A hairline grid of readouts. Cells share borders so the panel reads as one
+   instrument, not a row of separate tiles. */
+.term-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--term-line);
+  border: 1px solid var(--term-line);
+}
+
+.term-cell {
+  background: var(--bg);
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.term-cell > b {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.term-cell > small {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.term-cell > i {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.term-cell.is-good > b { color: var(--good); }
+.term-cell.is-warn > b { color: var(--warn); }
+.term-cell.is-bad  > b { color: var(--bad); }
+.term-cell.is-idle > b { color: var(--text-muted); }
+
+.term-panel {
+  border: 1px solid var(--term-line);
+  padding: 16px;
+}
+
+/* Outcome distribution as a labelled bar with a monospaced tally beneath. */
+.term-bar {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  background: rgba(122, 152, 255, 0.08);
+}
+
+.term-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.term-legend b { font-weight: 700; }
+
+.term-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.term-note em {
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .term-cell > b { font-size: 24px; }
+}

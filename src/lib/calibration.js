@@ -10,7 +10,7 @@
 // becomes a horoscope. Every claim carries the sample it rests on, and no claim
 // is made below the thresholds below.
 
-import { isComparableFocusGeneration, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { isComparableFocusGeneration, sessionAverageFocus, sessionFocusMeasurement } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
 
 /** Nothing at all is claimed under this many usable sessions. */
@@ -49,8 +49,10 @@ export function isUsable(session) {
   return measurement?.measuredSeconds > 120 && Number.isFinite(session.timestamp)
 }
 
+// Patterns compare the same number the screens display, or the two would
+// disagree about what "82%" refers to.
 export function focusPct(session) {
-  return sessionFocusPct(session)
+  return sessionAverageFocus(session)
 }
 
 /** Sessions are stamped when they end, so the start is where the work happened. */

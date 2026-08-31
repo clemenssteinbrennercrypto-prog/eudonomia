@@ -72,9 +72,13 @@ describe('Overview — refusal state', () => {
 })
 
 describe('Overview — distinct metric naming', () => {
-  it('never conflates time above threshold with the versioned Focus Score', () => {
+  // Two different numbers live on this screen: a session's mean attention
+  // score, and the versioned daily Focus Score, which folds in volume and
+  // consistency. They must never be labelled as though they were the same
+  // measure.
+  it('never conflates average focus with the versioned Focus Score', () => {
     const html = render([session({ daysAgo: 1 })])
-    expect(html).toContain('Time above threshold')
+    expect(html).toContain('Average focus')
     expect(html).toContain('Focus Score')
   })
 })

@@ -247,6 +247,38 @@ describe('never shows an empty app while history is still in the old store', () 
     expect(called('db_load_all')).toBe(true)
   })
 
+  // Reads falling back while writes did not was worse than either alone: a
+  // delete removed a row from the empty database and the session stayed on
+  // screen, and a newly finished session was written somewhere nothing was
+  // reading from.
+  it('deletes from the store it is reading from', async () => {
+    withLegacyHistory()
+    await repo.deleteSession('a')
+    expect(called('db_delete_session')).toBe(false)
+    expect((await repo.loadAll()).map(s => s.id)).toEqual(['b'])
+  })
+
+  it('saves a new session where it will still be visible', async () => {
+    withLegacyHistory()
+    const saved = await repo.saveSession({ task: 'Fresh', actualSeconds: 600 })
+    expect(called('db_save_session')).toBe(false)
+    expect((await repo.loadAll()).map(s => s.id)).toContain(saved.id)
+  })
+
+  it('applies an outcome edit to the store it is reading from', async () => {
+    withLegacyHistory()
+    await repo.updateSession('a', { goalOutcome: 'yes' })
+    expect(called('db_update_session')).toBe(false)
+    expect((await repo.getSession('a')).goalOutcome).toBe('yes')
+  })
+
+  it('clears the store it is reading from', async () => {
+    withLegacyHistory()
+    await repo.clearAll()
+    expect(called('db_clear_all')).toBe(false)
+    expect(await repo.loadAll()).toEqual([])
+  })
+
   it('serves the ledger and session detail from the legacy store too', async () => {
     withLegacyHistory()
     expect(await repo.getSession('a')).toMatchObject({ task: 'Old one' })

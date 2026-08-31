@@ -52,11 +52,11 @@ export default function MeasuredFacts({ session, analysis }) {
         <div className="stat">
           <span
             className="stat-value stat-value-large"
-            style={{ fontSize: 72, color: measurement.aboveThresholdPct == null ? 'var(--text-muted)' : measurement.aboveThresholdPct >= 60 ? 'var(--good)' : measurement.aboveThresholdPct >= 40 ? 'var(--warn)' : 'var(--bad)' }}
+            style={{ fontSize: 72, color: measurement.averageFocus == null ? 'var(--text-muted)' : measurement.averageFocus >= 60 ? 'var(--good)' : measurement.averageFocus >= 40 ? 'var(--warn)' : 'var(--bad)' }}
           >
-            {measurement.aboveThresholdPct == null ? '--' : `${measurement.aboveThresholdPct}%`}
+            {measurement.averageFocus == null ? '--' : `${measurement.averageFocus}%`}
           </span>
-          <span className="stat-label">{measurement.aboveThresholdPct == null ? 'focus not measured' : 'time above threshold'}</span>
+          <span className="stat-label">{measurement.averageFocus == null ? 'focus not measured' : 'average focus'}</span>
           {/* Which ruler produced this number. V2 is a different measurement
               generation held out of cross-session comparison, so the figure is
               labelled rather than silently mixed in with V1 history. */}
