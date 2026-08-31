@@ -40,7 +40,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 421 tests — must stay green
+npm test           # vitest, currently 427 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -272,7 +272,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 421 JS tests and 67 Rust tests (13 native-camera library
+There are currently 427 JS tests and 67 Rust tests (13 native-camera library
 tests plus 54 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
