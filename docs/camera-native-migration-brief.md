@@ -176,8 +176,41 @@ an explicit product decision if exact WebGL-path parity cannot be reproduced.
 Clemens made that decision on 30 August: ship the native path to internal-test
 as a separately versioned V2 ruler, never as a passing V1 parity result. Steps 3
 and 4 are now implemented behind an opt-in internal toggle. V2 sessions carry
-their own scoring version/source and are excluded from stable V1 history and
-calibration. Step 5 remains blocked on the real MacBook live tests.
+their own scoring version/source. Step 5 remains blocked on the real MacBook
+live tests.
+
+**Revised 31 August.** V2 sessions were not merely kept out of V1 history — they
+produced nothing at all: no daily score, no ledger entry, no trend, no patterns.
+Anyone using the native camera measured themselves and had every measurement
+discarded, with only an orange "not counted" notice to explain it.
+
+Clemens' decision: V2 becomes the primary ruler, because it is the source that
+keeps measuring when WebKit suspends the camera, which is the failure this
+migration exists to solve. Chasing the remaining 1.72% is not the path — the
+same investigation found FaceMesh.js WebGL does not reproduce its own CPU
+inference, so the 99% gate compares against a reference that is not stable.
+
+What changed, and the invariant that replaces the old one:
+
+- `SCOREABLE_SCORING_VERSIONS` in focusMetric.js lists the generations the
+  metric will score. V1 and V2 both qualify; a session with no version is still
+  refused, since missing means pre-versioning and its raw fields need the
+  explicit recovery path.
+- **No single day, trend bucket, or pattern ever mixes two generations.**
+  `calculateDailyFocus` scores a day using the newest generation present and
+  sets the others aside; `comparableSessions` narrows any cross-session
+  comparison to the newest generation in the data. A camera switch therefore
+  restarts trends and patterns rather than blending two scales.
+- V1 history remains stored, readable and listed. It is excluded from
+  comparison against V2, not deleted.
+
+The tests that encoded the previous decision were replaced rather than removed,
+each carrying the date and reasoning — see focusMetric.test.js,
+historyTrend.test.js, calibration.test.js and sessionAnalysis.test.js.
+
+Still open and unchanged: Step 5's live MacBook minimize/close verification, and
+whether the parity harness keeps a 99% gate at all now that the reference is
+known not to reproduce itself.
 
 ## 9. Two-machine boundary
 

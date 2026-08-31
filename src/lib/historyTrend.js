@@ -7,12 +7,38 @@ export const HISTORY_TREND_RANGES = [
   { value: 'all', label: 'All' },
 ]
 
-// V2 is intentionally a different ruler. Until it is promoted after the live
-// gate, cross-session history and calibration remain on the historical WebView
-// generation. Missing versions are pre-versioning V1 records.
-export function isComparableFocusGeneration(session) {
-  return session?.attentionScoringVersion == null ||
-    session.attentionScoringVersion === WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+// Comparisons happen within one measurement generation, never across two.
+//
+// This used to pin every comparison to V1, which meant that once someone
+// switched to the native camera their sessions disappeared from trends and
+// patterns entirely. The rule now is relative: whichever generation is newest
+// in the data at hand is the one compared, and the others are kept but not
+// mixed in. Missing versions are pre-versioning V1 records.
+export function focusGenerationOf(session) {
+  return session?.attentionScoringVersion ?? WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+}
+
+/** The generation a set of sessions should be compared on — the newest present. */
+export function activeFocusGeneration(sessions) {
+  const versions = (Array.isArray(sessions) ? sessions : [])
+    .filter(Boolean)
+    .map(focusGenerationOf)
+    .filter(Number.isFinite)
+  return versions.length ? Math.max(...versions) : WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion
+}
+
+// Takes an explicit generation. Never pass this straight to Array.filter —
+// filter supplies the index as the second argument, which would silently
+// compare against 0, 1, 2… Use comparableSessions() for lists.
+export function isComparableFocusGeneration(session, generation = WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion) {
+  return focusGenerationOf(session) === generation
+}
+
+/** Narrow a list to the single generation it should be compared on. */
+export function comparableSessions(sessions) {
+  const safe = Array.isArray(sessions) ? sessions.filter(Boolean) : []
+  const generation = activeFocusGeneration(safe)
+  return safe.filter(session => isComparableFocusGeneration(session, generation))
 }
 
 export function sessionFocusMeasurement(session) {
@@ -94,7 +120,7 @@ export function sessionAverageFocus(session) {
 /** Mean attention across several sessions, weighted by measured time so a
  *  five-minute session cannot outweigh a two-hour one. */
 export function aggregateAverageFocus(sessions) {
-  const safeSessions = Array.isArray(sessions) ? sessions.filter(isComparableFocusGeneration) : []
+  const safeSessions = comparableSessions(sessions)
   let scoreSeconds = 0
   let measuredSeconds = 0
   for (const session of safeSessions) {
@@ -108,7 +134,7 @@ export function aggregateAverageFocus(sessions) {
 }
 
 export function aggregateFocusMeasurements(sessions) {
-  const safeSessions = Array.isArray(sessions) ? sessions.filter(isComparableFocusGeneration) : []
+  const safeSessions = comparableSessions(sessions)
   const totals = safeSessions.reduce((sum, session) => {
     const measurement = sessionFocusMeasurement(session)
     if (!measurement) return sum
@@ -149,8 +175,7 @@ export function measuredSessionDayStreak(sessions, now = Date.now()) {
   const current = new Date(now)
   if (Number.isNaN(current.getTime())) return 0
   const safeSessions = Array.isArray(sessions) ? sessions : []
-  const activeDays = new Set(safeSessions
-    .filter(isComparableFocusGeneration)
+  const activeDays = new Set(comparableSessions(safeSessions)
     .filter(hasMeasuredFocus)
     .map(session => {
       const date = new Date(session.timestamp)
@@ -293,9 +318,7 @@ function createBuckets(start, endExclusive, unit) {
 }
 
 export function buildHistoryTrend(sessions, options = {}) {
-  const safeSessions = Array.isArray(sessions)
-    ? sessions.filter(Boolean).filter(isComparableFocusGeneration)
-    : []
+  const safeSessions = comparableSessions(sessions)
   const range = HISTORY_TREND_RANGES.some(option => option.value === options.range)
     ? options.range
     : 'week'

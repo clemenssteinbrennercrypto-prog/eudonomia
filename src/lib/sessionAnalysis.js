@@ -16,7 +16,8 @@
 // verdict feature is a separate, still-isolated concern for future AI
 // Companion work.
 
-import { isComparableFocusGeneration, sessionAverageFocus, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { focusGenerationOf, sessionAverageFocus, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { SCOREABLE_SCORING_VERSIONS } from './focusMetric'
 import { summarizeSessionAlignment } from './sessionIntent'
 import { calibrate } from './calibration'
 
@@ -113,12 +114,12 @@ function buildMeasurement(session) {
     scored,
     scoringVersion,
     accumulationVersion: session.attentionAccumulationVersion ?? null,
-    // Whether this session's focus number can be read against the thresholds
-    // the conclusion codes use. Delegated to historyTrend so there is one
-    // definition of "same ruler": a missing version is pre-versioning V1 and
-    // comparable, while the native V2 ruler is deliberately held out of
-    // cross-session reads until it is promoted.
-    compatible: isComparableFocusGeneration(session),
+    // Whether this session's own number can be read against the conclusion
+    // thresholds. Any ruler the app knows how to score qualifies — including
+    // the native V2 camera. This is about reading one session on its own
+    // terms; keeping two generations out of the same comparison is a
+    // different job, done by comparableSessions() in historyTrend.
+    compatible: SCOREABLE_SCORING_VERSIONS.includes(focusGenerationOf(session)),
     measurementSource: session.attentionMeasurementSource ?? null,
     actualSeconds,
     measuredSeconds,

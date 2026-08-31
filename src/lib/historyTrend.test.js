@@ -70,16 +70,31 @@ describe('session focus measurement', () => {
     })
   })
 
-  it('does not blend the opt-in native V2 ruler into V1 history', () => {
+  // Superseded on 31 August: the native ruler becomes the primary one, so
+  // comparisons follow the newest generation present rather than being pinned
+  // to V1 forever. The invariant that matters is unchanged — two generations
+  // are never averaged together — but the survivor is now the newer one, and
+  // V1 history is set aside rather than V2.
+  it('compares within one generation, keeping the newest rather than blending', () => {
     const webviewV1 = sessionAt(NOW, 80, { attentionScoringVersion: 1 })
     const nativeV2 = sessionAt(NOW, 10, { attentionScoringVersion: 2 })
     expect(sessionFocusPct(nativeV2)).toBe(10)
+    // A blend would land between 10 and 80; this must be V2's number alone.
     expect(aggregateFocusMeasurements([webviewV1, nativeV2])).toMatchObject({
       sessionCount: 1,
-      focusPct: 80,
+      focusPct: 10,
     })
     expect(buildHistoryTrend([webviewV1, nativeV2], { range: 'week', now: NOW }).buckets[0])
-      .toMatchObject({ count: 1, avgFocus: 80 })
+      .toMatchObject({ count: 1, avgFocus: 10 })
+  })
+
+  it('leaves a single-generation history exactly as it was', () => {
+    const a = sessionAt(NOW, 80, { attentionScoringVersion: 1 })
+    const b = sessionAt(NOW, 60, { attentionScoringVersion: 1 })
+    expect(aggregateFocusMeasurements([a, b]).sessionCount).toBe(2)
+    // Pre-versioning records count as the same generation as explicit V1.
+    const legacy = sessionAt(NOW, 70)
+    expect(aggregateFocusMeasurements([a, legacy]).sessionCount).toBe(2)
   })
 
   it('keeps yesterday\'s measured streak alive while today is still pending', () => {

@@ -10,7 +10,7 @@
 // becomes a horoscope. Every claim carries the sample it rests on, and no claim
 // is made below the thresholds below.
 
-import { isComparableFocusGeneration, sessionAverageFocus, sessionFocusMeasurement } from './historyTrend'
+import { comparableSessions, sessionAverageFocus, sessionFocusMeasurement } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
 
 /** Nothing at all is claimed under this many usable sessions. */
@@ -39,7 +39,6 @@ function partOfDay(hour) {
  *  to mean anything. A 20-second session is noise, not evidence. */
 export function isUsable(session) {
   if (!session) return false
-  if (!isComparableFocusGeneration(session)) return false
   // Calibration makes cross-session claims. A known tracking fault makes the
   // whole session unreliable evidence even when an earlier partial span was
   // valid enough to display in that session's own debrief.
@@ -387,7 +386,10 @@ const INSIGHT_DEFINITIONS = [
  * bar); `insights` carries only the ones that did.
  */
 export function calibrate(sessions = []) {
-  const usable = sessions.filter(isUsable)
+  // Patterns rest on one ruler: narrow to the newest generation present before
+  // any comparison, so a camera switch restarts the evidence rather than
+  // blending two scales.
+  const usable = comparableSessions(sessions).filter(isUsable)
   if (usable.length < MIN_SESSIONS) {
     return {
       ready: false,

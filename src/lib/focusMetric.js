@@ -4,8 +4,37 @@
 // can create V2 without silently rewriting V1 history.
 
 import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
+import { NATIVE_CAMERA_MEASUREMENT_V2, WEBVIEW_CAMERA_MEASUREMENT } from './cameraMeasurement'
 
 export const ATTENTION_SCORING_VERSION = 1
+
+// Measurement generations this metric will score.
+//
+// V2 was originally refused outright, so every session measured by the native
+// camera produced nothing — no score, no ledger entry, no trend. That refusal
+// came from a parity gate: V2 matched the historical WebGL ruler on 97.28% of
+// frames against a 99% bar. But the same investigation found that FaceMesh.js
+// WebGL does not reproduce its own CPU inference either, so the gate was
+// measuring agreement with a reference that is not stable in the first place —
+// while V2 is the source that keeps measuring when WebKit suspends the camera,
+// which is the failure the native migration exists to solve.
+//
+// So V2 is scored, on its own terms. Scoring a generation is not blending
+// generations: the formula is ruler-agnostic — measured seconds and a score sum
+// in, a number out — and `calculateDailyFocus` guarantees no single day ever
+// averages two rulers together.
+//
+// A session with NO version is still refused. Missing means pre-versioning,
+// whose raw fields cannot be trusted without the explicit recovery path, and
+// that is a different question from "which known ruler measured this".
+export const SCOREABLE_SCORING_VERSIONS = Object.freeze([
+  WEBVIEW_CAMERA_MEASUREMENT.attentionScoringVersion,
+  NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+])
+
+function isScoreableGeneration(version) {
+  return SCOREABLE_SCORING_VERSIONS.includes(version)
+}
 
 export const FOCUS_METRIC_V1 = Object.freeze({
   version: 1,
@@ -367,7 +396,7 @@ export function deriveSessionFocusMetric(session) {
     focusMetricRejection: reason,
   })
 
-  if (measurement?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) {
+  if (!isScoreableGeneration(measurement?.attentionScoringVersion)) {
     const eligibleSeconds = finiteNonNegative(actualSeconds)
       ? Math.max(0, actualSeconds - FOCUS_METRIC_V1.calibrationSeconds)
       : null
@@ -399,6 +428,7 @@ export function deriveSessionFocusMetric(session) {
 
   return {
     focusMetricVersion: FOCUS_METRIC_V1.version,
+    scoringGeneration: measurement.attentionScoringVersion,
     sessionEfficiency: clamp(Math.round(rawEfficiency), 0, 100),
     deepFocusSeconds: phases.deepFocusSeconds,
     deepFocusMinutes: Math.round((phases.deepFocusSeconds / 60) * 10) / 10,
@@ -458,7 +488,7 @@ function validContribution(session) {
       ? Math.min(session.measuredSeconds, session.deepFocusMinutes * 60)
       : null
   if (
-    session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION ||
+    !isScoreableGeneration(session?.attentionScoringVersion) ||
     session?.focusMetricVersion !== FOCUS_METRIC_V1.version ||
     session?.focusMetricRejection != null ||
     !Number.isFinite(session?.sessionEfficiency) ||
@@ -478,6 +508,8 @@ function validContribution(session) {
     day,
     value: {
       version: FOCUS_METRIC_V1.version,
+      // Which ruler measured it. Days are scored one generation at a time.
+      generation: session.attentionScoringVersion,
       measuredSeconds: session.measuredSeconds,
       scoreSum: session.scoreSum,
       deepFocusSeconds,
@@ -562,7 +594,7 @@ export function removeSessionFromFocusLedger(ledger, sessionId) {
 }
 
 export function calculateDailyFocus(dayEntry) {
-  const contributions = Object.values(dayEntry?.sessions || {})
+  const usable = Object.values(dayEntry?.sessions || {})
     .filter(item =>
       item?.version === FOCUS_METRIC_V1.version &&
       finiteNonNegative(item.measuredSeconds) &&
@@ -572,7 +604,15 @@ export function calculateDailyFocus(dayEntry) {
       finiteNonNegative(item.deepFocusSeconds) &&
       item.deepFocusSeconds <= item.measuredSeconds
     )
-  if (contributions.length === 0) return null
+  if (usable.length === 0) return null
+
+  // A day is scored by one ruler. On a switchover day both generations are
+  // present, and averaging them yields a number that is neither — so the
+  // newest generation present wins and the older measurements sit that day
+  // out. Entries written before generations were tagged are V1.
+  const generationOf = (item) => item.generation ?? ATTENTION_SCORING_VERSION
+  const generation = Math.max(...usable.map(generationOf))
+  const contributions = usable.filter(item => generationOf(item) === generation)
 
   const totals = contributions.reduce((sum, item) => ({
     measuredSeconds: sum.measuredSeconds + item.measuredSeconds,
@@ -592,6 +632,9 @@ export function calculateDailyFocus(dayEntry) {
 
   return {
     score: Math.round(rawScore),
+    // Which ruler produced this day, so two generations are never presented
+    // as one continuous line.
+    generation,
     rawScore,
     scoreSum: totals.scoreSum,
     efficiency: Math.round(efficiency),

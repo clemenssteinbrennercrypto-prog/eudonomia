@@ -739,9 +739,11 @@ function NativeCameraPrototypeStatus() {
           Internal test · native camera V2
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
-          V2 is a separate scoring generation because recorded parity with the historical
-          WebGL ruler reached 97.28%, below the fixed 99% gate. Enable it only for the live
-          minimize/close test; switching it off restores the WebView V1 source.
+          V2 is its own scoring generation: recorded parity with the historical WebGL ruler
+          reached 97.28% against a 99% gate, and that reference does not reproduce its own CPU
+          inference either. V2 sessions are scored on their own terms and never averaged with
+          V1 history — a switch restarts trends and patterns rather than blending two rulers.
+          Switching it off restores the WebView V1 source.
         </div>
       </div>
 

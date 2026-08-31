@@ -58,9 +58,23 @@ describe('refuses to speak from thin data', () => {
     expect(isUsable(faulted[0])).toBe(false)
   })
 
-  it('does not calibrate V1 history with the separate native V2 ruler', () => {
+  // Superseded on 31 August alongside the historyTrend change: patterns follow
+  // the newest generation present. A camera switch restarts the evidence
+  // rather than blending two scales — which is why a mixed history calibrates
+  // on the V2 sessions alone.
+  it('calibrates on one generation, restarting the evidence after a switch', () => {
     const nativeV2 = many(MIN_SESSIONS, { extra: { attentionScoringVersion: 2 } })
-    expect(calibrate(nativeV2)).toMatchObject({ ready: false, needMore: MIN_SESSIONS })
+    expect(calibrate(nativeV2).ready).toBe(true)
+
+    // With both present, only the newer generation qualifies — the V1 sessions
+    // are kept but not counted toward a pattern measured on a different ruler.
+    const mixed = [...many(MIN_SESSIONS, { extra: { attentionScoringVersion: 1 } }), ...nativeV2]
+    expect(calibrate(mixed).sessionsAnalysed).toBe(MIN_SESSIONS)
+
+    // Too few of the newer ruler is a refusal, not a fallback to the old one.
+    const thinV2 = [...many(MIN_SESSIONS, { extra: { attentionScoringVersion: 1 } }),
+      ...many(2, { extra: { attentionScoringVersion: 2 } })]
+    expect(calibrate(thinV2)).toMatchObject({ ready: false })
   })
 
   it('ignores sessions too short to mean anything', () => {

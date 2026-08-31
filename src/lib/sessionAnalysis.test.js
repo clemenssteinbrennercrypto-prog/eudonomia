@@ -124,21 +124,33 @@ describe('measurement refusals', () => {
     expect(a.conclusion.evidence).not.toHaveProperty('focusPct')
   })
 
-  // The native V2 ruler is a different measurement generation, deliberately
-  // held out of comparison until promoted — so its number is shown as a fact
-  // but never read against thresholds calibrated on V1.
-  it('holds the native V2 ruler out of the focus-band conclusion', () => {
+  // Superseded on 31 August: the native camera becomes the primary ruler, so
+  // its sessions are read on their own terms rather than refused. Keeping two
+  // generations out of the same comparison is handled separately, by
+  // comparableSessions() — not by refusing to read a session at all.
+  it('reads a native V2 session on its own terms', () => {
     const a = analyzeSession(session({
       actualSeconds: 1800,
       pct: 90,
       goalOutcome: 'yes',
       extra: { attentionScoringVersion: 2, attentionMeasurementSource: 'native_mediapipe_v2' },
     }))
-    expect(a.measurement.compatible).toBe(false)
+    expect(a.measurement.compatible).toBe(true)
     expect(a.measurement.measurementSource).toBe('native_mediapipe_v2')
+    expect(a.measurement.averageFocus).toBe(90)
+    expect(a.conclusion.code).toBe('HIGH_FOCUS_GOAL_MET')
+  })
+
+  it('still refuses a ruler it does not know how to score', () => {
+    const a = analyzeSession(session({
+      actualSeconds: 1800,
+      pct: 90,
+      goalOutcome: 'yes',
+      extra: { attentionScoringVersion: 99 },
+    }))
+    expect(a.measurement.compatible).toBe(false)
     expect(a.conclusion.code).toBe('SCORING_VERSION_INCOMPATIBLE')
-    // The measured figure itself is still reported — it just is not compared.
-    expect(a.measurement.aboveThresholdPct).toBe(90)
+    expect(a.conclusion.evidence).not.toHaveProperty('focusPct')
   })
 
   // A record written before versioning existed is pre-versioning V1, not an

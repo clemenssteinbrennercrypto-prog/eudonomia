@@ -10,6 +10,7 @@ import {
   calculateDailyFocus,
   deriveSessionFocusMetric,
   emptyFocusLedger,
+  localDayKey,
   recoverLegacyTimelineMeasurement,
   recoverThrottledTimerMeasurement,
   removeSessionFromFocusLedger,
@@ -141,14 +142,50 @@ describe('session focus metric refusals', () => {
     })
   })
 
-  it('reports coverage for a separate scoring generation without mixing its score', () => {
-    const nativeV2 = rawSession({ measuredSeconds: 300, actualSeconds: 420 })
+  // Superseded on 31 August. V2 was refused outright, which left the native
+  // camera producing no score at all — and the parity gate behind that refusal
+  // compares against a WebGL reference that does not reproduce its own CPU
+  // inference. V2 is now scored on its own terms; what must never happen is a
+  // day blending two rulers, which is asserted separately below.
+  // The guarantee that makes scoring two generations safe: a switchover day
+  // holds both, and averaging them would produce a number belonging to neither
+  // ruler. The newer generation takes the day; the older measurements are kept
+  // but sit it out.
+  it('never averages two scoring generations into one day', () => {
+    const v1 = withSessionFocusMetric(measuredSession({ id: 'v1', efficiency: 90 }))
+    const v2raw = measuredSession({ id: 'v2', efficiency: 40 })
+    v2raw.attentionScoringVersion = ATTENTION_SCORING_VERSION + 1
+    const v2 = withSessionFocusMetric(v2raw)
+
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), v1)
+    ledger = addSessionToFocusLedger(ledger, v2)
+    const day = ledger.days[localDayKey(v1.startedAt)]
+
+    const scored = calculateDailyFocus(day)
+    // Both are present in the ledger; only the newer ruler scores the day.
+    expect(Object.keys(day.sessions)).toHaveLength(2)
+    expect(scored.generation).toBe(ATTENTION_SCORING_VERSION + 1)
+    expect(scored.sessionCount).toBe(1)
+    // A blend of 90 and 40 would land between them; this must be V2's alone.
+    expect(scored.efficiency).toBe(40)
+  })
+
+  it('scores a V1-only day exactly as it always did', () => {
+    const v1 = withSessionFocusMetric(measuredSession({ id: 'v1', efficiency: 80 }))
+    const ledger = addSessionToFocusLedger(emptyFocusLedger(), v1)
+    const scored = calculateDailyFocus(ledger.days[localDayKey(v1.startedAt)])
+    expect(scored.generation).toBe(ATTENTION_SCORING_VERSION)
+    expect(scored.efficiency).toBe(80)
+  })
+
+  it('scores a separate generation instead of discarding it', () => {
+    const nativeV2 = rawSession({ measuredSeconds: 600, actualSeconds: 720 })
     nativeV2.attentionScoringVersion = ATTENTION_SCORING_VERSION + 1
     expect(deriveSessionFocusMetric(nativeV2)).toMatchObject({
-      sessionEfficiency: null,
-      measurementCoverage: 0.75,
-      focusMetricRejection: 'legacy_scoring_version',
+      scoringGeneration: ATTENTION_SCORING_VERSION + 1,
+      focusMetricRejection: null,
     })
+    expect(deriveSessionFocusMetric(nativeV2).sessionEfficiency).toBeGreaterThan(0)
   })
 
   it('requires five measured minutes', () => {
