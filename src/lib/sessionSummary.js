@@ -20,22 +20,30 @@ function searchTextFor(session) {
   return [session?.task || '', ...tags].join(' ').trim().toLowerCase()
 }
 
+/** These are index columns, not the record. The live accumulator counts in
+ *  fractions of a second, so the raw values are things like 92.59400000000004;
+ *  the exact figure survives in the stored record either way. Rounding here
+ *  keeps the columns integral — the native store also tolerates fractions, but
+ *  sending clean values means only one side has to be forgiving. */
+const wholeOrZero = (value) => (Number.isFinite(value) ? Math.round(value) : 0)
+const wholeOrNull = (value) => (Number.isFinite(value) ? Math.round(value) : null)
+
 export function buildSessionSummary(session) {
   const s = session || {}
   return {
     id: s.id || '',
-    timestamp: Number.isFinite(s.timestamp) ? s.timestamp : 0,
+    timestamp: wholeOrZero(s.timestamp),
     task: s.task || '',
     goal: s.goal || '',
-    actualSeconds: Number.isFinite(s.actualSeconds) ? s.actualSeconds : 0,
-    focusedSeconds: Number.isFinite(s.focusedSeconds) ? s.focusedSeconds : null,
-    measuredSeconds: Number.isFinite(s.measuredSeconds) ? s.measuredSeconds : null,
-    distractionEvents: Number.isFinite(s.distractionEvents) ? s.distractionEvents : 0,
+    actualSeconds: wholeOrZero(s.actualSeconds),
+    focusedSeconds: wholeOrNull(s.focusedSeconds),
+    measuredSeconds: wholeOrNull(s.measuredSeconds),
+    distractionEvents: wholeOrZero(s.distractionEvents),
     // Normalized here so the legacy `goalAchieved` boolean and the modern
     // `goalOutcome` string end up in the same column and filter alike.
     goalOutcome: sessionOutcome(s),
     workspaceId: s.workspace?.id ?? null,
-    workspaceRevision: Number.isFinite(s.workspace?.revision) ? s.workspace.revision : null,
+    workspaceRevision: wholeOrNull(s.workspace?.revision),
     workspaceName: s.workspace?.name ?? null,
     energyLevel: s.energyLevel ?? null,
     completed: Boolean(s.completed),

@@ -308,6 +308,24 @@ describe('summary columns match the JS filter semantics', () => {
     expect(buildSessionSummary(sessionData({ scoreMeasured: false })).measured).toBe(false)
   })
 
+  // The live accumulator counts in fractions, so a real record's
+  // focusedSeconds is 92.59400000000004 rather than 93. Sending that as an
+  // index column is what made the native import reject an entire history.
+  it('rounds the fractional seconds real records carry', () => {
+    const summary = buildSessionSummary({
+      id: 'real',
+      timestamp: 1_787_440_169_711,
+      actualSeconds: 620.0000000001,
+      focusedSeconds: 92.59400000000004,
+      measuredSeconds: 600.5,
+      workspace: { id: 'ws1', revision: 0 },
+    })
+    expect(summary.focusedSeconds).toBe(93)
+    expect(summary.measuredSeconds).toBe(601)
+    expect(summary.actualSeconds).toBe(620)
+    expect(Number.isInteger(summary.timestamp)).toBe(true)
+  })
+
   it('survives a record missing every optional field', () => {
     const summary = buildSessionSummary({ id: 'x' })
     expect(summary.workspaceId).toBeNull()

@@ -39,6 +39,36 @@ const MIGRATION_DONE: &str = "completed";
 
 pub struct DbState(pub Mutex<Connection>);
 
+/// Lenient number parsing for the indexed columns.
+///
+/// These come from a live JavaScript accumulator that adds elapsed time in
+/// fractions, so `focusedSeconds` is routinely something like
+/// 92.59400000000004 rather than 93. Declaring them as plain integers made
+/// serde reject the payload outright — which meant a real history could not be
+/// imported at all, while a test fixture full of round numbers passed happily.
+///
+/// These columns exist only to filter and sort on; the exact original value is
+/// preserved verbatim in `record_json` either way. So anything numeric is
+/// accepted and rounded, and anything else degrades to zero rather than
+/// failing the whole import.
+mod lenient {
+    use serde::{Deserialize, Deserializer};
+    use serde_json::Value;
+
+    pub fn i64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+        Ok(Value::deserialize(deserializer)?
+            .as_f64()
+            .map(|value| value.round() as i64)
+            .unwrap_or(0))
+    }
+
+    pub fn opt_i64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
+        Ok(Value::deserialize(deserializer)?
+            .as_f64()
+            .map(|value| value.round() as i64))
+    }
+}
+
 /// The indexed columns behind a session, computed by the JS repository so the
 /// two adapters cannot disagree about what a filter means. See sessionQuery.js
 /// for the semantics each of these fields feeds.
@@ -46,16 +76,22 @@ pub struct DbState(pub Mutex<Connection>);
 #[serde(rename_all = "camelCase", default)]
 pub struct SessionSummary {
     pub id: String,
+    #[serde(deserialize_with = "lenient::i64")]
     pub timestamp: i64,
     pub task: String,
     pub goal: String,
+    #[serde(deserialize_with = "lenient::i64")]
     pub actual_seconds: i64,
+    #[serde(deserialize_with = "lenient::opt_i64")]
     pub focused_seconds: Option<i64>,
+    #[serde(deserialize_with = "lenient::opt_i64")]
     pub measured_seconds: Option<i64>,
+    #[serde(deserialize_with = "lenient::i64")]
     pub distraction_events: i64,
     /// Normalized to yes/partly/no by JS, or absent when never rated.
     pub goal_outcome: Option<String>,
     pub workspace_id: Option<String>,
+    #[serde(deserialize_with = "lenient::opt_i64")]
     pub workspace_revision: Option<i64>,
     pub workspace_name: Option<String>,
     pub energy_level: Option<String>,
@@ -1289,6 +1325,66 @@ mod tests {
         assert_eq!(outcome.imported_count, 1);
         assert_eq!(outcome.skipped_duplicate_count, 1);
         assert_eq!(load_all(&connection).unwrap().len(), 2);
+    }
+
+    // Real records carry fractional seconds from the live accumulator. An
+    // import that rejects them rejects the user's entire history, which is
+    // exactly what shipped: "invalid type: floating point 92.59400000000004,
+    // expected i64".
+    #[test]
+    fn accepts_the_fractional_seconds_real_records_carry() {
+        let raw = json!({
+            "id": "real",
+            "timestamp": 1_787_440_169_711_i64,
+            "task": "Thesis",
+            "goal": "",
+            "actualSeconds": 620.0000000001_f64,
+            "focusedSeconds": 92.59400000000004_f64,
+            "measuredSeconds": 600.5_f64,
+            "distractionEvents": 2,
+            "goalOutcome": "yes",
+            "workspaceId": "ws1",
+            "workspaceRevision": 0,
+            "completed": true,
+            "measured": true,
+            "tags": [],
+            "searchText": "thesis",
+        });
+        let parsed: SessionSummary = serde_json::from_value(raw).expect("fractional seconds parse");
+        assert_eq!(parsed.focused_seconds, Some(93));
+        assert_eq!(parsed.measured_seconds, Some(601));
+        assert_eq!(parsed.actual_seconds, 620);
+
+        // And such a record imports rather than failing the whole migration.
+        let mut connection = db();
+        let outcome = migrate_legacy(
+            &mut connection,
+            &[session_value("real")],
+            &[parsed],
+            &json!({ "days": {} }),
+        )
+        .unwrap();
+        assert!(outcome.verified);
+        assert_eq!(outcome.imported_count, 1);
+    }
+
+    #[test]
+    fn a_null_or_unexpected_number_field_degrades_instead_of_failing_the_import() {
+        let raw = json!({
+            "id": "odd",
+            "timestamp": null,
+            "actualSeconds": null,
+            "focusedSeconds": null,
+            "distractionEvents": null,
+            "completed": false,
+            "measured": false,
+            "tags": [],
+            "searchText": "",
+        });
+        let parsed: SessionSummary = serde_json::from_value(raw).expect("null numbers parse");
+        assert_eq!(parsed.timestamp, 0);
+        assert_eq!(parsed.actual_seconds, 0);
+        assert_eq!(parsed.focused_seconds, None);
     }
 
     #[test]
