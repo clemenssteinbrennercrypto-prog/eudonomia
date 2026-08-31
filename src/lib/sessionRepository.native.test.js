@@ -279,6 +279,49 @@ describe('never shows an empty app while history is still in the old store', () 
     expect(await repo.loadAll()).toEqual([])
   })
 
+  // The store must be chosen once per launch. Deciding per call raced the
+  // app's own startup: the first screens read before the import had finished,
+  // found rows still in localStorage and answered from there, so the app
+  // showed the old capped copy while the real history sat in SQLite.
+  it('settles which store is authoritative before the first read', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({ migrated: true, importedCount: 2, verified: true }),
+      db_load_all: () => [{ id: 'from-sqlite' }],
+    })
+    repo = createNativeSessionRepository()
+
+    // No explicit migrate call: the very first read has to settle it itself.
+    const all = await repo.loadAll()
+    expect(all.map(s => s.id)).toEqual(['from-sqlite'])
+    expect(repo.migrated).toBe(true)
+  })
+
+  it('runs the import once even when several reads start at the same time', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({ migrated: true, importedCount: 2, verified: true }),
+      db_load_all: () => [{ id: 'from-sqlite' }],
+    })
+    repo = createNativeSessionRepository()
+
+    await Promise.all([repo.loadAll(), repo.loadFocusLedger(), repo.listSessionSummaries({})])
+    const imports = invoked.filter(call => call.command === 'db_migrate_legacy')
+    expect(imports).toHaveLength(1)
+  })
+
+  it('keeps reads on the legacy store when that one import fails', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => { throw new Error('database locked') },
+    })
+    repo = createNativeSessionRepository()
+
+    // The failure must not propagate out of an ordinary read.
+    const all = await repo.loadAll()
+    expect(all.map(s => s.id)).toEqual(['a', 'b'])
+  })
+
   it('serves the ledger and session detail from the legacy store too', async () => {
     withLegacyHistory()
     expect(await repo.getSession('a')).toMatchObject({ task: 'Old one' })

@@ -73,9 +73,32 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
   // and every past session vanished from view while sitting untouched in
   // localStorage the whole time.
   let migrated = false
+  let readyPromise = null
+
+  /**
+   * Settle which store is authoritative, once, before anything reads.
+   *
+   * This used to be decided per call, which raced the app's own startup: the
+   * first screens called loadAll() while the import had not finished, saw
+   * localStorage still holding rows, and answered from there — so the app
+   * showed the old capped copy while the real history sat in SQLite. Worse, it
+   * was re-decided on every call, so different parts of one screen could
+   * disagree about where the data lived.
+   *
+   * Every method awaits this, so the question is answered once per launch and
+   * every caller gets the same answer. A failed import resolves too: reads
+   * then stay on the legacy store, which is the safe side.
+   */
+  function ensureReady() {
+    if (!readyPromise) {
+      readyPromise = repository.migrateLegacyIfNeeded().catch(() => null)
+    }
+    return readyPromise
+  }
 
   /** True while the old store still holds the only copy of anything. */
   async function servedByLegacy() {
+    await ensureReady()
     if (migrated) return false
     return loadLegacySessions().length > 0
   }
@@ -234,6 +257,7 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
      * run simply retries next launch.
      */
     async migrateLegacyIfNeeded() {
+      // Called by ensureReady(); must never await it back.
       const legacySessions = loadLegacySessions()
       const legacyLedger = loadLegacyFocusLedger()
       if (legacySessions.length === 0) {
