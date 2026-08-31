@@ -22,6 +22,7 @@ import { addSessionToFocusLedger, localDayKey, withSessionFocusMetric } from './
 import { buildSessionSummary } from './sessionSummary'
 import { analyzeSession } from './sessionAnalysis'
 import { DEFAULT_PAGE_SIZE, dateRangeCutoff } from './sessionQuery'
+import { createLocalSessionRepository } from './sessionRepository.local'
 
 export const ARCHIVE_SCHEMA_VERSION = 1
 
@@ -55,15 +56,39 @@ function ledgerDayFor(session, currentLedger) {
   return { key: dayKey, entry: next.days?.[dayKey] ?? { sessions: {} } }
 }
 
-export function createNativeSessionRepository() {
+export function createNativeSessionRepository({ legacy = createLocalSessionRepository() } = {}) {
+  // Until the legacy import has verifiably succeeded, the SQLite store is not
+  // the source of truth — localStorage still is. Reading from an empty
+  // database in that window would show someone an app with none of their
+  // history in it, which is indistinguishable from having lost it.
+  //
+  // This is not hypothetical: it is what shipped. The app auto-updates from a
+  // push to main, so it switched to reading SQLite before any import had run,
+  // and every past session vanished from view while sitting untouched in
+  // localStorage the whole time.
+  let migrated = false
+
+  /** True while the old store still holds the only copy of anything. */
+  async function servedByLegacy() {
+    if (migrated) return false
+    return loadLegacySessions().length > 0
+  }
+
   const repository = {
     kind: 'native',
 
+    /** Whether reads are currently coming from SQLite or the legacy store. */
+    get migrated() {
+      return migrated
+    },
+
     async loadAll() {
+      if (await servedByLegacy()) return legacy.loadAll()
       return invoke('db_load_all')
     },
 
     async listSessionSummaries(query = {}) {
+      if (await servedByLegacy()) return legacy.listSessionSummaries(query)
       const page = await invoke('db_list_session_summaries', { query: toNativeQuery(query) })
       return {
         rows: page.rows,
@@ -75,6 +100,7 @@ export function createNativeSessionRepository() {
     },
 
     async getSession(id) {
+      if (await servedByLegacy()) return legacy.getSession(id)
       return (await invoke('db_get_session', { id })) ?? null
     },
 
@@ -121,6 +147,7 @@ export function createNativeSessionRepository() {
     },
 
     async loadFocusLedger() {
+      if (await servedByLegacy()) return legacy.loadFocusLedger()
       return invoke('db_load_focus_ledger')
     },
 
@@ -148,17 +175,24 @@ export function createNativeSessionRepository() {
       const legacySessions = loadLegacySessions()
       const legacyLedger = loadLegacyFocusLedger()
       if (legacySessions.length === 0) {
+        // Nothing to carry over, so SQLite is authoritative from the start.
+        migrated = true
         return { migrated: false, importedCount: 0, reason: 'nothing_to_migrate' }
       }
       // Upgrade recoverable legacy measurements the same way the web build
       // does on startup, so migrated sessions carry the metric they qualify
       // for rather than being frozen as unmeasured.
       const upgraded = legacySessions.map(withSessionFocusMetric)
-      return invoke('db_migrate_legacy', {
+      const result = await invoke('db_migrate_legacy', {
         sessions: upgraded,
         summaries: upgraded.map(buildSessionSummary),
         ledger: legacyLedger,
       })
+      // Only hand over to SQLite once Rust confirms every id landed. Anything
+      // else — a rollback, a partial import, a thrown error — leaves reads on
+      // the legacy store, where the data demonstrably still is.
+      if (result?.verified) migrated = true
+      return result
     },
   }
 

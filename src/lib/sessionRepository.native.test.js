@@ -56,6 +56,7 @@ function sessionData(overrides = {}) {
 }
 
 const sent = (command) => invoked.find(call => call.command === command)?.args
+const called = (command) => invoked.some(call => call.command === command)
 
 describe('interface parity with the local adapter', () => {
   it('exposes exactly the same methods', () => {
@@ -176,6 +177,82 @@ describe('updating', () => {
 
     expect(await repo.updateSession('ghost', { goalOutcome: 'yes' })).toBeNull()
     expect(sent('db_update_session')).toBeUndefined()
+  })
+})
+
+// The failure that shipped: the app auto-updates, switches to reading SQLite,
+// and shows an empty history while every session is still sitting in
+// localStorage. Nothing was deleted and it made no difference — from the
+// user's side their data was gone. Reads must not leave the old store until
+// the import is confirmed.
+describe('never shows an empty app while history is still in the old store', () => {
+  const legacyRows = [
+    { id: 'a', task: 'Old one', timestamp: 1, actualSeconds: 600, focusedSeconds: 400 },
+    { id: 'b', task: 'Old two', timestamp: 2, actualSeconds: 600, focusedSeconds: 400 },
+  ]
+
+  function withLegacyHistory() {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify(legacyRows))
+  }
+
+  it('reads from the legacy store before the import has run', async () => {
+    withLegacyHistory()
+    // SQLite is empty at this point — db_load_all would answer with nothing.
+    const all = await repo.loadAll()
+    expect(all.map(s => s.id)).toEqual(['a', 'b'])
+    expect(called('db_load_all')).toBe(false)
+  })
+
+  it('keeps reading from the legacy store when the import is not verified', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({ migrated: false, verified: false, reason: 'rolled back' }),
+    })
+    repo = createNativeSessionRepository()
+
+    await repo.migrateLegacyIfNeeded()
+    expect(repo.migrated).toBe(false)
+    expect((await repo.loadAll()).map(s => s.id)).toEqual(['a', 'b'])
+  })
+
+  it('keeps reading from the legacy store when the import throws', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => { throw new Error('database locked') },
+    })
+    repo = createNativeSessionRepository()
+
+    await expect(repo.migrateLegacyIfNeeded()).rejects.toThrow('database locked')
+    expect((await repo.loadAll()).map(s => s.id)).toEqual(['a', 'b'])
+  })
+
+  it('hands over to SQLite only once the import is verified', async () => {
+    withLegacyHistory()
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({ migrated: true, importedCount: 2, verified: true }),
+      db_load_all: () => [{ id: 'a' }, { id: 'b' }],
+    })
+    repo = createNativeSessionRepository()
+
+    await repo.migrateLegacyIfNeeded()
+    expect(repo.migrated).toBe(true)
+    await repo.loadAll()
+    expect(called('db_load_all')).toBe(true)
+  })
+
+  it('uses SQLite immediately when there is no legacy history to lose', async () => {
+    await repo.migrateLegacyIfNeeded()
+    expect(repo.migrated).toBe(true)
+    await repo.loadAll()
+    expect(called('db_load_all')).toBe(true)
+  })
+
+  it('serves the ledger and session detail from the legacy store too', async () => {
+    withLegacyHistory()
+    expect(await repo.getSession('a')).toMatchObject({ task: 'Old one' })
+    expect(await repo.loadFocusLedger()).toBeTruthy()
+    expect(called('db_get_session')).toBe(false)
+    expect(called('db_load_focus_ledger')).toBe(false)
   })
 })
 

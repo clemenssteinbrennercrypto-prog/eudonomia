@@ -172,6 +172,7 @@ export default function App() {
   const [tags,     setTags]     = useState([])
   const [sessionData, setSessionData] = useState(null)
   const [saveError, setSaveError] = useState(null)
+  const [migrationError, setMigrationError] = useState(null)
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
@@ -203,9 +204,19 @@ export default function App() {
     backfilledRef.current = true
     let cancelled = false
     sessionRepository.migrateLegacyIfNeeded()
-      .then(() => sessionRepository.backfillFocusLedger())
+      .then(result => {
+        // A refused or unverified import is not a detail to swallow: it means
+        // history is still only in the old store, and the user needs to know
+        // why rather than being shown an app that looks empty.
+        if (!cancelled && result && result.verified === false) {
+          setMigrationError(result.reason || 'the import could not be verified')
+        }
+        return sessionRepository.backfillFocusLedger()
+      })
       .then(() => { if (!cancelled) setSessionRevision(value => value + 1) })
-      .catch(() => {})
+      .catch(error => {
+        if (!cancelled) setMigrationError(String(error?.message || error))
+      })
     return () => { cancelled = true }
   }, [])
 
@@ -398,6 +409,16 @@ export default function App() {
 
   return (
     <>
+      {migrationError && screen !== 'session' && (
+        <div className="session-save-error" role="alert">
+          <span>
+            Your history could not be imported into the new local database
+            ({migrationError}). Nothing has been deleted — your sessions are
+            still being read from their original storage, and the app will try
+            the import again next launch.
+          </span>
+        </div>
+      )}
       {/* Hidden during a session: a reload tears down all in-memory session
           state (scores, streaks, timers live in refs), so hitting it mid-session
           silently destroys the run. There is no reason to reload while tracking,
