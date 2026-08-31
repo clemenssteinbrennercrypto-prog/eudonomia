@@ -202,7 +202,7 @@ the tag and the displayed build ID before asking the user to test.
 Current automated baseline after the opt-in V2 wiring:
 
 ```bash
-npm test -- --run                 # 428 tests
+npm test -- --run                 # 432 tests
 npm run build
 cd companion/src-tauri
 cargo test                        # 69 tests: 13 library + 56 app

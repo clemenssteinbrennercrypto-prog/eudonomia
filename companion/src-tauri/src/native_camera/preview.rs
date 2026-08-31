@@ -19,11 +19,10 @@ const PREVIEW_LAYER_NAME: &str = "at.eudonomia.native-camera-preview";
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeCameraPreviewBounds {
-    x: f64,
-    y: f64,
+    right: f64,
+    bottom: f64,
     width: f64,
     height: f64,
-    viewport_height: f64,
     visible: bool,
     corner_radius: f64,
 }
@@ -31,25 +30,25 @@ pub struct NativeCameraPreviewBounds {
 impl NativeCameraPreviewBounds {
     fn is_drawable(self) -> bool {
         self.visible
-            && self.x.is_finite()
-            && self.y.is_finite()
+            && self.right.is_finite()
+            && self.bottom.is_finite()
             && self.width.is_finite()
             && self.height.is_finite()
-            && self.viewport_height.is_finite()
             && self.corner_radius.is_finite()
+            && self.right >= 0.0
+            && self.bottom >= 0.0
             && self.width >= 1.0
             && self.height >= 1.0
     }
 
-    fn layer_y(self, geometry_flipped: bool, native_layer_height: f64) -> f64 {
-        if geometry_flipped {
-            // A flipped WKWebView layer starts above the DOM viewport when
-            // Tauri extends content beneath the title bar. Move DOM y down by
-            // that native-only top inset.
-            self.y + (native_layer_height - self.viewport_height).max(0.0)
+    fn layer_origin(self, geometry_flipped: bool, root_bounds: CGRect) -> CGPoint {
+        let x = root_bounds.origin.x + root_bounds.size.width - self.right - self.width;
+        let y = if geometry_flipped {
+            root_bounds.origin.y + root_bounds.size.height - self.bottom - self.height
         } else {
-            self.viewport_height - self.y - self.height
-        }
+            root_bounds.origin.y + self.bottom
+        };
+        CGPoint::new(x, y)
     }
 }
 
@@ -108,9 +107,12 @@ pub(super) fn update(app: &AppHandle, bounds: NativeCameraPreviewBounds) -> Resu
             CATransaction::begin();
             CATransaction::setDisableActions(true);
             if bounds.is_drawable() {
-                let y = bounds.layer_y(root.isGeometryFlipped(), root.bounds().size.height);
+                // The placeholder is fixed to the bottom-right corner. Anchor
+                // the native layer to those shared edges too, avoiding every
+                // title-bar/safe-area difference at the top of WKWebView.
+                let origin = bounds.layer_origin(root.isGeometryFlipped(), root.bounds());
                 preview.setFrame(CGRect::new(
-                    CGPoint::new(bounds.x, y),
+                    origin,
                     CGSize::new(bounds.width, bounds.height),
                 ));
                 preview.setCornerRadius(bounds.corner_radius.max(0.0));
@@ -154,61 +156,44 @@ fn remove_from(root: &CALayer) {
 #[cfg(test)]
 mod tests {
     use super::NativeCameraPreviewBounds;
+    use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 
     #[test]
     fn preview_requires_real_visible_bounds() {
         assert!(NativeCameraPreviewBounds {
-            x: 10.0,
-            y: 20.0,
+            right: 28.0,
+            bottom: 80.0,
             width: 160.0,
             height: 120.0,
-            viewport_height: 800.0,
             visible: true,
             corner_radius: 8.0,
         }
         .is_drawable());
-        assert_eq!(
-            NativeCameraPreviewBounds {
-                x: 10.0,
-                y: 600.0,
-                width: 160.0,
-                height: 120.0,
-                viewport_height: 800.0,
-                visible: true,
-                corner_radius: 8.0,
-            }
-            .layer_y(false, 830.0),
-            80.0
-        );
-        assert_eq!(
-            NativeCameraPreviewBounds {
-                x: 10.0,
-                y: 600.0,
-                width: 160.0,
-                height: 120.0,
-                viewport_height: 800.0,
-                visible: true,
-                corner_radius: 8.0,
-            }
-            .layer_y(true, 830.0),
-            630.0
-        );
+        let bounds = NativeCameraPreviewBounds {
+            right: 28.0,
+            bottom: 80.0,
+            width: 160.0,
+            height: 120.0,
+            visible: true,
+            corner_radius: 8.0,
+        };
+        let root = CGRect::new(CGPoint::ZERO, CGSize::new(1_000.0, 830.0));
+        assert_eq!(bounds.layer_origin(false, root), CGPoint::new(812.0, 80.0));
+        assert_eq!(bounds.layer_origin(true, root), CGPoint::new(812.0, 630.0));
         assert!(!NativeCameraPreviewBounds {
-            x: 10.0,
-            y: 20.0,
+            right: 28.0,
+            bottom: 80.0,
             width: 0.0,
             height: 120.0,
-            viewport_height: 800.0,
             visible: true,
             corner_radius: 8.0,
         }
         .is_drawable());
         assert!(!NativeCameraPreviewBounds {
-            x: 10.0,
-            y: 20.0,
+            right: 28.0,
+            bottom: 80.0,
             width: 160.0,
             height: 120.0,
-            viewport_height: 800.0,
             visible: false,
             corner_radius: 8.0,
         }
