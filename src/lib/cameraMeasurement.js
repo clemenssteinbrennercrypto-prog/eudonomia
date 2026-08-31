@@ -11,37 +11,9 @@ export const NATIVE_CAMERA_MEASUREMENT_V2 = Object.freeze({
   detectorModelSha256: '3bc182eb9f33925d9e58b5c8d59308a760f4adea8f282370e428c51212c26633',
 })
 
-export const NATIVE_CAMERA_V2_PREFERENCE_KEY = 'eudaimonia_native_camera_v2'
-
-export function nativeCameraV2Available({
-  dev = import.meta.env.DEV,
-  channel = import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL,
-  nativeInvoke = globalThis.window?.__TAURI__?.core?.invoke,
-} = {}) {
-  return Boolean(nativeInvoke) && (dev === true || channel === 'test')
-}
-
-export function loadNativeCameraV2Enabled(options = {}) {
-  if (!nativeCameraV2Available(options)) return false
-  const storage = options.storage || globalThis.localStorage
-  try {
-    return storage?.getItem(NATIVE_CAMERA_V2_PREFERENCE_KEY) === 'on'
-  } catch {
-    return false
-  }
-}
-
-export function saveNativeCameraV2Enabled(enabled, storage = globalThis.localStorage) {
-  const next = Boolean(enabled)
-  try {
-    storage?.setItem(NATIVE_CAMERA_V2_PREFERENCE_KEY, next ? 'on' : 'off')
-  } catch {}
-  return next
-}
-
-export function cameraMeasurementProfile(nativeEnabled) {
-  return nativeEnabled ? NATIVE_CAMERA_MEASUREMENT_V2 : WEBVIEW_CAMERA_MEASUREMENT
-}
+// New live sessions have one source. V1 remains exported solely so stored
+// history can identify its original ruler; it is never a runtime fallback.
+export const PRIMARY_CAMERA_MEASUREMENT = NATIVE_CAMERA_MEASUREMENT_V2
 
 export function nativeCameraFaultFor(status) {
   if (status?.state !== 'faulted') return null

@@ -15,12 +15,14 @@ pull` before you start and before you push.**
 A focus tracker with teeth. It is one native macOS product with two layers:
 
 - **Embedded UI** (`src/`) — React 18 + Vite, plain JSX, no TypeScript. Bundled
-  into the Tauri WebView; it is not a standalone browser product. Reads the
-  webcam via MediaPipe FaceMesh and turns attention into a live focus score.
+  into the Tauri WebView; it is not a standalone browser product. Receives
+  native MediaPipe landmarks over Tauri IPC, scores them, and renders the live
+  session. It does not own the live-session camera.
 - **Native core** (`companion/src-tauri/`) — Tauri 2 + Rust. Hosts the UI,
-  watches which app/site is frontmost, and **blocks** distracting apps and sites
-  during a session. Rust and React communicate only through Tauri commands and
-  events; there is no local HTTP service.
+  captures and infers faces through AVFoundation + MediaPipe, watches which
+  app/site is frontmost, and **blocks** distracting apps and sites during a
+  session. Rust and React communicate only through Tauri commands and events;
+  there is no local HTTP service.
 
 The differentiator is that last word. Every competitor measures. This one
 intervenes. Keep that asymmetry in mind when weighing features.
@@ -40,7 +42,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 432 tests — must stay green
+npm test           # vitest, currently 434 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -48,7 +50,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 69 tests (13 library + 56 app)
+cargo test         # currently 70 tests (13 library + 57 app)
 cargo check
 ```
 
@@ -272,28 +274,19 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 432 JS tests and 69 Rust tests (13 native-camera library
-tests plus 56 app tests). Both suites must stay green. Treat these counts as a
+There are currently 434 JS tests and 70 Rust tests (13 native-camera library
+tests plus 57 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
 Test the **refusals and the boundaries**, not just the happy path. The valuable
 tests here assert that the code stays quiet on thin data, rejects malformed model
 output, and survives records written before a field existed.
 
-**A green build is not verification.** For anything with a runtime surface,
-actually drive it: the app runs at `localhost:5173` and can be driven from the
-browser console. Useful trick — a canvas `captureStream` stubbed into
-`navigator.mediaDevices.getUserMedia` exercises the whole camera path without
-hardware:
-
-```js
-navigator.mediaDevices.getUserMedia = async () => {
-  const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240
-  const c = cv.getContext('2d')
-  setInterval(() => { c.fillStyle = '#141c42'; c.fillRect(0, 0, 320, 240) }, 60)
-  return cv.captureStream(15)
-}
-```
+**A green build is not verification.** The live-session camera is native, so
+`npm run dev` and a browser `getUserMedia` stub cannot exercise it. Use the
+internal native diagnostic for frame flow and the installed app with a real
+camera for scoring, minimize and close/hide behavior. The camera-less build
+machine can run the recorded-frame parity harness, not the live-camera test.
 
 ---
 
@@ -395,11 +388,11 @@ WebView on macOS. Not "is buggy" — cannot.
 - `7f645a5` — `"backgroundThrottling": "disabled"` (WebKit
   `inactiveSchedulingPolicy = none`). **Tested on macOS 15.7.3: no effect.** It
   governs task scheduling, not the capture pipeline.
-- `ea2bdfc` — stale-frame guard: `video.currentTime` is watched, and a picture
-  frozen for over a second is no longer fed to MediaPipe. **This one is
-  load-bearing and must survive any rewrite.** It is not a fix for the capture
-  problem; it is the guarantee that a frozen frame is never scored as a
-  measurement. Removing it silently reintroduces fabricated focus time.
+- `ea2bdfc` — stale-frame guard: `video.currentTime` was watched, and a picture
+  frozen for over a second was no longer fed to MediaPipe. It was load-bearing
+  while the WebView source existed. Native V2 replaces it with a one-second
+  AVFoundation frame heartbeat; that equivalent honesty guard is now
+  load-bearing. Removing it silently reintroduces fabricated focus time.
 
 ### The decision
 
@@ -418,38 +411,41 @@ Feeding native frames into the WebView so MediaPipe.js could stay was
 considered and rejected: measurement would still depend on WebKit keeping JS
 alive while hidden, which is the exact class of dependency that caused this.
 
-### The non-negotiable gate
+### The parity result and replacement gate
 
-The risk is **not** the model — identical weights give identical output. The
-risk is the **preprocessing** (ROI crop, rotation, scale before landmark
-inference). A slight mismatch shifts every coordinate, and the tuned thresholds
-quietly come to mean something else. Nobody notices; the history silently rots.
+The original main risk was preprocessing (ROI crop, rotation and scale before
+landmark inference): a slight mismatch shifts every coordinate and silently
+changes tuned thresholds. The parity work also proved that identical weights do
+not guarantee identical output across WebGL and CPU execution backends.
 
-Therefore **nothing switches over until parity is measured and passed**, on
-identical recorded frames, reporting mean/p95/max for landmark delta, yaw and
-pitch, per-frame score, and above all **classification parity against
-`FOCUSED_SCORE` (target ≥ 99% of frames)** — that threshold is what produces
-`focusedSeconds`, i.e. the reported focus percentage (§4.8).
+Parity was measured on identical recorded frames, reporting mean/p95/max for
+landmark delta, pose, per-frame score and `FOCUSED_SCORE` classification. Native
+V2 reached 97.2806%, below the proposed 99% classification gate. It is not and
+must never be presented as V1 parity.
 
-If parity cannot be reached: do not weaken the thresholds and do not switch
-quietly. Either keep aligning the preprocessing, or introduce a new **versioned**
-scoring generation (as `focusMetric.js` does, §4.9) so old and new sessions stay
-separated rather than blended. That is Clemens' product decision, not an
-implementation detail.
+The same isolation showed FaceMesh.js WebGL does not meet those score and
+classification gates against FaceMesh.js CPU. On 1 Sep 2026 the fixed WebGL
+99% gate was therefore retired as a promotion gate: the historical execution
+backend is not a stable reference implementation. Keep the harness, failed
+numbers and model/sign checks as characterization and regression evidence.
 
-That product decision was made on 30 Aug 2026 after the isolation work below:
-use the native path as an explicit **V2 scoring generation**. Internal-test and
-dev builds expose an opt-in toggle; release builds cannot enable it. V2 sessions
-store `attentionScoringVersion: 2` and
-`attentionMeasurementSource: native_mediapipe_v2`. The stable V1 daily ledger,
-history aggregates and personal calibration refuse V2 rather than blending the
-two rulers. Do not remove that separation. Promotion of V2 history is a later
-product decision after the real MacBook tests, not a reason to relabel V2 as V1.
+The replacement gate is: every new session is explicitly V2 with pinned model
+hashes; no daily score, trend bucket or pattern mixes generations; missing
+native frames remain absent measurement; and the real minimize/close score test
+passes. This is a versioned ruler migration, not a claim of equality.
 
-### Native V2 status (30 Aug 2026)
+`SCOREABLE_SCORING_VERSIONS` includes V1 and V2 but refuses a missing version.
+Per day, `calculateDailyFocus` uses the highest generation present.
+`comparableSessions()` narrows cross-session comparisons to the most recently
+used generation. V1 history remains stored and readable, but is excluded from
+V2 comparisons. Existing users therefore need eight usable V2 sessions before
+patterns speak again. Do not bypass that silence by blending generations.
 
-The native path exists **in parallel** and is an opt-in internal V2 live-session
-source; stable/release sessions remain on V1:
+### Native V2 status (1 Sep 2026)
+
+Native V2 is the **only** live-session source in every native build. The old
+WebView `getUserMedia`/FaceMesh.js session path and its preference toggle are
+removed:
 
 - `AVCaptureSession` delivers 640×480 BGRA buffers to a bounded native queue.
   Rust immediately copies them to in-memory RGB; no live frame is written to
@@ -475,12 +471,11 @@ source; stable/release sessions remain on V1:
 
 The underlying compatibility commands remain `start_native_camera_prototype`,
 `stop_native_camera_prototype`, and `get_native_camera_status`; events are
-`native-camera-landmarks` and `native-camera-status`. Internal-test builds show
-both the V2 session-source toggle and the start/stop/frame-counter diagnostic on
-Protection. Leaving that screen stops the diagnostic before a session claims
-the camera. With the toggle on, native landmarks feed the unchanged JavaScript
-scorer through Tauri events; live pixels never cross IPC, and `getUserMedia` is
-not acquired. Turning the toggle off restores WebView V1.
+`native-camera-landmarks` and `native-camera-status`. Internal-test/dev builds
+show a start/stop/frame-counter diagnostic on Protection, but it cannot change
+the session source. Leaving that screen stops the diagnostic before a session
+claims the camera. Native landmarks feed the unchanged JavaScript scorer
+through Tauri events; live pixels never cross IPC.
 
 On 29 Aug 2026 Clemens verified this prototype on the target MacBook Air: the
 native frame sequence continued advancing both while the window was yellow-
@@ -537,6 +532,11 @@ hypotheses are in
 versioned. The live minimize/close gate has since passed as recorded above;
 CPU/battery and hard camera-removal tests remain outstanding. Do not claim
 those separate boundaries have passed.
+
+That real-use confirmation completed migration Step 5. On 1 Sep 2026 the
+WebView live-session camera path and source toggle were removed. Visible
+onboarding/workspace calibration and the explicit recorded-frame parity harness
+may still use WebView camera/FaceMesh code; they are not session measurement.
 
 ### Verifying it — the traps that already cost real time
 

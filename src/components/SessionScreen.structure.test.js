@@ -71,6 +71,18 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source).toContain('attentionMeasurementSource: cameraMeasurement.id')
   })
 
+  // Revised 31 Aug 2026: V2 is a deliberate ruler migration, not an internal
+  // preference. Reintroducing the hidden WebView fallback would bring back the
+  // exact minimize/close freeze this architecture exists to prevent.
+  it('has exactly one live measurement source and never acquires WebView video', () => {
+    expect(source).toContain('const cameraMeasurement = PRIMARY_CAMERA_MEASUREMENT')
+    expect(source).toContain('startNativeCameraMeasurement()')
+    expect(source).not.toContain('loadNativeCameraV2Enabled')
+    expect(source).not.toContain('navigator.mediaDevices.getUserMedia')
+    expect(source).not.toContain('window.FaceMesh')
+    expect(source).not.toContain('createCameraController')
+  })
+
   it('requests a screen wake lock while the session status is mounted', () => {
     expect(source).toContain("navigator.wakeLock.request('screen')")
   })

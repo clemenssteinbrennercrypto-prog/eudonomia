@@ -30,9 +30,9 @@ import {
   UNCERTAIN_HOLD_MS,
   YAWN_HOLD_MS,
 } from './cameraScoringConstants.js'
-import { CAMERA_FRAME_MS } from './cameraController.js'
-
-export const PARITY_FRAME_INTERVAL_MS = CAMERA_FRAME_MS
+// Historical FaceMesh.js sampling cadence used by the recorded parity corpus.
+// Keep it explicit here: the live WebView camera controller no longer exists.
+export const PARITY_FRAME_INTERVAL_MS = 67
 
 // Replays the camera-only live scoring configuration: no activity bonus or
 // penalty, but the same calibration, rolling windows, holds, trust gate,

@@ -15,13 +15,12 @@ import {
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
 } from '../lib/nativeCompanion'
-import { loadNativeCameraV2Enabled, saveNativeCameraV2Enabled } from '../lib/cameraMeasurement'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
-const SHOW_NATIVE_CAMERA_PROTOTYPE = import.meta.env.DEV ||
+const SHOW_NATIVE_CAMERA_DIAGNOSTICS = import.meta.env.DEV ||
   import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL === 'test'
 
 function addUnique(list, value) {
@@ -624,7 +623,7 @@ function CompanionStatus() {
   )
 }
 
-function NativeCameraPrototypeStatus() {
+function NativeCameraDiagnostics() {
   const [camera, setCamera] = useState({
     state: 'stopped',
     fault: null,
@@ -634,7 +633,6 @@ function NativeCameraPrototypeStatus() {
   const [facePresent, setFacePresent] = useState(null)
   const [landmarkCount, setLandmarkCount] = useState(0)
   const [actionError, setActionError] = useState('')
-  const [sessionSourceEnabled, setSessionSourceEnabled] = useState(loadNativeCameraV2Enabled)
 
   useEffect(() => {
     let cancelled = false
@@ -736,29 +734,14 @@ function NativeCameraPrototypeStatus() {
     }}>
       <div>
         <div style={{ color: 'var(--ultra-bright)', fontSize: 13, fontWeight: 900 }}>
-          Internal test · native camera V2
+          Native camera diagnostics
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
-          V2 is its own scoring generation: recorded parity with the historical WebGL ruler
-          reached 97.28% against a 99% gate, and that reference does not reproduce its own CPU
-          inference either. V2 sessions are scored on their own terms and never averaged with
-          V1 history — a switch restarts trends and patterns rather than blending two rulers.
-          Switching it off restores the WebView V1 source.
+          Native V2 is the measurement source for every new session. Historical V1 sessions
+          remain readable, but daily scores, trends and patterns never mix the two generations.
+          These controls inspect capture health only; they do not change the scoring source.
         </div>
       </div>
-
-      <label style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
-        border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px',
-        color: 'var(--text-secondary)', fontSize: 12, fontWeight: 800,
-      }}>
-        <span>Use native V2 for new sessions</span>
-        <input
-          type="checkbox"
-          checked={sessionSourceEnabled}
-          onChange={event => setSessionSourceEnabled(saveNativeCameraV2Enabled(event.target.checked))}
-        />
-      </label>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ color: statusTone, fontSize: 12, fontWeight: 900 }}>
@@ -1170,7 +1153,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           </div>
         </div>
 
-        {SHOW_NATIVE_CAMERA_PROTOTYPE && <NativeCameraPrototypeStatus />}
+        {SHOW_NATIVE_CAMERA_DIAGNOSTICS && <NativeCameraDiagnostics />}
 
         {/* Which engine reads your goal. Switchable at any time — the app works
             the same whichever is chosen, only better or worse informed, and any

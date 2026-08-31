@@ -75,7 +75,8 @@ native frame heartbeat afterward.
 - Send landmarks or derived signals to React only through Tauri commands and
   events.
 - Keep live pixels inside the native process and in memory.
-- Remove WebView `getUserMedia` as the measurement source only after parity.
+- Keep V1 and V2 as explicit scoring generations if backend parity is not
+  reproducible; never relabel native output as V1.
 
 Do not replace FaceMesh with Apple Vision. Vision's landmark and iris geometry
 does not match the ruler on which the existing EAR, gaze, pose and history
@@ -101,15 +102,15 @@ The implemented prototype pins and documents:
 
 See `docs/native-camera-prototype.md` for offsets, hashes and runtime details.
 
-## 6. Parity is the release gate
+## 6. Parity evidence and the replacement release gate
 
 The main risk is preprocessing, not merely loading identical weights. FaceMesh
 crops, scales and rotates a tracked facial ROI before landmark inference. A
 small transform mismatch changes the meaning of tuned thresholds without an
 obvious failure.
 
-Nothing may switch to the native source until both engines have processed the
-same recorded pixels and the comparison reports mean, p95 and maximum for:
+Both engines processed the same recorded pixels, with mean, p95 and maximum
+reported for:
 
 - normalized landmark distance
 - `yawSigned` and `pitchDeg`
@@ -118,23 +119,41 @@ same recorded pixels and the comparison reports mean, p95 and maximum for:
 - per-frame attention score
 - `FOCUSED_SCORE` classification
 
-Fixed proposed gates:
+The original proposed gates were:
 
 - landmark p95 `< 0.005`, maximum `< 0.02`
 - yaw and pitch p95 `< 1.5°`
 - score p95 `< 2` points
 - identical `FOCUSED_SCORE` classification for at least 99% of frames
 
-The classification gate is decisive because it produces `focusedSeconds`,
-which feeds history, calibration, the end screen and export.
+The recorded native run did not pass those gates, and it is not being presented
+as V1 parity. The same investigation also showed that FaceMesh.js WebGL misses
+the score and classification gates against FaceMesh.js CPU. The historical
+WebGL execution is therefore not a stable reference implementation that a
+native CPU backend can be required to reproduce at 99%.
+
+**Decision, 1 September 2026:** retire the fixed 99% WebGL comparison as a
+promotion gate. Keep the harness and all recorded numbers as characterization
+evidence and as a regression corpus; do not delete, weaken or rewrite the failed
+result. Its purpose is now to detect unexplained native preprocessing, model or
+sign drift, not to certify V2 as V1.
+
+The replacement release gate is explicit generation integrity plus observable
+measurement behavior:
+
+- every new live session records native V2's source, generation and model hashes
+- no daily score, trend bucket or pattern mixes V1 with V2
+- landmark/model tests preserve the empirical yaw and iris sign conventions
+- a missing/stale native frame is absent measurement, never a replayed score
+- the real MacBook minimize and close/hide score tests pass
+
+This is a ruler migration, not a claim that the rulers are equal. Existing V1
+history remains readable, while V2 comparisons start anew and require their own
+sample minimums.
 
 Do not reinterpret signs. Match them empirically through the harness:
 `yawSigned > 0` is head-left from the user's perspective, while `irisH > 0` is
 eyes-right.
-
-If parity fails, align preprocessing. Do not weaken the gate. If parity proves
-unreachable, keep the old source or ask Clemens to choose a separately
-versioned scoring generation; that is a product decision.
 
 ## 7. Measurement and privacy invariants
 
@@ -153,11 +172,11 @@ versioned scoring generation; that is a product decision.
 ## 8. Staged delivery
 
 1. Native AVFoundation capture and landmark prototype over Tauri IPC.
-2. Recorded-frame parity harness and measured gate.
-3. Native source behind an explicit flag while both paths remain available.
-4. Feed native landmarks into the existing JavaScript scorer unless parity
-   data justifies moving more logic.
-5. Remove the JavaScript camera path only after real-use confirmation.
+2. Recorded-frame parity harness and measured characterization.
+3. Temporarily expose the native source behind an internal flag.
+4. Feed native landmarks into the existing JavaScript scorer.
+5. After real-use confirmation, make V2 the only live source and remove the
+   WebView session-camera path.
 
 Step 1 is implemented and its minimize/close lifecycle was verified on the
 target MacBook. Step 2 has now run on Clemens' 4:51 reference clip, including a
@@ -173,11 +192,27 @@ WebGL ruler. FaceMesh.js WebGL versus its own CPU inference already misses the
 score/classification gates. This strengthens, rather than removes, the need for
 an explicit product decision if exact WebGL-path parity cannot be reproduced.
 
-Clemens made that decision on 30 August: ship the native path to internal-test
-as a separately versioned V2 ruler, never as a passing V1 parity result. Steps 3
-and 4 are now implemented behind an opt-in internal toggle. V2 sessions carry
-their own scoring version/source. Step 5 remains blocked on the real MacBook
-live tests.
+Clemens made that decision on 30 August: ship the native path as a separately
+versioned V2 ruler, never as a passing V1 parity result. Steps 3 and 4 provided
+the temporary internal rollout. On 31 August he completed the real MacBook live
+test: after establishing a score, he deliberately moved and looked away while
+yellow-minimized and again while red-closed/hidden; on reopening, the score and
+timeline had changed. Neither window action paused the session or required a
+manual resume, and the saved debrief identified V2. That is the real-use
+confirmation required by Step 5.
+
+**Step 5 completed 1 September 2026.** Native V2 is intentionally the only
+live-session measurement source in every native build. The preference and
+source toggle are gone, and `SessionScreen` no longer acquires WebView
+`getUserMedia` or constructs FaceMesh.js. The internal Protection panel remains
+as capture diagnostics only. Visible onboarding/workspace calibration and the
+explicit recorded-frame harness may still use WebView camera/FaceMesh code;
+they are not hidden-window session measurement paths.
+
+This default change deliberately starts existing users' comparisons at V2.
+Their V1 records remain stored and readable, but patterns stay silent until V2
+has the required eight usable sessions. That reset is the cost of preserving
+generation integrity, not an accidental side effect.
 
 **Revised 31 August.** V2 sessions were not merely kept out of V1 history — they
 produced nothing at all: no daily score, no ledger entry, no trend, no patterns.
@@ -208,9 +243,9 @@ The tests that encoded the previous decision were replaced rather than removed,
 each carrying the date and reasoning — see focusMetric.test.js,
 historyTrend.test.js, calibration.test.js and sessionAnalysis.test.js.
 
-Still open and unchanged: Step 5's live MacBook minimize/close verification, and
-whether the parity harness keeps a 99% gate at all now that the reference is
-known not to reproduce itself.
+The fixed 99% WebGL gate is retired for the reasons in §6. Hard camera loss,
+system sleep/lid close and quantified CPU/energy comparison remain separate
+open verification boundaries.
 
 ## 9. Two-machine boundary
 
@@ -232,18 +267,18 @@ the tag and the displayed build ID before asking the user to test.
 
 ## 10. Verification
 
-Current automated baseline after the opt-in V2 wiring:
+Automated baseline is updated whenever the suites change:
 
 ```bash
-npm test -- --run                 # 432 tests
+npm test -- --run                 # 434 tests
 npm run build
 cd companion/src-tauri
-cargo test                        # 69 tests: 13 library + 56 app
+cargo test                        # 70 tests: 13 library + 57 app
 cargo check
 ```
 
-A green build is not runtime verification. With the internal V2 source enabled,
-manually test with a real camera:
+A green build is not runtime verification. Manually test native V2 with a real
+camera:
 
 1. Start a session, fixate and note the score.
 2. Yellow-minimize, deliberately look away and move for about two minutes.
