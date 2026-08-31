@@ -262,6 +262,7 @@ fn main() {
             native_camera::get_native_camera_status,
             native_camera::start_native_camera_prototype,
             native_camera::stop_native_camera_prototype,
+            native_camera::set_native_camera_preview,
             pick_output_folder,
             install_native_update,
             quit_app

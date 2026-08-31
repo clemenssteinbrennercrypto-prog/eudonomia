@@ -13,6 +13,7 @@ import {
   listenNativeCameraStatus,
   listenWindowLifecycle,
   pushCompanionSession,
+  setNativeCameraPreview,
   setOutputWatchFolder,
   startNativeCameraMeasurement,
   stopNativeCameraMeasurement,
@@ -858,6 +859,9 @@ export default function SessionScreen({
   const [activityStatus,  setActivityStatus]  = useState(() => getLastActivity())
 
   const videoRef        = useRef(null)
+  const nativePreviewRef = useRef(null)
+  const nativePreviewHostRef = useRef(null)
+  const syncNativePreviewRef = useRef(() => {})
   const sessionEndedRef = useRef(false)
   const startTimeRef    = useRef(Date.now())
   const isPausedRef     = useRef(true)
@@ -2367,6 +2371,49 @@ export default function SessionScreen({
     // (detection confidence + trust gate are computed earlier, before scoring)
   }, [alertDelayMs, devices, workspace, yawLT, yawRT, yawNeutral, pitchDT, pitchUpDT, workZonePitchMin, workZonePitchMax])
 
+  // Keep the native AVFoundation preview aligned with its React placeholder.
+  // ResizeObserver also follows the mini/full CSS transition. Only this small
+  // geometry payload crosses IPC; camera pixels remain in the native layer.
+  useEffect(() => {
+    if (!nativeCameraV2Enabled) return
+    const preview = nativePreviewRef.current
+    const host = nativePreviewHostRef.current
+    if (!preview) return
+
+    let stopped = false
+    const sync = () => {
+      if (stopped || !preview.isConnected) return
+      const rect = preview.getBoundingClientRect()
+      const style = window.getComputedStyle(preview)
+      const cornerRadius = Number.parseFloat(style.borderTopLeftRadius) || 0
+      setNativeCameraPreview({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        visible: Number.parseFloat(style.opacity) > 0.01 && rect.width >= 1 && rect.height >= 1,
+        cornerRadius,
+      }).catch(() => {})
+    }
+    syncNativePreviewRef.current = sync
+
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(sync) : null
+    observer?.observe(preview)
+    if (host) observer?.observe(host)
+    window.addEventListener('resize', sync)
+    sync()
+
+    return () => {
+      stopped = true
+      syncNativePreviewRef.current = () => {}
+      observer?.disconnect()
+      window.removeEventListener('resize', sync)
+      setNativeCameraPreview({
+        x: 0, y: 0, width: 0, height: 0, visible: false, cornerRadius: 0,
+      }).catch(() => {})
+    }
+  }, [nativeCameraV2Enabled])
+
   // ── MediaPipe setup ───────────────────────────────────────────────────────
   useEffect(() => {
     if (sessionEndedRef.current) return
@@ -2406,6 +2453,7 @@ export default function SessionScreen({
         if (cancelled || generation !== cameraGenerationRef.current || !status) return
         const fault = nativeCameraFaultFor(status)
         if (fault) interruptCamera(fault)
+        else if (status.state === 'running') syncNativePreviewRef.current()
       }
 
       const start = async () => {
@@ -3111,7 +3159,7 @@ export default function SessionScreen({
         </button>
       </div>
 
-      <div className="webcam-corner">
+      <div className="webcam-corner" ref={nativePreviewHostRef}>
         {faceAbsentPrompt && !isPaused && !isCalibrating && (
           <div style={{
             fontSize: 11, color: 'var(--text-muted)', textAlign: 'center',
@@ -3124,6 +3172,7 @@ export default function SessionScreen({
         <div style={{ position: 'relative', display: 'inline-block' }}>
           {nativeCameraV2Enabled ? (
             <div
+              ref={nativePreviewRef}
               className="webcam-feed"
               onClick={() => !camHidden && setCamSize(s => s === 'full' ? 'mini' : 'full')}
               style={{

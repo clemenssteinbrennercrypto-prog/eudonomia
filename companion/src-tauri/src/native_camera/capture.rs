@@ -150,6 +150,10 @@ impl NativeCapture {
         ))
     }
 
+    pub fn session(&self) -> Retained<AVCaptureSession> {
+        self.session.clone()
+    }
+
     pub fn stop(&self) {
         unsafe {
             self.output.setSampleBufferDelegate_queue(None, None);
