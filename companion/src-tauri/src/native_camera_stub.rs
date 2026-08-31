@@ -45,6 +45,7 @@ pub struct NativeCameraPreviewBounds {
     y: f64,
     width: f64,
     height: f64,
+    viewport_height: f64,
     visible: bool,
     corner_radius: f64,
 }

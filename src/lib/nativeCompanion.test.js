@@ -121,7 +121,8 @@ describe('native events and output', () => {
     await expect(startNativeCameraPrototype()).resolves.toMatchObject({ state: 'running' })
     await expect(fetchNativeCameraStatus()).resolves.toMatchObject({ frameSequence: 7 })
     await expect(setNativeCameraPreview({
-      x: 10, y: 20, width: 160, height: 120, visible: true, cornerRadius: 8,
+      x: 10, y: 20, width: 160, height: 120, viewportHeight: 800,
+      visible: true, cornerRadius: 8,
     })).resolves.toMatchObject({ state: 'running' })
     await expect(stopNativeCameraPrototype()).resolves.toMatchObject({ state: 'running' })
     await expect(listenNativeCameraLandmarks(onLandmarks)).resolves.toBe(unlisten)
@@ -133,7 +134,10 @@ describe('native events and output', () => {
       'stop_native_camera_prototype',
     ])
     expect(invoke).toHaveBeenCalledWith('set_native_camera_preview', {
-      bounds: { x: 10, y: 20, width: 160, height: 120, visible: true, cornerRadius: 8 },
+      bounds: {
+        x: 10, y: 20, width: 160, height: 120, viewportHeight: 800,
+        visible: true, cornerRadius: 8,
+      },
     })
     expect(listen).toHaveBeenCalledWith('native-camera-landmarks', expect.any(Function))
     expect(onLandmarks).toHaveBeenCalledWith(expect.objectContaining({ frameSequence: 7 }))
