@@ -41,11 +41,10 @@ pub fn stop_native_camera_prototype(_state: State<'_, NativeCameraState>) -> Nat
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct NativeCameraPreviewBounds {
-    x: f64,
-    y: f64,
+    right: f64,
+    bottom: f64,
     width: f64,
     height: f64,
-    viewport_height: f64,
     visible: bool,
     corner_radius: f64,
 }

@@ -2387,11 +2387,10 @@ export default function SessionScreen({
       const style = window.getComputedStyle(preview)
       const cornerRadius = Number.parseFloat(style.borderTopLeftRadius) || 0
       setNativeCameraPreview({
-        x: rect.x,
-        y: rect.y,
+        right: window.innerWidth - rect.right,
+        bottom: window.innerHeight - rect.bottom,
         width: rect.width,
         height: rect.height,
-        viewportHeight: window.innerHeight,
         visible: Number.parseFloat(style.opacity) > 0.01 && rect.width >= 1 && rect.height >= 1,
         cornerRadius,
       }).catch(() => {})
@@ -2410,7 +2409,7 @@ export default function SessionScreen({
       observer?.disconnect()
       window.removeEventListener('resize', sync)
       setNativeCameraPreview({
-        x: 0, y: 0, width: 0, height: 0, viewportHeight: window.innerHeight,
+        right: 0, bottom: 0, width: 0, height: 0,
         visible: false, cornerRadius: 0,
       }).catch(() => {})
     }
