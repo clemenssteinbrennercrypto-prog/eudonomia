@@ -167,7 +167,7 @@ export default function LandingPage() {
               letterSpacing: '0.01em', textDecoration: 'none',
             }}
           >
-            Download for macOS
+            Download for Apple Silicon
           </a>
 
           {/* Trust pills */}
@@ -177,7 +177,7 @@ export default function LandingPage() {
           }}>
             {[
               { icon: '🔒', label: 'Local-first' },
-              { icon: '⌘', label: 'Native Mac app' },
+              { icon: '⌘', label: 'M1 or newer · macOS 11+' },
               { icon: '✓', label: 'No account needed' },
             ].map(({ icon, label }) => (
               <span key={label} style={{
@@ -348,6 +348,7 @@ export default function LandingPage() {
             {[
               { q: 'Is my camera footage stored?', a: 'Never. Attention processing happens locally on your device using MediaPipe. No frames leave your device.' },
               { q: 'Can I use Eudaimonia in the browser?', a: 'The public website is only a landing and download surface. The main experience runs in the native macOS Companion app.' },
+              { q: 'Which Macs are supported?', a: 'Apple Silicon Macs with an M1 chip or newer, running macOS 11 or later. Intel Macs are not supported.' },
               { q: 'Does it work without a webcam?', a: 'No. A camera is required for attention tracking; a built-in laptop camera works.' },
               { q: 'Is it free?', a: 'Yes. No account, subscription, or credit card is required.' },
             ].map(({ q, a }) => (

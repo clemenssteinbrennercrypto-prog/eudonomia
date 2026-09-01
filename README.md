@@ -8,7 +8,7 @@ and route users to the app download.
 
 - **Companion:** Tauri macOS app in `companion/`
 - **UI:** React + Vite, bundled into `companion/webui`
-- **Attention tracking:** MediaPipe in the local WebView
+- **Attention tracking:** native AVFoundation + MediaPipe, scored in the WebView
 - **Activity/blocking:** in-process Rust commands and Tauri events
 - **Marketing site:** Vercel surface for product explanation and downloads
 
@@ -29,6 +29,10 @@ runtime, build/run the Companion from `companion/src-tauri`.
 The Companion is the primary runtime. It hosts the UI, detects the frontmost app
 and browser tab via AppleScript, and enforces app/website blocking during a
 session.
+
+Supported systems: Apple Silicon Macs (M1 or newer), macOS 11 or newer. Intel
+Macs are intentionally unsupported because the native measurement engine is
+arm64-only.
 
 ```bash
 npm run refresh:companion-webui

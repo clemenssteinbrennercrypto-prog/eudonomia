@@ -27,7 +27,7 @@ The app checks GitHub Releases for a newer signed native build through Tauri's
 updater. The in-app refresh control always offers a local reload, and shows a
 separate install action only when the updater reports a real native app update.
 See `.github/workflows/companion-release.yml`, which runs only for `release-v*`
-tags or manual release dispatches. It builds a universal macOS DMG, signs it
+tags or manual release dispatches. It builds an Apple Silicon macOS DMG, signs it
 with a Developer ID Application certificate, notarizes it, staples the
 notarization ticket, verifies Gatekeeper acceptance, and only then publishes the
 GitHub Release.
@@ -44,6 +44,10 @@ Local and test-channel builds poll `releases/download/internal-test/latest.json`
 so the in-app update button follows the newest build from `main`. Production
 builds override that endpoint through `src-tauri/tauri.release.conf.json` and
 only install published production releases.
+
+The native app supports Apple Silicon Macs (M1 or newer) on macOS 11+. Intel
+Macs are intentionally not built or advertised by the updater because the
+native MediaPipe measurement engine is arm64-only.
 
 The native updater also compares release publication time with the bundled UI's
 `builtAt` value. A numerically higher SemVer from an older channel is refused,

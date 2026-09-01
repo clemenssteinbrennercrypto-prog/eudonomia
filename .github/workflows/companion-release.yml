@@ -1,6 +1,6 @@
 name: Release Companion
 
-# Production-only Companion pipeline. Builds a signed universal macOS app,
+# Production-only Companion pipeline. Builds a signed Apple Silicon macOS app,
 # notarizes and staples the DMG, verifies Gatekeeper acceptance, then publishes
 # the release used by the native updater.
 
@@ -34,7 +34,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -133,13 +133,13 @@ jobs:
           releaseDraft: true
           prerelease: false
           releaseAssetNamePattern: '[name]-[version]-[arch][ext]'
-          args: --target universal-apple-darwin --verbose --config src-tauri/tauri.release.conf.json
+          args: --target aarch64-apple-darwin --verbose --config src-tauri/tauri.release.conf.json
 
       - name: Verify signed and notarized macOS artifacts
         run: |
           set -euo pipefail
 
-          bundle_root="companion/src-tauri/target/universal-apple-darwin/release/bundle"
+          bundle_root="companion/src-tauri/target/aarch64-apple-darwin/release/bundle"
 
           app_count=0
           while IFS= read -r app; do

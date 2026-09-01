@@ -35,6 +35,11 @@ Optimise for things that survive low maintenance.
 The camera feed, the activity log, window titles and file names never go
 anywhere. There is exactly one deliberate exception, described in §5.
 
+**Supported platform:** Apple Silicon Macs (`aarch64-apple-darwin`, M1 or
+newer), macOS 11+. Intel Macs are intentionally unsupported as of 1 Sep 2026.
+Do not restore Universal/x86_64 artifacts: their camera slice could start the
+app but could never run the native measurement engine.
+
 ---
 
 ## 2. Run it
@@ -42,7 +47,7 @@ anywhere. There is exactly one deliberate exception, described in §5.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 438 tests — must stay green
+npm test           # vitest, currently 442 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -274,7 +279,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 438 JS tests and 72 Rust tests (13 native-camera library
+There are currently 442 JS tests and 72 Rust tests (13 native-camera library
 tests plus 59 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -424,10 +429,11 @@ V2 reached 97.2806%, below the proposed 99% classification gate. It is not and
 must never be presented as V1 parity.
 
 The same isolation showed FaceMesh.js WebGL does not meet those score and
-classification gates against FaceMesh.js CPU. On 1 Sep 2026 the fixed WebGL
-99% gate was therefore retired as a promotion gate: the historical execution
-backend is not a stable reference implementation. Keep the harness, failed
-numbers and model/sign checks as characterization and regression evidence.
+classification gates against FaceMesh.js CPU. Clemens explicitly delegated the
+parity-gate decision to Codex on 1 Sep 2026; Codex retired the fixed WebGL 99%
+gate as a promotion gate because the historical execution backend is not a
+stable reference implementation. Keep the harness, failed numbers and
+model/sign checks as characterization and regression evidence.
 
 The replacement gate is: every new session is explicitly V2 with pinned model
 hashes; no daily score, trend bucket or pattern mixes generations; missing
@@ -498,9 +504,9 @@ only and must not fault otherwise valid landmark measurement. Do not replace
 this with frame bytes, data URLs, canvas copies, or a second capture session.
 
 The harness must remain a Cargo `example`, not a `src/bin` target: Tauri tries
-to bundle extra binaries and the Universal build then fails for the arm64-only
-runner. `Cargo.toml` also keeps `default-run = "eudonomia-companion"` so no
-future auxiliary target can silently become the app executable.
+to bundle extra binaries and can select the wrong app executable.
+`Cargo.toml` also keeps `default-run = "eudonomia-companion"` so no future
+auxiliary target can silently become the app executable.
 
 The recorded-frame tools are:
 

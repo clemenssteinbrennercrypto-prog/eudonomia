@@ -98,13 +98,16 @@ load-bearing `video.currentTime` guard. It has compile/unit coverage but has not
 yet been exercised by hard camera removal on the camera-less Mac Mini.
 
 The recorded-frame runner is a Cargo `example`, not a `src/bin` target. Tauri
-tries to bundle additional Cargo binaries and its Universal build fails when an
-arm64-only harness has no liposuction output; it can also select the wrong app
+tries to bundle additional Cargo binaries and can select the wrong app
 executable unless `default-run` is explicit. Keep both the example location and
-`default-run = "eudonomia-companion"`. The Universal release `.app` build was
-verified with `eudonomia-companion` as its bundle executable, arm64 and x86_64
-application slices, and the pinned arm64 inference dylib hash. The native camera
-path intentionally remains unavailable in the x86_64 slice.
+`default-run = "eudonomia-companion"`.
+
+The pinned inference dylib is arm64-only. A former Universal build paired it
+with an x86_64 application slice that contained only an unsupported-camera
+stub. That slice could launch but could not perform the product's core
+measurement. Clemens ended Intel support on 1 Sep 2026: builds, updater
+manifests and release artifacts are Apple Silicon only, and non-arm64 Rust
+targets fail instead of producing a misleading partial app.
 
 ## Recorded-frame harness
 

@@ -132,11 +132,12 @@ the score and classification gates against FaceMesh.js CPU. The historical
 WebGL execution is therefore not a stable reference implementation that a
 native CPU backend can be required to reproduce at 99%.
 
-**Decision, 1 September 2026:** retire the fixed 99% WebGL comparison as a
-promotion gate. Keep the harness and all recorded numbers as characterization
-evidence and as a regression corpus; do not delete, weaken or rewrite the failed
-result. Its purpose is now to detect unexplained native preprocessing, model or
-sign drift, not to certify V2 as V1.
+**Decision, 1 September 2026:** Clemens explicitly delegated the parity-gate
+decision to Codex. Codex retired the fixed 99% WebGL comparison as a promotion
+gate because the reference backend is not stable. Keep the harness and all
+recorded numbers as characterization evidence and as a regression corpus; do
+not delete, weaken or rewrite the failed result. Its purpose is now to detect
+unexplained native preprocessing, model or sign drift, not to certify V2 as V1.
 
 The replacement release gate is explicit generation integrity plus observable
 measurement behavior:
@@ -214,6 +215,14 @@ Their V1 records remain stored and readable, but patterns stay silent until V2
 has the required eight usable sessions. That reset is the cost of preserving
 generation integrity, not an accidental side effect.
 
+**Platform decision, 1 September 2026:** after review exposed that the former
+Universal app's x86_64 slice contained only an unsupported-camera stub, Clemens
+ended Intel support rather than retaining the broken WebView ruler. Supported
+builds are Apple Silicon (`aarch64-apple-darwin`, M1 or newer) on macOS 11+.
+Builds and updater manifests must contain only `darwin-aarch64`; an x86_64 or
+Universal artifact would falsely advertise a machine on which the product's
+core measurement cannot run.
+
 **Revised 31 August.** V2 sessions were not merely kept out of V1 history — they
 produced nothing at all: no daily score, no ledger entry, no trend, no patterns.
 Anyone using the native camera measured themselves and had every measurement
@@ -270,10 +279,10 @@ the tag and the displayed build ID before asking the user to test.
 Automated baseline is updated whenever the suites change:
 
 ```bash
-npm test -- --run                 # 434 tests
+npm test -- --run                 # 442 tests
 npm run build
 cd companion/src-tauri
-cargo test                        # 70 tests: 13 library + 57 app
+cargo test                        # 72 tests: 13 library + 59 app
 cargo check
 ```
 

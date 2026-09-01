@@ -41,7 +41,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -97,15 +97,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: companion
-          args: --target universal-apple-darwin --verbose --config src-tauri/tauri.test.conf.json
+          args: --target aarch64-apple-darwin --verbose --config src-tauri/tauri.test.conf.json
 
       - name: Upload unsigned app bundle
         uses: actions/upload-artifact@v4
         with:
           name: eudonomia-companion-test-${{ github.run_number }}
           path: |
-            companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.app
-            companion/src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
+            companion/src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app
+            companion/src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
           if-no-files-found: error
 
       - name: Publish internal updater channel
@@ -115,7 +115,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          bundle_root="companion/src-tauri/target/universal-apple-darwin/release/bundle"
+          bundle_root="companion/src-tauri/target/aarch64-apple-darwin/release/bundle"
           release_dir="$(mktemp -d)"
 
           find "$bundle_root" -type f \( -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' -o -name 'latest.json' \) -exec cp {} "$release_dir/" \;
@@ -167,8 +167,6 @@ jobs:
               "pub_date": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
               "platforms": {
                   "darwin-aarch64": platform,
-                  "darwin-x86_64": platform,
-                  "darwin-universal": platform,
               },
           }
 
@@ -188,10 +186,15 @@ jobs:
           if not platforms:
               raise SystemExit("latest.json does not contain updater platforms")
 
-          required = {"darwin-aarch64", "darwin-x86_64"}
+          required = {"darwin-aarch64"}
           missing = required - set(platforms)
           if missing:
               raise SystemExit(f"latest.json is missing required platform(s): {', '.join(sorted(missing))}")
+          unexpected = set(platforms) - required
+          if unexpected:
+              raise SystemExit(
+                  f"latest.json advertises unsupported platform(s): {', '.join(sorted(unexpected))}"
+              )
 
           bad = []
           for name, metadata in platforms.items():
