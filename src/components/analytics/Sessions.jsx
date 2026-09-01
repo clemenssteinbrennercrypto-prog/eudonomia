@@ -31,7 +31,7 @@ function focusColor(pct) {
 // CSV respects the caller's current filters — the old History dashboard
 // exported everything regardless of what was on screen, which read as a bug
 // once Sessions became a filterable view.
-function exportCSV(sessions) {
+export function buildSessionsCSV(sessions) {
   const header = ['timestamp', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'averageFocus', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
   const rows = sessions.map(s => {
     const pct = sessionAverageFocus(s)
@@ -53,7 +53,11 @@ function exportCSV(sessions) {
       s.longestFocusedStreak ?? 0,
     ].join(',')
   })
-  const csv = [header.join(','), ...rows].join('\n')
+  return [header.join(','), ...rows].join('\n')
+}
+
+function exportCSV(sessions) {
+  const csv = buildSessionsCSV(sessions)
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -65,8 +69,12 @@ function exportCSV(sessions) {
 
 // Unlike the CSV, the full backup is always the complete, lossless history —
 // full records, timelines, and the ledger — regardless of the active filters.
+export function buildFullArchive(sessions, focusLedger, exportedAt = new Date().toISOString()) {
+  return { schemaVersion: 1, exportedAt, sessions, focusLedger }
+}
+
 function exportFullArchive(sessions, focusLedger) {
-  const archive = { schemaVersion: 1, exportedAt: new Date().toISOString(), sessions, focusLedger }
+  const archive = buildFullArchive(sessions, focusLedger)
   const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

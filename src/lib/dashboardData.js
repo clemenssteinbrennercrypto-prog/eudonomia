@@ -1,5 +1,6 @@
 import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
-import { ATTENTION_SCORING_VERSION, FOCUS_METRIC_V1, buildFocusPeriod } from './focusMetric'
+import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod } from './focusMetric'
+import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
 
 const RANGE_MS = {
   day: 24 * 60 * 60 * 1000,
@@ -31,9 +32,15 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
   const width = Math.max(1, nominalEnd - start)
   const safeBins = Math.max(12, Math.min(160, Math.trunc(bins) || 96))
   const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false }))
+  const scoreableSessions = (Array.isArray(sessions) ? sessions : []).filter(session =>
+    SCOREABLE_SCORING_VERSIONS.includes(session?.attentionScoringVersion))
+  const activeGeneration = activeFocusGeneration(scoreableSessions)
 
-  for (const session of sessions || []) {
-    if (session?.attentionScoringVersion !== ATTENTION_SCORING_VERSION) continue
+  for (const session of scoreableSessions) {
+    // The field is a comparison just like Trends and Patterns: show the ruler
+    // in current use, but never average coordinates measured by two different
+    // camera generations into one colour cell.
+    if (focusGenerationOf(session) !== activeGeneration) continue
     const sessionStartMs = sessionStart(session)
     if (!Number.isFinite(sessionStartMs)) continue
     const durationMs = Math.max(0, (session.actualSeconds || 0) * 1000)

@@ -5,6 +5,7 @@
 
 import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
 import { NATIVE_CAMERA_MEASUREMENT_V2, WEBVIEW_CAMERA_MEASUREMENT } from './cameraMeasurement'
+import { activeFocusGeneration } from './historyTrend'
 
 export const ATTENTION_SCORING_VERSION = 1
 
@@ -708,6 +709,15 @@ export function buildFocusPeriod(ledger, options = {}) {
   const safeNow = Number.isNaN(now.getTime()) ? new Date() : now
   const { start, endExclusive, safeOffset } = getPeriodWindow(range, options.offset, safeNow)
   const safeLedger = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
+  const generationCandidates = (Array.isArray(options.sessions) ? options.sessions : [])
+    .filter(session => isScoreableGeneration(session?.attentionScoringVersion))
+  const ledgerGeneration = Object.entries(safeLedger.days)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([, entry]) => calculateDailyFocus(entry)?.generation)
+    .find(isScoreableGeneration)
+  const activeGeneration = generationCandidates.length > 0
+    ? activeFocusGeneration(generationCandidates)
+    : ledgerGeneration ?? ATTENTION_SCORING_VERSION
   const sessionDays = new Set((options.sessions || [])
     .map(session => localDayKey(session?.startedAt ?? session?.timestamp))
     .filter(Boolean))
@@ -716,7 +726,8 @@ export function buildFocusPeriod(ledger, options = {}) {
   for (let cursor = new Date(start); cursor < endExclusive; cursor = addDays(cursor, 1)) {
     const key = localDayKey(cursor)
     const entry = safeLedger.days[key]
-    const calculated = calculateDailyFocus(entry)
+    const storedCalculation = calculateDailyFocus(entry)
+    const calculated = storedCalculation?.generation === activeGeneration ? storedCalculation : null
     const isFuture = key > todayKey
     const noActivity = !entry && !sessionDays.has(key) && !isFuture
     days.push({
@@ -756,20 +767,26 @@ export function buildFocusPeriod(ledger, options = {}) {
   const priorScores = Object.entries(safeLedger.days)
     .filter(([key]) => key < localDayKey(start))
     .sort(([a], [b]) => b.localeCompare(a))
-    .map(([, entry]) => calculateDailyFocus(entry)?.rawScore)
+    .map(([, entry]) => calculateDailyFocus(entry))
+    .filter(day => day?.generation === activeGeneration)
+    .map(day => day.rawScore)
     .filter(Number.isFinite)
     .slice(0, 28)
   const baseline = priorScores.length >= 8 ? Math.round(median(priorScores)) : null
 
-  const allDays = Object.entries(safeLedger.days).map(([key, entry]) => ({
-    key,
-    score: calculateDailyFocus(entry)?.score ?? null,
-  }))
+  const allDays = Object.entries(safeLedger.days).map(([key, entry]) => {
+    const calculated = calculateDailyFocus(entry)
+    return {
+      key,
+      score: calculated?.generation === activeGeneration ? calculated.score : null,
+    }
+  })
 
   return {
     range,
     offset: safeOffset,
     title: formatPeriodTitle(range, start),
+    generation: activeGeneration,
     start,
     endExclusive,
     days,

@@ -2,7 +2,8 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import LabDashboard from './LabDashboard'
-import { ATTENTION_SCORING_VERSION, FOCUS_METRIC_V1 } from '../lib/focusMetric'
+import { FOCUS_METRIC_V1 } from '../lib/focusMetric'
+import { NATIVE_CAMERA_MEASUREMENT_V2 } from '../lib/cameraMeasurement'
 import { loadFocusLedger, saveSession } from '../lib/storage'
 
 class MemoryStorage {
@@ -32,12 +33,18 @@ describe('LabDashboard metric labels', () => {
       measuredSeconds: 600,
       scoreSum: 46_800,
       focusedSeconds: 480,
-      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      attentionMeasurementSource: NATIVE_CAMERA_MEASUREMENT_V2.id,
       focusMetricVersion: FOCUS_METRIC_V1.version,
       focusMetricRejection: null,
       sessionEfficiency: 78,
       deepFocusSeconds: 600,
       deepFocusMinutes: 10,
+      timeline: [
+        { second: 30, score: 82 },
+        { second: 300, score: 55 },
+        { second: 590, score: 22 },
+      ],
     })
 
     const html = renderToString(React.createElement(LabDashboard, {
@@ -51,6 +58,8 @@ describe('LabDashboard metric labels', () => {
 
     expect(html).toContain('Measured time')
     expect(html).toContain('78% efficiency')
+    expect(html).toContain('title="Focus 53"')
+    expect(html).not.toContain('Complete a measured session to reveal your attention field.')
     expect(html).not.toContain('Measured focus')
     expect(html).not.toContain('78 focus')
   })

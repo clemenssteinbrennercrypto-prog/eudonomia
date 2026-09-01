@@ -616,6 +616,29 @@ describe('backfilling the ledger from already-stored sessions', () => {
 })
 
 describe('daily ledger and calendar periods', () => {
+  it('never averages V1 and V2 days into one weekly comparison', () => {
+    const v1Start = new Date(2026, 7, 17, 9).getTime()
+    const v2Start = new Date(2026, 7, 18, 9).getTime()
+    const v1 = measuredSession({ id: 'v1-day', startedAt: v1Start, efficiency: 90 })
+    const v2 = measuredSession({ id: 'v2-day', startedAt: v2Start, efficiency: 40 })
+    v2.attentionScoringVersion = ATTENTION_SCORING_VERSION + 1
+
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), withSessionFocusMetric(v1))
+    ledger = addSessionToFocusLedger(ledger, withSessionFocusMetric(v2))
+    const period = buildFocusPeriod(ledger, {
+      range: 'week',
+      now: new Date(2026, 7, 19, 18),
+      sessions: [v1, v2],
+    })
+
+    expect(period.generation).toBe(ATTENTION_SCORING_VERSION + 1)
+    expect(period.efficiency).toBe(40)
+    expect(period.measuredSeconds).toBe(v2.measuredSeconds)
+    expect(period.activeDays).toBe(1)
+    expect(period.days.find(day => day.key === '2026-08-17')?.score).toBeUndefined()
+    expect(period.days.find(day => day.key === '2026-08-18')?.score).toBeGreaterThan(0)
+  })
+
   it('includes the stored 103-minute session and rounds the combined day normally', () => {
     const day = {
       sessions: {

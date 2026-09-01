@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { ATTENTION_SCORING_VERSION, emptyFocusLedger } from './focusMetric'
+import { NATIVE_CAMERA_MEASUREMENT_V2 } from './cameraMeasurement'
 import { buildAttentionField, buildDashboardData } from './dashboardData'
 
 const NOW = new Date(2026, 7, 25, 12, 0, 0).getTime()
 
 describe('dashboard data', () => {
-  it('builds the attention field only from matching measured timelines', () => {
+  it('builds the attention field from the ruler in current use without mixing generations', () => {
     const start = new Date(2026, 7, 25, 8, 0, 0).getTime()
     const bins = buildAttentionField([
       {
         startedAt: start,
+        timestamp: start + 3 * 60 * 60 * 1000,
         actualSeconds: 3 * 60 * 60,
         attentionScoringVersion: ATTENTION_SCORING_VERSION,
         timeline: [
@@ -20,8 +22,9 @@ describe('dashboard data', () => {
       },
       {
         startedAt: start,
+        timestamp: start - 1,
         actualSeconds: 60 * 60,
-        attentionScoringVersion: ATTENTION_SCORING_VERSION + 1,
+        attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
         timeline: [{ second: 60, score: 99 }],
       },
     ], { range: 'day', now: NOW, bins: 24 })
@@ -35,6 +38,36 @@ describe('dashboard data', () => {
     expect(states).toContain('no-signal')
     expect(states).toContain('inactive')
     expect(states).toContain('future')
+  })
+
+  it('connects native V2 timeline samples to the attention field', () => {
+    const start = new Date(2026, 7, 25, 8, 0, 0).getTime()
+    const bins = buildAttentionField([{
+      startedAt: start,
+      timestamp: start + 3 * 60 * 60 * 1000,
+      actualSeconds: 3 * 60 * 60,
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      attentionMeasurementSource: NATIVE_CAMERA_MEASUREMENT_V2.id,
+      timeline: [
+        { second: 60, score: 82 },
+        { second: 60 * 60, score: 55 },
+        { second: 2 * 60 * 60, score: 22 },
+      ],
+    }], { range: 'day', now: NOW, bins: 24 })
+
+    expect(bins[8]).toMatchObject({ state: 'strong', score: 82 })
+    expect(bins[9]).toMatchObject({ state: 'focused', score: 55 })
+    expect(bins[10]).toMatchObject({ state: 'drift', score: 22 })
+  })
+
+  it('refuses unknown or unversioned timelines instead of guessing their ruler', () => {
+    const start = new Date(2026, 7, 25, 8, 0, 0).getTime()
+    const bins = buildAttentionField([
+      { startedAt: start, timestamp: start + 1000, actualSeconds: 600, timeline: [{ second: 60, score: 99 }] },
+      { startedAt: start, timestamp: start + 2000, actualSeconds: 600, attentionScoringVersion: 99, timeline: [{ second: 60, score: 99 }] },
+    ], { range: 'day', now: NOW, bins: 24 })
+
+    expect(bins[8]).toMatchObject({ state: 'inactive', score: null })
   })
 
   it('never calls idle protection active', () => {
