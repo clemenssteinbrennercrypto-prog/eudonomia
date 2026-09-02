@@ -10,6 +10,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
+import LegalModal from './components/LegalModal'
 import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
@@ -184,6 +185,7 @@ export default function App() {
   // the natural owner of the data that revision refers to. LabDashboard and
   // SessionIntentScreen render whatever they are handed.
   const [history, setHistory] = useState({ sessions: [], ledger: emptyFocusLedger() })
+  const [legalTab, setLegalTab] = useState(null)
   useEffect(() => {
     let cancelled = false
     Promise.all([sessionRepository.loadAll(), sessionRepository.loadFocusLedger()])
@@ -449,11 +451,17 @@ export default function App() {
           <AppShell
             active={screen === 'focus-apps' ? 'lab' : screen}
             onNavigate={navigate}
+            onLegal={() => setLegalTab('datenschutz')}
             utility={<AppRefreshControl updateStatus={updateStatus} />}
           >
             {content}
           </AppShell>
         )}
+      <LegalModal
+        open={legalTab !== null}
+        onClose={() => setLegalTab(null)}
+        initialTab={legalTab ?? 'datenschutz'}
+      />
     </>
   )
 }

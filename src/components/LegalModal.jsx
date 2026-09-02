@@ -7,11 +7,11 @@ const navy = 'var(--ultra)'
 // abgemahnte Einzelpunkt überhaupt, weil er trivial nachprüfbar ist. Eine
 // Ausnahme für Einzelunternehmer gibt es nicht: ohne andere Niederlassung muss
 // die Wohnadresse hier stehen. Vor dem Launch ausfüllen.
-const IMPRESSUM = [
+export const IMPRESSUM = [
   {
     heading: 'Angaben gemäß § 5 ECG',
     body: `Name: Clemens Steinbrenner
-Adresse: Wien, Österreich
+Adresse: [Straße, Hausnummer, PLZ und Ort ergänzen]
 E-Mail: clemenssteinbrenner.crypto@gmail.com`,
   },
   {
@@ -31,10 +31,10 @@ E-Mail: clemenssteinbrenner.crypto@gmail.com`,
 //   Cloud-Anbieter        src/lib/intentContract.js      (cloudProvider)
 //   Standard = aus        src/lib/storage.js             (CONTRACT_DEFAULTS)
 //   Nur Metadaten         companion/src-tauri/src/output.rs
-const DATENSCHUTZ = [
+export const DATENSCHUTZ = [
   {
     heading: 'Verantwortlicher',
-    body: `Clemens Steinbrenner, Wien, Österreich (siehe Impressum)`,
+    body: `Clemens Steinbrenner (siehe Impressum)`,
   },
   {
     heading: 'Grundsatz',
@@ -48,33 +48,33 @@ Gesichtsmerkmale werden NICHT zur Identifizierung von Personen verarbeitet. Es f
   },
   {
     heading: 'Lokale Speicherung',
-    body: `Auf Ihrem Gerät gespeichert werden (localStorage):
-– Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse, Zeitverlauf
-– Namen der während der Sitzung aktiven Apps und Websites
+    body: `In der nativen macOS-App werden Ihre Sitzungsdaten in einer lokalen SQLite-Datenbank im App-Datenordner gespeichert. Im Web- und Entwicklungsmodus verwendet die App localStorage. Es werden gespeichert:
+– Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse und Zeitverlauf
+– beobachtete Apps, Websites und — soweit vom System geliefert — Fenstertitel
 – Ihr eingegebenes Ziel sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
-– Workspace-Konfiguration, Blockierlisten, Onboarding-Status
+– Workspace-Konfiguration, Blockierlisten, Onboarding-Status und lokale Einstellungen
 
-Sie können alles jederzeit über History → Clear all oder Ihre Browser-Einstellungen löschen.`,
+In der App können Sie einzelne Sitzungen oder die gesamte Sitzungshistorie unter Analytics → Sessions löschen. „Clear all history“ löscht die lokale Sitzungshistorie einschließlich der zugehörigen Tageswerte; Workspace-Konfiguration und andere Einstellungen bleiben bestehen. Im Web-/Entwicklungsmodus können Sie zusätzlich die Website-Daten Ihres Browsers löschen.`,
   },
   {
     heading: 'Companion-App (macOS)',
-    body: `Während einer Sitzung fragt die Companion-App alle drei Sekunden ab, welche App im Vordergrund ist, und bei Browsern die Adresse des aktiven Tabs. Das dient dem Blockieren und der Ablenkungserkennung und bleibt im Arbeitsspeicher.
+    body: `Während einer Sitzung fragt die Companion-App ungefähr alle drei Sekunden ab, welche App im Vordergrund ist, und bei unterstützten Browsern die Adresse des aktiven Tabs. Diese Aktivitätsdaten werden für Ablenkungserkennung, Blockieren und die lokale Sitzungsübersicht verwendet und in der lokalen Sitzungshistorie gespeichert.
 
 Wenn Sie einen Projektordner für die Fortschrittsmessung auswählen, werden ausschließlich Metadaten gelesen: Dateinamen, Größen, Änderungszeitpunkte und Git-Zähler. Dateiinhalte werden nie geöffnet oder gelesen, Tastatureingaben nie aufgezeichnet.`,
   },
   {
     heading: 'Update-Prüfung (verlässt das Gerät)',
-    body: `Die App fragt beim Start und anschließend alle fünf Minuten bei GitHub an, ob eine neuere signierte Version vorliegt. Dabei werden technisch bedingt Ihre IP-Adresse und die installierte Versionsnummer an GitHub Inc. (Microsoft Corporation, USA) übermittelt.
+    body: `Die App fragt beim Start und anschließend ungefähr alle fünf Minuten bei GitHub Releases an, ob eine neuere signierte Version vorliegt. GitHub erhält dabei technisch bedingt Ihre IP-Adresse und übliche Verbindungsdaten. Die installierte Version wird von der App lokal mit der Antwort verglichen; Sitzungs-, Kamera- und Aktivitätsdaten werden nicht übertragen.
 
 Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rechtsgrundlage ist unser berechtigtes Interesse an sicheren und aktuellen Installationen (Art. 6 Abs. 1 lit. f DSGVO).`,
   },
   {
     heading: 'Zielverständnis per Sprachmodell (optional)',
-    body: `Standardmäßig ausgeschaltet. Die Voreinstellung arbeitet mit lokalen Stichwortprofilen und ohne jede Netzwerkverbindung.
+    body: `Standardmäßig ausgeschaltet. Die Voreinstellung „Built-in“ arbeitet mit lokalen Stichwortprofilen und ohne jede Netzwerkverbindung.
 
-Schalten Sie unter Focus Apps auf "Lokal", läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
+Schalten Sie unter Focus Apps auf „Local model“, läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
 
-Schalten Sie auf "Cloud", wird ausschließlich der von Ihnen eingegebene Zielsatz an Anthropic (USA) übermittelt. Nicht übertragen werden Aktivitätsprotokolle, Fenstertitel und Dateinamen. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
+Schalten Sie auf „Claude API“, wird ausschließlich der von Ihnen eingegebene Zielsatz an Anthropic (USA) übermittelt. Nicht übertragen werden Aktivitätsprotokolle, Fenstertitel und Dateinamen. Wenn der Cloud-Aufruf scheitert, fällt die App auf die lokalen Stichwortprofile zurück. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',
@@ -84,7 +84,7 @@ Schalten Sie auf "Cloud", wird ausschließlich der von Ihnen eingegebene Zielsat
     heading: 'Ihre Rechte',
     body: `Ihnen stehen die Rechte auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch zu, ebenso ein Beschwerderecht bei der Österreichischen Datenschutzbehörde.
 
-In der Praxis liegen Ihre Daten ausschließlich bei Ihnen: Wir speichern keine Sitzungsdaten und können Sie anhand einer Update-Anfrage nicht identifizieren, weshalb wir Auskunfts- oder Löschbegehren dazu nicht zuordnen können (Art. 11 DSGVO). Ihre lokalen Daten löschen Sie selbst über History → Clear all.`,
+In der Praxis liegen die Sitzungsdaten ausschließlich bei Ihnen: Wir speichern keine Sitzungsdaten und können Sie anhand einer Update-Anfrage nicht identifizieren, weshalb wir Auskunfts- oder Löschbegehren dazu nicht zuordnen können (Art. 11 DSGVO). Ihre lokale Sitzungshistorie löschen Sie selbst über Analytics → Sessions → Clear all history; einzelne Sitzungen können dort ebenfalls gelöscht werden.`,
   },
   {
     heading: 'Kontakt',
