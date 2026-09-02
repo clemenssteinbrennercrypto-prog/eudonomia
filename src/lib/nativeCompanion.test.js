@@ -61,7 +61,7 @@ describe('Keychain credential boundary', () => {
     const fetch = vi.fn()
     globalThis.window = { __TAURI__: { core: { invoke } }, fetch }
     await expect(setCloudApiKey('sk-secret')).resolves.toBe(true)
-    await expect(deleteCloudApiKey()).resolves.toBeUndefined()
+    await expect(deleteCloudApiKey()).resolves.toBe(true)
     expect(invoke).toHaveBeenCalledWith('set_cloud_api_key', { key: 'sk-secret' })
     expect(invoke).toHaveBeenCalledWith('delete_cloud_api_key')
     expect(fetch).not.toHaveBeenCalled()
@@ -70,6 +70,14 @@ describe('Keychain credential boundary', () => {
   it('does not claim a save succeeded when native IPC is unavailable', async () => {
     globalThis.window = {}
     await expect(setCloudApiKey('sk-secret')).resolves.toBe(false)
+  })
+
+  it('distinguishes an unavailable Keychain from an unconfigured one', async () => {
+    const invoke = vi.fn().mockResolvedValue(false)
+    globalThis.window = { __TAURI__: { core: { invoke } } }
+    await expect(hasCloudApiKey()).resolves.toBe(false)
+    invoke.mockRejectedValue(new Error('Keychain unavailable'))
+    await expect(hasCloudApiKey()).resolves.toBeNull()
   })
 })
 

@@ -12,9 +12,6 @@ const MAX_TOKENS: u32 = 700;
 #[serde(rename_all = "camelCase")]
 pub struct CloudRequest {
     pub prompt: String,
-    pub model: String,
-    #[serde(rename = "maxTokens")]
-    pub _max_tokens: u32,
 }
 
 fn valid_key(key: &str) -> Result<(), String> {
@@ -49,14 +46,22 @@ pub fn delete_cloud_api_key() -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-pub fn has_cloud_api_key() -> bool { read_key().is_ok() }
+pub fn has_cloud_api_key() -> Result<bool, String> {
+    match security_framework::passwords::get_generic_password(SERVICE, ACCOUNT) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map(|key| !key.trim().is_empty())
+            .map_err(|_| "stored Anthropic API key is invalid".to_string()),
+        Err(error) if error.code() == -25300 => Ok(false),
+        Err(_) => Err("could not read Anthropic API key from Keychain".to_string()),
+    }
+}
 
 #[cfg(not(target_os = "macos"))]
-pub fn has_cloud_api_key() -> bool { false }
+pub fn has_cloud_api_key() -> Result<bool, String> { Ok(false) }
 
 #[cfg(target_os = "macos")]
 fn call_cloud_model_blocking(request: CloudRequest) -> Result<String, String> {
-    if request.prompt.len() > 32_000 || request.model.trim() != SUPPORTED_MODEL {
+    if request.prompt.len() > 32_000 {
         return Err("invalid cloud model request".to_string());
     }
     let key = read_key()?;

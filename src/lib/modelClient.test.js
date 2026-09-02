@@ -13,9 +13,7 @@ describe('cloud transport boundary', () => {
     const result = await callCloudModel('goal only', { apiKey: 'sk-secret', model: 'claude-test' })
 
     expect(result).toBe('{"ok":true}')
-    expect(invoke).toHaveBeenCalledWith('call_cloud_model', {
-      request: { prompt: 'goal only', model: 'claude-test', maxTokens: 700 },
-    })
+    expect(invoke).toHaveBeenCalledWith('call_cloud_model', { request: { prompt: 'goal only' } })
     expect(fetch).not.toHaveBeenCalled()
   })
 

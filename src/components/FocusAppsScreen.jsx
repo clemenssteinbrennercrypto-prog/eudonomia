@@ -850,7 +850,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   useEffect(() => {
     let cancelled = false
     hasCloudApiKey().then(configured => {
-      if (!cancelled) setCloudKeyStatus(configured ? 'configured' : 'not-configured')
+      if (!cancelled) setCloudKeyStatus(configured === null ? 'error' : configured ? 'configured' : 'not-configured')
     })
     return () => { cancelled = true }
   }, [])
@@ -899,14 +899,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     }
     setCloudKeyStatus('saving')
     const ok = await setCloudApiKey(key)
-    setCloudKey('')
+    if (ok) setCloudKey('')
     setCloudKeyStatus(ok ? 'configured' : 'error')
   }
 
   const handleRemoveCloudKey = async () => {
     setCloudKeyStatus('removing')
     const ok = await deleteCloudApiKey()
-    setCloudKey('')
+    if (ok) setCloudKey('')
     setCloudKeyStatus(ok ? 'not-configured' : 'error')
   }
 
@@ -1260,14 +1260,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 style={{ fontSize: 13 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={handleSaveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing'}>
+                <button type="button" onClick={handleSaveCloudKey} disabled={!cloudKey.trim() || cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending'}>
                   Save key
                 </button>
-                <button type="button" onClick={handleRemoveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing'}>
+                <button type="button" onClick={handleRemoveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending' || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'}>
                   Remove key
                 </button>
                 <span role="status" aria-live="polite" style={{ fontSize: 11, color: cloudKeyStatus === 'error' ? 'var(--bad)' : 'var(--text-muted)' }}>
-                  {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Could not update Keychain' })[cloudKeyStatus]}
+                  {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Keychain unavailable' })[cloudKeyStatus]}
                 </span>
               </div>
               <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>

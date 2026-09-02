@@ -15,10 +15,10 @@ export const DEFAULT_TIMEOUT_MS = 12_000
 
 export const PROVIDERS = ['keywords', 'local', 'cloud']
 
-async function callNativeCloud(prompt, { model, maxTokens }) {
+async function callNativeCloud(prompt) {
   const invoke = globalThis.window?.__TAURI__?.core?.invoke
   if (!invoke) throw new Error('native cloud bridge unavailable')
-  return invoke('call_cloud_model', { request: { prompt, model, maxTokens } })
+  return invoke('call_cloud_model', { request: { prompt } })
 }
 
 /** A model on this machine via Ollama. Nothing leaves the device. */
@@ -41,10 +41,10 @@ export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', end
 }
 
 /** The Anthropic API. Only what the caller put in the prompt is sent. */
-export async function callCloudModel(prompt, { model = 'claude-sonnet-5', maxTokens = 700 } = {}) {
+export async function callCloudModel(prompt) {
   // Cloud credentials and network access are native-only. In particular, do
   // not add a browser fallback: a fake caller-supplied key must be inert.
-  return callNativeCloud(prompt, { model, maxTokens })
+  return callNativeCloud(prompt)
 }
 
 /**
