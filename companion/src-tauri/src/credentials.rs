@@ -30,6 +30,7 @@ fn read_key() -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
+#[tauri::command]
 pub fn set_cloud_api_key(key: String) -> Result<(), String> {
     valid_key(&key)?;
     security_framework::passwords::set_generic_password(SERVICE, ACCOUNT, key.trim().as_bytes())
@@ -37,6 +38,7 @@ pub fn set_cloud_api_key(key: String) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
+#[tauri::command]
 pub fn delete_cloud_api_key() -> Result<(), String> {
     match security_framework::passwords::delete_generic_password(SERVICE, ACCOUNT) {
         Ok(()) => Ok(()),
@@ -46,6 +48,7 @@ pub fn delete_cloud_api_key() -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
+#[tauri::command]
 pub fn has_cloud_api_key() -> Result<bool, String> {
     match security_framework::passwords::get_generic_password(SERVICE, ACCOUNT) {
         Ok(bytes) => String::from_utf8(bytes)
@@ -87,6 +90,7 @@ fn call_cloud_model_blocking(request: CloudRequest) -> Result<String, String> {
 
 /// Keep TLS and Keychain calls off Tauri's async executor thread.
 #[cfg(target_os = "macos")]
+#[tauri::command]
 pub async fn call_cloud_model(request: CloudRequest) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || call_cloud_model_blocking(request))
         .await
