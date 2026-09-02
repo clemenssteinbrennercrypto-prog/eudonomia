@@ -395,6 +395,38 @@ describe('complete native history deletion', () => {
     expect(called('db_migrate_legacy')).toBe(false)
   })
 
+  it('cannot resurrect history when both legacy cleanup and the JS retry marker fail', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    localStorage.setItem = () => { throw new Error('storage unavailable') }
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_clear_all: () => undefined,
+    })
+    repo = createNativeSessionRepository()
+
+    await expect(repo.clearAll()).rejects.toThrow('deletion retry marker failed')
+    expect(called('db_clear_all')).toBe(true)
+
+    // The native transaction's tombstone is what protects the next launch;
+    // localStorage cannot carry either cleanup or retry state in this case.
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_migrate_legacy: () => ({
+        migrated: false,
+        importedCount: 0,
+        verified: true,
+        reason: 'already_migrated',
+      }),
+      db_load_all: () => [],
+    })
+    invoked = []
+    const retry = createNativeSessionRepository()
+    await retry.migrateLegacyIfNeeded()
+    expect(called('db_migrate_legacy')).toBe(true)
+    expect(retry.migrated).toBe(true)
+    expect(await retry.loadAll()).toEqual([])
+    expect(called('db_load_all')).toBe(true)
+  })
+
   it('does not touch legacy history when SQLite deletion fails', async () => {
     localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
     globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_clear_all: () => { throw new Error('database locked') } })
