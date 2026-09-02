@@ -11,7 +11,7 @@ This is a point-in-time checklist for commit `ab3a07fb4e28a7316a63ef9b6a70406c11
 | Web production build | Pass | `npm run build` completed successfully. Existing warnings: non-module MediaPipe script tags and two chunks over 500 kB. |
 | Latest CI test/build | Pass | GitHub Actions run `33537175187`, Test Companion, commit `ab3a07f`, completed successfully. Its unit tests, Rust tests, companion UI refresh/verification, updater-secret check, arm64 build, artifact upload, and internal-channel publication steps all passed. |
 | Internal updater channel | Pass/current | `internal-test/latest.json` is version `0.1.2609011731`, published 2026-09-01 17:36 UTC, and names commit `ab3a07f` in its notes. It advertises only `darwin-aarch64` and has a non-empty signature. |
-| Native Rust checks on this machine | Not available | `cargo test` and `cargo check` could not start: `cargo` is not installed. CI is the current evidence for these gates. |
+| Native Rust checks on this machine | Pass | The Cargo proxy exists outside the shell `PATH`. `~/.cargo/bin/cargo check` completed successfully, and `~/.cargo/bin/cargo test` passed 13 library plus 59 app tests (72 total). |
 | Checked-in companion bundle | Not ready locally | `npm run verify:companion-webui` fails because `companion/webui` lacks bundled MediaPipe runtime files. The CI refresh step succeeds and produces the required generated bundle; no generated artifact was committed here. |
 
 ## Release blockers and open verification
@@ -36,5 +36,5 @@ The production updater manifest is still `0.1.10`, published 16 July 2026, while
 
 1. On a target MacBook Air, manually run the hard camera-loss, sleep/wake, permission, and resource-impact checks and attach dated evidence.
 2. Supply the legal address and complete Apple Developer/release-secret setup.
-3. On a Rust-capable clean checkout, run `npm ci`, `npm test`, `npm run refresh:companion-webui`, `npm run verify:companion-webui`, `cargo test --manifest-path companion/src-tauri/Cargo.toml`, and the arm64 release build; inspect the build badge and updater channel before installation.
+3. On a clean checkout, run `npm ci`, `npm test`, `npm run refresh:companion-webui`, `npm run verify:companion-webui`, `~/.cargo/bin/cargo test --manifest-path companion/src-tauri/Cargo.toml`, and the arm64 release build; inspect the build badge and updater channel before installation.
 4. Only after those gates pass should an authorized release owner create a `release-v*` tag and publish the signed production draft.
