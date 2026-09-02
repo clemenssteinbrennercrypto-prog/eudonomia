@@ -356,9 +356,18 @@ describe('focus phase score boundaries', () => {
     inFlow: false,
   }
 
-  it('treats the alert boundary as drift and the next point as fade/arrival', () => {
-    expect(classifyFocusPhase({ ...stable, score: ALERT_SCORE - 1 })).toBe('drift')
-    expect(classifyFocusPhase({ ...stable, score: ALERT_SCORE })).toBe('arrival')
+  it('keeps the focused boundary independent from the severe alert boundary', () => {
+    // ALERT_SCORE only gates severe intervention; phase arrival still requires
+    // the independently named FOCUSED_SCORE. This protects 38/39 from falling
+    // through to Arrival while preserving the exact focused-second boundary.
+    expect(ALERT_SCORE).toBe(38)
+    expect(FOCUSED_SCORE).toBe(40)
+    for (const score of [37, 38, 39]) {
+      expect(classifyFocusPhase({ ...stable, score })).toBe('drift')
+      expect(isFocusedSecond(score)).toBe(false)
+    }
+    expect(classifyFocusPhase({ ...stable, score: FOCUSED_SCORE })).toBe('arrival')
+    expect(isFocusedSecond(FOCUSED_SCORE)).toBe(true)
   })
 
   it('does not promote a score below the good-streak band to ramp', () => {

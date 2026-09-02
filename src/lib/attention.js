@@ -132,7 +132,10 @@ export function classifyFocusPhase({
   preDriftActive,
   inFlow,
 }) {
-  if (score < ALERT_SCORE) return 'drift'
+  // Phase progression follows the focused ruler. ALERT_SCORE is deliberately
+  // narrower: it only controls severe intervention, so scores 38–39 must not
+  // become Arrival merely because they are outside the severe-alert band.
+  if (score < FOCUSED_SCORE) return 'drift'
   if (msSinceDistraction < RECOVERY_WINDOW_MS) return 'recovery'
   if (preDriftActive || (score >= 55 && score < GOOD_STREAK_SCORE)) return 'fade'
   if (inFlow || goodStreakSecs >= LOCK_IN_STREAK_SECS) return 'lock_in'
