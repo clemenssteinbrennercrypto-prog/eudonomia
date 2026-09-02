@@ -64,6 +64,34 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source.slice(interruptStart, lifecycleStart)).not.toContain('pauseSession')
   })
 
+  // A camera blackout must not be able to *satisfy* a hold. The first recovered
+  // frame is scored before markReady(), with an empty nose history, every
+  // detection hold cleared and the frozen pre-fault score — so any duration
+  // timer still holding a pre-fault timestamp is met instantly by time nothing
+  // measured. flowGoodSince did exactly that: it granted flow, and with it the
+  // 'lock_in' phase, straight out of a >90 s outage.
+  it('clears every duration hold on a camera fault, not just the accumulators', () => {
+    const interruptStart = source.indexOf('const interruptCamera = useCallback')
+    const lifecycleStart = source.indexOf('// Window focus', interruptStart)
+    const reset = source.slice(interruptStart, lifecycleStart)
+    expect(interruptStart).toBeGreaterThan(-1)
+    expect(lifecycleStart).toBeGreaterThan(interruptStart)
+    for (const cleared of [
+      'goodStreakSecsRef.current = 0',
+      'currentStreakRef.current = 0',
+      'sustainedGoodMsRef.current = 0',
+      'scoreLowSinceRef.current = null',
+      'flowGoodSinceRef.current = null',
+      'distractedSinceRef.current = null',
+      'preDriftChargeMsRef.current = 0',
+    ]) {
+      expect(reset).toContain(cleared)
+    }
+    // Flow is a claim about measured time; a fault must retract it, not freeze it.
+    expect(reset).toContain('inFlowRef.current = false')
+    expect(reset).toContain('setInFlowState(false)')
+  })
+
   it('feeds validated native landmarks into the unchanged scoring callback', () => {
     expect(source).toContain('nativeLandmarksForScoring(payload)')
     expect(source).toContain('{ multiFaceLandmarks: landmarks.length ? [landmarks] : [] },')

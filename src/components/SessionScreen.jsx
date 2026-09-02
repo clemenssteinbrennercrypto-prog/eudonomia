@@ -1150,6 +1150,16 @@ export default function SessionScreen({
     currentStreakRef.current = 0
     sustainedGoodMsRef.current = 0
     scoreLowSinceRef.current = null
+    // The three timers below measure a *duration* of evidence, so a blackout
+    // would otherwise satisfy them for free: the first recovered frame arrives
+    // with an empty nose history (headVariance = 0), every detection hold
+    // cleared (primaryReason 'focused') and the frozen pre-fault score, so a
+    // stale flowGoodSince instantly grants flow — and with it the 'lock_in'
+    // phase — for time nothing was measured. distractedSince does the same to
+    // the gentle reminder's hold, preDriftCharge to the drift-risk seconds.
+    flowGoodSinceRef.current = null
+    distractedSinceRef.current = null
+    preDriftChargeMsRef.current = 0
     headDownStartRef.current = null
     headTurnLeftStartRef.current = null
     headTurnRightStartRef.current = null
@@ -1159,6 +1169,10 @@ export default function SessionScreen({
     distractionDownStartRef.current = null
     lookingUpStartRef.current = null
     setCurrentStreak(0)
+    if (inFlowRef.current) {
+      inFlowRef.current = false
+      setInFlowState(false)
+    }
   }, [])
 
   // Window focus, visibility and the red close button are presentation state,
