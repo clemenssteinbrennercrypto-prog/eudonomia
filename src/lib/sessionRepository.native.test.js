@@ -279,6 +279,7 @@ describe('never shows an empty app while history is still in the old store', () 
     withLegacyHistory()
     await repo.clearAll()
     expect(called('db_clear_all')).toBe(true)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(true)
     expect(await repo.loadAll()).toEqual([])
   })
 
@@ -382,6 +383,7 @@ describe('complete native history deletion', () => {
     }
     await expect(repo.clearAll()).rejects.toThrow('cleared from the native database')
     expect(called('db_clear_all')).toBe(true)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
     expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBe('true')
 
     // A new repository must not import the stale localStorage copy.
@@ -404,24 +406,22 @@ describe('complete native history deletion', () => {
     })
     repo = createNativeSessionRepository()
 
-    await expect(repo.clearAll()).rejects.toThrow('deletion retry marker failed')
+    await expect(repo.clearAll()).rejects.toThrow('browser retry marker unavailable')
     expect(called('db_clear_all')).toBe(true)
 
-    // The native transaction's tombstone is what protects the next launch;
-    // localStorage cannot carry either cleanup or retry state in this case.
+    // The native transaction carries both the permanent tombstone and the
+    // cleanup retry. localStorage cannot carry either state in this case.
     globalThis.window.__TAURI__.core.invoke = fakeInvoke({
-      db_migrate_legacy: () => ({
-        migrated: false,
-        importedCount: 0,
-        verified: true,
-        reason: 'already_migrated',
-      }),
+      db_is_legacy_cleanup_pending: () => true,
       db_load_all: () => [],
     })
     invoked = []
     const retry = createNativeSessionRepository()
-    await retry.migrateLegacyIfNeeded()
-    expect(called('db_migrate_legacy')).toBe(true)
+    const result = await retry.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBe('storage unavailable')
+    expect(called('db_migrate_legacy')).toBe(false)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
     expect(retry.migrated).toBe(true)
     expect(await retry.loadAll()).toEqual([])
     expect(called('db_load_all')).toBe(true)
@@ -467,6 +467,10 @@ describe('complete native history deletion', () => {
     await expect(repo.clearAll()).rejects.toMatchObject({ partialDeletion: true })
 
     expect(repo.migrated).toBe(true)
+    await expect(repo.migrateLegacyIfNeeded()).resolves.toMatchObject({
+      verified: true,
+      reason: 'history_cleared',
+    })
     expect(await repo.loadAll()).toEqual([])
     await repo.saveSession({ task: 'after the delete', actualSeconds: 60 })
     expect(called('db_save_session')).toBe(true)
@@ -490,6 +494,10 @@ describe('a failed deletion cleanup is not reported as a failed import', () => {
 
   it('keeps the handover verified and names the leftover copy instead', async () => {
     localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_is_legacy_cleanup_pending: () => true,
+      db_load_all: () => [],
+    })
     repo = createNativeSessionRepository()
 
     const result = await repo.migrateLegacyIfNeeded()
@@ -499,9 +507,13 @@ describe('a failed deletion cleanup is not reported as a failed import', () => {
     expect(repo.migrated).toBe(true)
     expect(await repo.loadAll()).toEqual([])
     expect(called('db_migrate_legacy')).toBe(false)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
   })
 
   it('reports nothing once the retry succeeds', async () => {
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_is_legacy_cleanup_pending: () => true,
+    })
     repo = createNativeSessionRepository()
 
     const result = await repo.migrateLegacyIfNeeded()
@@ -509,6 +521,7 @@ describe('a failed deletion cleanup is not reported as a failed import', () => {
     expect(result.deletionCleanupError).toBeNull()
     expect(localStorage.getItem('eudaimonia_sessions')).toBeNull()
     expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBeNull()
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(true)
   })
 })
 

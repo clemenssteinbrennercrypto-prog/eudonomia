@@ -80,9 +80,20 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
   let readyPromise = null
 
   async function migrateLegacyOnce() {
-    if (isHistoryDeletionPending()) {
+    // The native flag is the authority here. A localStorage marker is retained
+    // as a compatibility fallback for deletions made by an older build, but it
+    // cannot be the only signal: the failure that leaves a legacy copy behind
+    // commonly prevents writing localStorage too.
+    const nativeCleanupPending = await invoke('db_is_legacy_cleanup_pending') === true
+    if (nativeCleanupPending || isHistoryDeletionPending()) {
       const cleanup = clearLegacyHistory()
-      if (cleanup.ok) clearHistoryDeletionPending()
+      if (cleanup.ok) {
+        clearHistoryDeletionPending()
+        // If acknowledgement fails, the native marker deliberately survives
+        // and next launch repeats an idempotent cleanup. The legacy copy is
+        // already gone, so this is not a failed or partial deletion.
+        try { await invoke('db_acknowledge_legacy_cleanup') } catch {}
+      }
       // SQLite was already cleared and tombstoned when the delete ran, so it
       // is authoritative whether or not this retry succeeds. `verified` says
       // exactly that, and must stay true here: reporting a failed cleanup as
@@ -247,19 +258,34 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
       // from the copy the user had just deleted, and — worse — wrote new
       // sessions into it, which the next launch's cleanup then destroyed.
       migrated = true
+      // ensureReady() memoizes the startup result. Once the deletion tombstone
+      // commits, that cached "unverified import" answer is obsolete: SQLite is
+      // authoritative for the rest of this launch and every later caller must
+      // see that same fact.
+      readyPromise = Promise.resolve({
+        migrated: false,
+        importedCount: 0,
+        verified: true,
+        reason: 'history_cleared',
+      })
       const cleanup = clearLegacyHistory()
       if (!cleanup.ok) {
         const marker = markHistoryDeletionPending()
-        const markerError = marker.ok ? '' : `; deletion retry marker failed: ${marker.error}`
-        const error = new Error(`History was cleared from the native database, but the legacy copy could not be removed: ${cleanup.error}${markerError}`)
+        const fallbackMarker = marker.ok ? '' : `; browser retry marker unavailable: ${marker.error}`
+        const error = new Error(`History was cleared from the native database, but the legacy copy could not be removed: ${cleanup.error}${fallbackMarker}`)
         // Two very different failures reach the caller from this method, and
         // they mean opposite things to the user: this one deleted the history,
         // a rejected `db_clear_all` deleted nothing. Callers must be able to
         // tell them apart before wording a message about it.
         error.partialDeletion = true
+        error.deletionCleanupError = cleanup.error
         throw error
       }
       clearHistoryDeletionPending()
+      // The durable marker is cleared only after both legacy history keys were
+      // removed. A failed acknowledgement leaves a harmless retry behind; it
+      // can never resurrect data or make the cleared store non-authoritative.
+      try { await invoke('db_acknowledge_legacy_cleanup') } catch {}
     },
 
     async loadFocusLedger() {

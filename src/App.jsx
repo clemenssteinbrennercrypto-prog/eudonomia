@@ -10,6 +10,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
+import HistoryStorageAlerts from './components/HistoryStorageAlerts'
 import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
@@ -251,6 +252,16 @@ export default function App() {
     })
   }, [])
 
+  const handleHistoryCleared = useCallback((cleanupError) => {
+    // A committed delete permanently ends the legacy-import state. Clear any
+    // earlier banner before it can keep asserting that the old store is still
+    // authoritative, and preserve only a real residual-copy warning.
+    setMigrationError(null)
+    setDeletionCleanupError(cleanupError || null)
+    setHistoryLoadError(null)
+    setSessionRevision(value => value + 1)
+  }, [])
+
   const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
 
   // Owns the save and the check-in answers together, because only one place
@@ -411,7 +422,10 @@ export default function App() {
         </>
       )}
       {screen === 'analytics' && (
-        <AnalyticsShell onClose={() => setScreen('lab')} />
+        <AnalyticsShell
+          onClose={() => setScreen('lab')}
+          onHistoryCleared={handleHistoryCleared}
+        />
       )}
     </div>
   )
@@ -424,27 +438,11 @@ export default function App() {
 
   return (
     <>
-      {migrationError && screen !== 'session' && (
-        <div className="session-save-error" role="alert">
-          <span>
-            Your history could not be imported into the new local database
-            ({migrationError}). Nothing has been deleted — your sessions are
-            still being read from their original storage, and the app will try
-            the import again next launch.
-          </span>
-        </div>
-      )}
-      {deletionCleanupError && screen !== 'session' && (
-        <div className="session-save-error" role="alert">
-          <span>
-            Your history was deleted from the local database, but the older
-            browser-storage copy could not be removed ({deletionCleanupError}).
-            Nothing is read from that copy any more and it can never be imported
-            back, but it is still on this device. The app will try to remove it
-            again next launch.
-          </span>
-        </div>
-      )}
+      <HistoryStorageAlerts
+        migrationError={migrationError}
+        deletionCleanupError={deletionCleanupError}
+        screen={screen}
+      />
       {historyLoadError && screen !== 'session' && (
         <div className="session-save-error" role="alert">
           <span>
