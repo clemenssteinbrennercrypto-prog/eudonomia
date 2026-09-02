@@ -910,6 +910,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     setCloudKeyStatus(ok ? 'not-configured' : 'error')
   }
 
+  const cloudKeyBusy = cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending'
+  const saveKeyDisabled = !cloudKey.trim() || cloudKeyBusy
+  const removeKeyDisabled = cloudKeyBusy || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'
+
   // Leaving this screen used to discard unsaved edits without a word, while the
   // header meanwhile counted them as if they were live ("1 focus apps · 1
   // blocked"). Track what's actually on disk so Back can say something.
@@ -1260,10 +1264,28 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 style={{ fontSize: 13 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={handleSaveCloudKey} disabled={!cloudKey.trim() || cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending'}>
+                <button
+                  type="button"
+                  onClick={handleSaveCloudKey}
+                  disabled={saveKeyDisabled}
+                  style={{
+                    border: 'none', borderRadius: 10, padding: '8px 13px', fontFamily: 'inherit',
+                    background: saveKeyDisabled ? 'var(--line)' : 'var(--ultra)', color: 'var(--text)',
+                    cursor: saveKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 900,
+                  }}
+                >
                   Save key
                 </button>
-                <button type="button" onClick={handleRemoveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending' || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'}>
+                <button
+                  type="button"
+                  onClick={handleRemoveCloudKey}
+                  disabled={removeKeyDisabled}
+                  style={{
+                    border: '1px solid var(--line)', borderRadius: 10, padding: '8px 13px',
+                    fontFamily: 'inherit', background: 'var(--surface)', color: 'var(--text-secondary)',
+                    cursor: removeKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 850,
+                  }}
+                >
                   Remove key
                 </button>
                 <span role="status" aria-live="polite" style={{ fontSize: 11, color: cloudKeyStatus === 'error' ? 'var(--bad)' : 'var(--text-muted)' }}>
