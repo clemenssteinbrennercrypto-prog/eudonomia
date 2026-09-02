@@ -899,6 +899,7 @@ export default function SessionScreen({
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
   const lastFrameTsRef         = useRef(0)
   const lastDistractionRef     = useRef(0)   // timestamp of last distraction event (alert or prolonged low score)
+  const recoveryElapsedBeforeFaultRef = useRef(null) // measured recovery time preserved across camera outages
   const lastAlertTimeRef       = useRef(0)
   const overlayActiveRef       = useRef(false)
   const attentionStatusRef     = useRef('focused')
@@ -1071,12 +1072,70 @@ export default function SessionScreen({
     return true
   }, [])
 
+  const resetCameraEvidence = useCallback(() => {
+    // Preserve only recovery time that was actually measured. Wall-clock time
+    // while capture is silent must neither complete nor erase the recovery
+    // window; the first trustworthy frame resumes it below.
+    const lastMeasuredAt = lastDeliveredFrameAtRef.current
+    if (
+      recoveryElapsedBeforeFaultRef.current == null &&
+      lastDistractionRef.current &&
+      lastMeasuredAt
+    ) {
+      const measuredRecoveryMs = Math.max(0, lastMeasuredAt - lastDistractionRef.current)
+      recoveryElapsedBeforeFaultRef.current = measuredRecoveryMs < RECOVERY_WINDOW_MS
+        ? measuredRecoveryMs
+        : null
+    }
+    lastDistractionRef.current = 0
+
+    goodStreakSecsRef.current = 0
+    currentStreakRef.current = 0
+    sustainedGoodMsRef.current = 0
+    lastFrameTsRef.current = 0
+    scoreLowSinceRef.current = null
+    flowGoodSinceRef.current = null
+    distractedSinceRef.current = null
+    preDriftChargeMsRef.current = 0
+    headDownStartRef.current = null
+    headTurnLeftStartRef.current = null
+    headTurnRightStartRef.current = null
+    eyesClosedSinceRef.current = null
+    yawnStartRef.current = null
+    phoneStartRef.current = null
+    distractionDownStartRef.current = null
+    lookingUpStartRef.current = null
+    faceAbsentSinceRef.current = null
+    eyesOffStartRef.current = null
+    lowConfSinceRef.current = null
+    headTurnLeftFramesRef.current = 0
+    headTurnRightFramesRef.current = 0
+    headDownFramesRef.current = 0
+    eyesOffFramesRef.current = 0
+    wasClosedRef.current = false
+    blinkTimestampsRef.current = []
+    perclosHistRef.current = []
+    nosePtHistRef.current = []
+    setCurrentStreak(0)
+    setFaceAbsentPrompt(false)
+
+    if (preDriftRiskRef.current.active || preDriftRiskRef.current.level !== 0) {
+      preDriftRiskRef.current = { active: false, level: 0, reason: 'stable' }
+      setPreDriftRisk(preDriftRiskRef.current)
+    }
+    if (inFlowRef.current) {
+      inFlowRef.current = false
+      setInFlowState(false)
+    }
+  }, [])
+
   // Replace the WebView's native-camera listener generation. The native worker
   // remains the camera owner during this hand-off and either resumes delivering
   // frames or reports an honest fault through its own heartbeat.
   const restartCamera = useCallback((manual = false) => {
     const now = Date.now()
     if (!manual && now - lastRecoverAtRef.current < CAMERA_RECOVER_MS) return
+    resetCameraEvidence()
     lastRecoverAtRef.current = now
     cameraRecoverTriesRef.current = manual ? 0 : cameraRecoverTriesRef.current + 1
     cameraReadyRef.current = false
@@ -1088,7 +1147,7 @@ export default function SessionScreen({
       setCameraFault(null)
     }
     setCameraEpoch(e => e + 1)
-  }, [])
+  }, [resetCameraEvidence])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
@@ -1134,6 +1193,7 @@ export default function SessionScreen({
 
   const interruptCamera = useCallback((fault = null) => {
     if (sessionEndedRef.current) return
+    resetCameraEvidence()
     cameraReadyRef.current = false
     lastFrameAtRef.current = 0
     lastDeliveredFrameAtRef.current = 0
@@ -1144,36 +1204,9 @@ export default function SessionScreen({
       setCameraFault(fault)
     }
     // A camera outage withholds measurement; it is not a user pause. Keep the
-    // wall clock and native protection running, and erase every stateful hold
-    // that could otherwise leak a pre-fault bonus or penalty into recovery.
-    goodStreakSecsRef.current = 0
-    currentStreakRef.current = 0
-    sustainedGoodMsRef.current = 0
-    scoreLowSinceRef.current = null
-    // The three timers below measure a *duration* of evidence, so a blackout
-    // would otherwise satisfy them for free: the first recovered frame arrives
-    // with an empty nose history (headVariance = 0), every detection hold
-    // cleared (primaryReason 'focused') and the frozen pre-fault score, so a
-    // stale flowGoodSince instantly grants flow — and with it the 'lock_in'
-    // phase — for time nothing was measured. distractedSince does the same to
-    // the gentle reminder's hold, preDriftCharge to the drift-risk seconds.
-    flowGoodSinceRef.current = null
-    distractedSinceRef.current = null
-    preDriftChargeMsRef.current = 0
-    headDownStartRef.current = null
-    headTurnLeftStartRef.current = null
-    headTurnRightStartRef.current = null
-    eyesClosedSinceRef.current = null
-    yawnStartRef.current = null
-    phoneStartRef.current = null
-    distractionDownStartRef.current = null
-    lookingUpStartRef.current = null
-    setCurrentStreak(0)
-    if (inFlowRef.current) {
-      inFlowRef.current = false
-      setInFlowState(false)
-    }
-  }, [])
+    // wall clock and native protection running while resetCameraEvidence erases
+    // every stateful camera hold that could leak through recovery.
+  }, [resetCameraEvidence])
 
   // Window focus, visibility and the red close button are presentation state,
   // not session state. The webcam must keep tracking while Eudonomia is behind
@@ -1591,6 +1624,10 @@ export default function SessionScreen({
       : Date.now()
     lastFrameAtRef.current = deliveredAt
     lastDeliveredFrameAtRef.current = deliveredAt
+    if (recoveryElapsedBeforeFaultRef.current != null) {
+      lastDistractionRef.current = deliveredAt - recoveryElapsedBeforeFaultRef.current
+      recoveryElapsedBeforeFaultRef.current = null
+    }
     if (sessionEndedRef.current || isPausedRef.current) return
 
     const lmArray        = results.multiFaceLandmarks
