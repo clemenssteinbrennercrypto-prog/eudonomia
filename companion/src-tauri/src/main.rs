@@ -10,6 +10,7 @@
 mod activity;
 mod app_nap;
 mod blocking;
+mod credentials;
 mod db;
 mod native;
 mod output;
@@ -260,6 +261,9 @@ fn main() {
             native::install_blocking_helper,
             native::set_output_watch_folder,
             native::get_output_delta,
+            credentials::set_cloud_api_key,
+            credentials::delete_cloud_api_key,
+            credentials::call_cloud_model,
             native_camera::get_native_camera_status,
             native_camera::start_native_camera_prototype,
             native_camera::stop_native_camera_prototype,

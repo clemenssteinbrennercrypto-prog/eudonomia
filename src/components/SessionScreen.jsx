@@ -1496,7 +1496,6 @@ export default function SessionScreen({
         provider: settings.provider,
         model: settings.provider === 'cloud' ? settings.cloudModel : settings.localModel,
         endpoint: settings.localEndpoint,
-        apiKey: settings.apiKey,
       }
     ).then(contract => {
       if (!cancelled && contract) sessionContractRef.current = contract

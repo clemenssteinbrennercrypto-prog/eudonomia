@@ -14,6 +14,7 @@ import {
   pushCompanionSession,
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
+  setCloudApiKey,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
@@ -816,6 +817,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
   const [contract, setContract] = useState(loadContractSettings)
+  const [cloudKey, setCloudKey] = useState('')
   const testTimerRef = useRef(null)
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
@@ -1219,14 +1221,17 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               <input
                 type="password"
                 className="text-input"
-                value={contract.apiKey}
-                onChange={e => setContract(saveContractSettings({ apiKey: e.target.value.trim() }))}
+                value={cloudKey}
+                onChange={e => {
+                  const value = e.target.value
+                  setCloudKey(value)
+                  setCloudApiKey(value)
+                }}
                 placeholder="Anthropic API key"
                 style={{ fontSize: 13 }}
               />
               <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                The key is kept in this app's local storage, unencrypted. Use a key scoped to
-                this purpose that you can revoke.
+                The key is kept in your macOS Keychain and is used only for goal understanding.
               </p>
             </>
           )}

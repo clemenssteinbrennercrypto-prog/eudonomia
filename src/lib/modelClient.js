@@ -15,6 +15,14 @@ export const DEFAULT_TIMEOUT_MS = 12_000
 
 export const PROVIDERS = ['keywords', 'local', 'cloud']
 
+async function callNativeCloud(prompt, { model, maxTokens }) {
+  const invoke = globalThis.window?.__TAURI__?.core?.invoke
+  if (!invoke) return null
+  try {
+    return await invoke('call_cloud_model', { request: { prompt, model, maxTokens } })
+  } catch { return null }
+}
+
 /** A model on this machine via Ollama. Nothing leaves the device. */
 export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', endpoint = 'http://127.0.0.1:11434' } = {}) {
   const res = await fetch(`${endpoint}/api/generate`, {
@@ -36,6 +44,8 @@ export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', end
 
 /** The Anthropic API. Only what the caller put in the prompt is sent. */
 export async function callCloudModel(prompt, { signal, apiKey, model = 'claude-sonnet-5', maxTokens = 700 } = {}) {
+  const native = await callNativeCloud(prompt, { model, maxTokens })
+  if (native !== null) return native
   if (!apiKey) throw new Error('no api key')
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

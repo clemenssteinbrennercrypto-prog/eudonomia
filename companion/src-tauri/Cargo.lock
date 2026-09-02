@@ -779,6 +779,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "rusqlite",
+ "security-framework",
  "semver",
  "serde",
  "serde_json",
@@ -788,6 +789,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
