@@ -5,13 +5,16 @@ use serde::Deserialize;
 
 const SERVICE: &str = "ai.eudonomia.companion";
 const ACCOUNT: &str = "anthropic-api-key";
+const SUPPORTED_MODEL: &str = "claude-sonnet-5";
+const MAX_TOKENS: u32 = 700;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudRequest {
     pub prompt: String,
     pub model: String,
-    pub max_tokens: u32,
+    #[serde(rename = "maxTokens")]
+    pub _max_tokens: u32,
 }
 
 fn valid_key(key: &str) -> Result<(), String> {
@@ -46,14 +49,20 @@ pub fn delete_cloud_api_key() -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
+pub fn has_cloud_api_key() -> bool { read_key().is_ok() }
+
+#[cfg(not(target_os = "macos"))]
+pub fn has_cloud_api_key() -> bool { false }
+
+#[cfg(target_os = "macos")]
 fn call_cloud_model_blocking(request: CloudRequest) -> Result<String, String> {
-    if request.prompt.len() > 32_000 || request.model.trim().is_empty() {
+    if request.prompt.len() > 32_000 || request.model.trim() != SUPPORTED_MODEL {
         return Err("invalid cloud model request".to_string());
     }
     let key = read_key()?;
     let body = serde_json::json!({
-        "model": request.model.trim(),
-        "max_tokens": request.max_tokens.clamp(1, 4096),
+        "model": SUPPORTED_MODEL,
+        "max_tokens": MAX_TOKENS,
         "messages": [{"role": "user", "content": request.prompt}],
     });
     let mut response = ureq::post("https://api.anthropic.com/v1/messages")

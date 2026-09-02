@@ -263,6 +263,7 @@ fn main() {
             native::get_output_delta,
             credentials::set_cloud_api_key,
             credentials::delete_cloud_api_key,
+            credentials::has_cloud_api_key,
             credentials::call_cloud_model,
             native_camera::get_native_camera_status,
             native_camera::start_native_camera_prototype,

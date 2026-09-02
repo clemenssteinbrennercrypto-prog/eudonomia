@@ -17,10 +17,8 @@ export const PROVIDERS = ['keywords', 'local', 'cloud']
 
 async function callNativeCloud(prompt, { model, maxTokens }) {
   const invoke = globalThis.window?.__TAURI__?.core?.invoke
-  if (!invoke) return null
-  try {
-    return await invoke('call_cloud_model', { request: { prompt, model, maxTokens } })
-  } catch { return null }
+  if (!invoke) throw new Error('native cloud bridge unavailable')
+  return invoke('call_cloud_model', { request: { prompt, model, maxTokens } })
 }
 
 /** A model on this machine via Ollama. Nothing leaves the device. */
@@ -43,28 +41,10 @@ export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', end
 }
 
 /** The Anthropic API. Only what the caller put in the prompt is sent. */
-export async function callCloudModel(prompt, { signal, apiKey, model = 'claude-sonnet-5', maxTokens = 700 } = {}) {
-  const native = await callNativeCloud(prompt, { model, maxTokens })
-  if (native !== null) return native
-  if (!apiKey) throw new Error('no api key')
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  })
-  if (!res.ok) throw new Error(`anthropic ${res.status}`)
-  const data = await res.json()
-  return data?.content?.map(c => c.text).join('') || ''
+export async function callCloudModel(prompt, { model = 'claude-sonnet-5', maxTokens = 700 } = {}) {
+  // Cloud credentials and network access are native-only. In particular, do
+  // not add a browser fallback: a fake caller-supplied key must be inert.
+  return callNativeCloud(prompt, { model, maxTokens })
 }
 
 /**

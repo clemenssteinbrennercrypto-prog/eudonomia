@@ -49,11 +49,17 @@ export async function fetchActivityStatus() {
 export async function setCloudApiKey(apiKey) {
   const key = String(apiKey || '').trim()
   if (!key) return deleteCloudApiKey()
-  try { await invokeNative('set_cloud_api_key', { key }); return Boolean(getNativeApi()) } catch { return false }
+  if (!getNativeApi()?.core?.invoke) return false
+  try { await invokeNative('set_cloud_api_key', { key }); return true } catch { return false }
 }
 
 export async function deleteCloudApiKey() {
+  if (!getNativeApi()?.core?.invoke) return false
   try { return await invokeNative('delete_cloud_api_key') } catch { return false }
+}
+
+export async function hasCloudApiKey() {
+  try { return (await invokeNative('has_cloud_api_key')) === true } catch { return false }
 }
 
 export function listenActivityUpdates(onUpdate) {

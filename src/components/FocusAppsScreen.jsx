@@ -15,6 +15,8 @@ import {
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
   setCloudApiKey,
+  deleteCloudApiKey,
+  hasCloudApiKey,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
@@ -818,6 +820,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [testBlockingActive, setTestBlockingActive] = useState(false)
   const [contract, setContract] = useState(loadContractSettings)
   const [cloudKey, setCloudKey] = useState('')
+  const [cloudKeyStatus, setCloudKeyStatus] = useState('pending')
   const testTimerRef = useRef(null)
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
@@ -842,6 +845,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
       clearInterval(heartbeat)
       stopActivityUpdates()
     }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    hasCloudApiKey().then(configured => {
+      if (!cancelled) setCloudKeyStatus(configured ? 'configured' : 'not-configured')
+    })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => () => {
@@ -878,6 +889,25 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
 
   const toggleStrictMode = () => {
     setStrictMode(saveStrictMode(!strictMode))
+  }
+
+  const handleSaveCloudKey = async () => {
+    const key = cloudKey.trim()
+    if (!key) {
+      setCloudKeyStatus('error')
+      return
+    }
+    setCloudKeyStatus('saving')
+    const ok = await setCloudApiKey(key)
+    setCloudKey('')
+    setCloudKeyStatus(ok ? 'configured' : 'error')
+  }
+
+  const handleRemoveCloudKey = async () => {
+    setCloudKeyStatus('removing')
+    const ok = await deleteCloudApiKey()
+    setCloudKey('')
+    setCloudKeyStatus(ok ? 'not-configured' : 'error')
   }
 
   // Leaving this screen used to discard unsaved edits without a word, while the
@@ -1223,13 +1253,23 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
                 className="text-input"
                 value={cloudKey}
                 onChange={e => {
-                  const value = e.target.value
-                  setCloudKey(value)
-                  setCloudApiKey(value)
+                  setCloudKey(e.target.value)
+                  setCloudKeyStatus('not-saved')
                 }}
                 placeholder="Anthropic API key"
                 style={{ fontSize: 13 }}
               />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={handleSaveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing'}>
+                  Save key
+                </button>
+                <button type="button" onClick={handleRemoveCloudKey} disabled={cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing'}>
+                  Remove key
+                </button>
+                <span role="status" aria-live="polite" style={{ fontSize: 11, color: cloudKeyStatus === 'error' ? 'var(--bad)' : 'var(--text-muted)' }}>
+                  {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Could not update Keychain' })[cloudKeyStatus]}
+                </span>
+              </div>
               <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>
                 The key is kept in your macOS Keychain and is used only for goal understanding.
               </p>

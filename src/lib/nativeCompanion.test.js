@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchCompanionDebug,
+  hasCloudApiKey,
   fetchNativeCameraStatus,
   fetchOutputDelta,
   listenActivityUpdates,
@@ -10,6 +11,8 @@ import {
   setNativeCameraPreview,
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
+  setCloudApiKey,
+  deleteCloudApiKey,
 } from './nativeCompanion'
 
 afterEach(() => {
@@ -41,6 +44,32 @@ describe('fetchCompanionDebug', () => {
     globalThis.window = { __TAURI__: { core: { invoke } } }
 
     await expect(fetchCompanionDebug()).resolves.toBeNull()
+  })
+})
+
+describe('Keychain credential boundary', () => {
+  it('returns only configured state and never exposes a secret', async () => {
+    const invoke = vi.fn().mockResolvedValue(true)
+    globalThis.window = { __TAURI__: { core: { invoke } } }
+    await expect(hasCloudApiKey()).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledWith('has_cloud_api_key')
+    expect(JSON.stringify(invoke.mock.calls)).not.toContain('sk-')
+  })
+
+  it('saves/removes through native IPC and never uses browser fetch', async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined)
+    const fetch = vi.fn()
+    globalThis.window = { __TAURI__: { core: { invoke } }, fetch }
+    await expect(setCloudApiKey('sk-secret')).resolves.toBe(true)
+    await expect(deleteCloudApiKey()).resolves.toBeUndefined()
+    expect(invoke).toHaveBeenCalledWith('set_cloud_api_key', { key: 'sk-secret' })
+    expect(invoke).toHaveBeenCalledWith('delete_cloud_api_key')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not claim a save succeeded when native IPC is unavailable', async () => {
+    globalThis.window = {}
+    await expect(setCloudApiKey('sk-secret')).resolves.toBe(false)
   })
 })
 
