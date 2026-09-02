@@ -287,6 +287,10 @@ Test the **refusals and the boundaries**, not just the happy path. The valuable
 tests here assert that the code stays quiet on thin data, rejects malformed model
 output, and survives records written before a field existed.
 
+The dated release-gate evidence and its still-open manual/credentialed checks
+live in [`docs/release-readiness-2026-09-02.md`](docs/release-readiness-2026-09-02.md).
+Update that record instead of creating a second unlinked launch checklist.
+
 **A green build is not verification.** The live-session camera is native, so
 `npm run dev` and a browser `getUserMedia` stub cannot exercise it. Use the
 internal native diagnostic for frame flow and the installed app with a real
