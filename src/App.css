@@ -1686,6 +1686,8 @@ body {
 .session-plan-dialog header > button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--text-secondary); font: inherit; font-size: 22px; cursor: pointer; }
 .session-plan-dialog textarea { width: 100%; min-height: 300px; max-height: 55vh; box-sizing: border-box; resize: vertical; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; outline: none; background: color-mix(in srgb, var(--bg) 58%, transparent); color: var(--text); font: inherit; font-size: 15px; line-height: 1.65; }
 .session-plan-dialog textarea:focus { border-color: var(--accent); }
+.session-plan-cloud-disclosure { margin: 10px 2px 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.session-plan-cloud-summary { color: var(--warn); line-height: 1.45; }
 .session-plan-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 16px; color: var(--text-muted); font-size: 11px; }
 .session-plan-dialog footer button { min-height: 38px; padding: 0 18px; border: 1px solid var(--text); border-radius: 7px; background: var(--text); color: var(--bg); font: inherit; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; transition: background .2s ease, transform .2s ease; }
 .session-plan-dialog footer button:hover { background: color-mix(in srgb, var(--text) 88%, var(--accent)); transform: translateY(-1px); }

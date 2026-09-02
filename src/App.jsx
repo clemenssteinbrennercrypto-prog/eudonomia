@@ -10,7 +10,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
-import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
+import { loadContractSettings, loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
 import {
@@ -350,6 +350,7 @@ export default function App() {
           setTags={setTags}
           workspaces={workspaceState.workspaces}
           activeWorkspaceId={workspaceState.activeWorkspaceId}
+          contractProvider={loadContractSettings().provider}
           onWorkspaceChange={(id) => setWorkspaceState({ ...workspaceState, activeWorkspaceId: id })}
           onEditWorkspaces={() => setScreen('setup')}
           onStart={handleStart}

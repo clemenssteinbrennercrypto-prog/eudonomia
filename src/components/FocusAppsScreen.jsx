@@ -24,6 +24,18 @@ const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Red
 const SHOW_NATIVE_CAMERA_DIAGNOSTICS = import.meta.env.DEV ||
   import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL === 'test'
 
+export function CloudPrivacyNotice() {
+  return (
+    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
+      How your session plan becomes session expectations. With Cloud, only the text you
+      typed into &quot;Definition of plan&quot; is sent to Anthropic, cut to the first{' '}
+      {CLOUD_GOAL_MAX_CHARS} characters — never the session name, tags, activity, window
+      titles or file names, and never anything after the session. Leave that field empty
+      and nothing is sent: the built-in profiles answer instead.
+    </p>
+  )
+}
+
 function addUnique(list, value) {
   const app = value.trim()
   if (!app) return list
@@ -1166,13 +1178,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
             Goal understanding
           </p>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            How your session plan becomes session expectations. With Cloud, only the text you
-            typed into "Definition of plan" is sent to Anthropic, cut to the first{' '}
-            {CLOUD_GOAL_MAX_CHARS} characters — never the session name, tags, activity, window
-            titles or file names, and never anything after the session. Leave that field empty
-            and nothing is sent: the built-in profiles answer instead.
-          </p>
+          <CloudPrivacyNotice />
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             {[

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { buildRecentSessionSetups, normalizeSessionTags, QUICK_SESSION_TAGS } from '../lib/sessionSetups'
 import { countWords, limitWords, SESSION_PLAN_WORD_LIMIT } from '../lib/sessionPlan'
 import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuration'
+import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -21,6 +22,7 @@ export default function SessionIntentScreen({
   setTags,
   workspaces = [],
   activeWorkspaceId = null,
+  contractProvider = 'keywords',
   onWorkspaceChange,
   onEditWorkspaces,
   onStart,
@@ -33,6 +35,7 @@ export default function SessionIntentScreen({
   const canStart = task.trim().length > 0
   const planWordCount = countWords(goal)
   const hasTimeLimit = isTimed(duration)
+  const cloudPlanSharing = contractProvider === 'cloud'
 
   const toggleTag = (tag) => {
     setTags(previous => previous.includes(tag)
@@ -99,6 +102,12 @@ export default function SessionIntentScreen({
               <strong>{goal.trim() ? 'Edit plan' : 'Add plan'} ↗</strong>
             </button>
             <small>{planWordCount}/{SESSION_PLAN_WORD_LIMIT} words</small>
+            {cloudPlanSharing && (
+              <small className="session-plan-cloud-summary">
+                Cloud active: the first {CLOUD_GOAL_MAX_CHARS} characters are sent to Anthropic;
+                session name, tags and activity stay local.
+              </small>
+            )}
           </div>
 
           <fieldset className="session-intent-field">
@@ -230,8 +239,15 @@ export default function SessionIntentScreen({
               value={goal}
               onChange={event => setGoal(limitWords(event.target.value))}
               placeholder="Write the steps, constraints, and the result you want to have by the end of this session…"
+              aria-describedby={cloudPlanSharing ? 'session-plan-cloud-disclosure' : undefined}
               autoFocus
             />
+            {cloudPlanSharing && (
+              <p id="session-plan-cloud-disclosure" className="session-plan-cloud-disclosure" role="note">
+                Cloud is active. The first {CLOUD_GOAL_MAX_CHARS} characters are sent to Anthropic
+                when the session starts. The session name, tags and session activity stay local.
+              </p>
+            )}
             <footer>
               <span>{planWordCount}/{SESSION_PLAN_WORD_LIMIT} words</span>
               <button type="button" onClick={() => setPlanOpen(false)}>Save plan</button>

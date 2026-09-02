@@ -52,7 +52,7 @@ Gesichtsmerkmale werden NICHT zur Identifizierung von Personen verarbeitet. Es f
     body: `Auf Ihrem Gerät gespeichert werden (localStorage):
 – Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse, Zeitverlauf
 – Namen der während der Sitzung aktiven Apps und Websites
-– Ihr eingegebenes Ziel sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
+– Sessionname, optionale "Definition of plan" sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
 – Workspace-Konfiguration, Blockierlisten, Onboarding-Status
 
 Sie können alles jederzeit über History → Clear all oder Ihre Browser-Einstellungen löschen.`,
