@@ -28,6 +28,10 @@ import { PROVIDERS, callModel, parseModelJson, strList } from './modelClient'
 
 export { PROVIDERS, parseModelJson }
 
+// Keep the explicit cloud consent narrow and deterministic. Trim first so
+// whitespace does not consume the user's useful goal budget.
+export const CLOUD_GOAL_MAX_CHARS = 500
+
 /** A model gets this long before we stop waiting and use the keyword contract.
  *  Session start must never hang behind a model. */
 const PROVIDER_TIMEOUT_MS = 12_000
@@ -117,7 +121,8 @@ so with "confidence": "low" rather than inventing specifics.`
 // Cloud is deliberately narrower than local: only the explicit goal field is
 // allowed across the device boundary. Keep local task/tag prompts unchanged.
 export function buildCloudPrompt({ goal = '' } = {}) {
-  return buildPrompt({ goal: String(goal || '').trim() })
+  const boundedGoal = String(goal ?? '').trim().slice(0, CLOUD_GOAL_MAX_CHARS)
+  return buildPrompt({ goal: boundedGoal })
 }
 
 /** Built-in profiles. No network, no key, always answers. */

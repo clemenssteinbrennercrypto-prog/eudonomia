@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   PROVIDERS,
+  CLOUD_GOAL_MAX_CHARS,
   buildPrompt,
   buildCloudPrompt,
   clearContractCache,
@@ -105,6 +106,12 @@ describe('the prompt sends the intention and nothing else', () => {
     expect(buildPrompt(goalInput)).toContain('Write the intro chapter')
   })
 
+  it('keeps task and tags in the local/general prompt', () => {
+    const p = buildPrompt(goalInput)
+    expect(p).toContain('Thesis')
+    expect(p).toContain('Writing')
+  })
+
   it('never carries activity, window titles or file names', () => {
     const p = buildPrompt(goalInput)
     for (const leak of ['thesis_intro_v3.docx', 'localhost', 'youtube.com/watch', '/Users/']) {
@@ -117,6 +124,24 @@ describe('the prompt sends the intention and nothing else', () => {
     expect(p).toContain(goalInput.goal)
     expect(p).not.toContain(goalInput.task)
     expect(p).not.toContain('Writing')
+  })
+
+  it('trims cloud goal whitespace before applying the character bound', () => {
+    const p = buildCloudPrompt({ goal: `  ${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}  ` })
+    expect(p).toContain(`"${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}"`)
+    expect(p).not.toContain(` ${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}`)
+  })
+
+  it('keeps an exact-boundary cloud goal intact', () => {
+    const goal = 'b'.repeat(CLOUD_GOAL_MAX_CHARS)
+    expect(buildCloudPrompt({ goal })).toContain(`"${goal}"`)
+  })
+
+  it('bounds an overlong cloud goal after trimming', () => {
+    const goal = `${'c'.repeat(CLOUD_GOAL_MAX_CHARS)}TAIL`
+    const p = buildCloudPrompt({ goal: ` \n${goal}\t ` })
+    expect(p).toContain(`"${'c'.repeat(CLOUD_GOAL_MAX_CHARS)}"`)
+    expect(p).not.toContain('TAIL')
   })
 })
 
@@ -193,12 +218,34 @@ describe('switching providers is safe', () => {
       task: 'PRIVATE TASK thesis_intro_v3.docx',
       goal: 'Draft the intro chapter',
       tags: ['PRIVATE TAG youtube.com/watch?v=secret'],
+      activity: [{ app: 'PRIVATE ACTIVITY APP', title: 'PRIVATE WINDOW TITLE' }],
+      privateField: 'PRIVATE FIELD',
     }, { provider: 'cloud', apiKey: 'secret-key' })
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.messages[0].content).toContain('Draft the intro chapter')
-    for (const leak of ['PRIVATE TASK', 'PRIVATE TAG', 'thesis_intro_v3.docx', 'youtube.com', '/Users/']) {
+    for (const leak of [
+      'PRIVATE TASK', 'PRIVATE TAG', 'PRIVATE ACTIVITY APP', 'PRIVATE WINDOW TITLE',
+      'PRIVATE FIELD', 'thesis_intro_v3.docx', 'youtube.com', '/Users/',
+    ]) {
       expect(body.messages[0].content).not.toContain(leak)
     }
+  })
+
+  it('sends only the bounded, trimmed goal to Anthropic', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ content: [{ text: JSON.stringify({ kind: 'writing', expectedTools: ['word'] }) }] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const goal = `${'g'.repeat(CLOUD_GOAL_MAX_CHARS)}PRIVATE TAIL`
+    await deriveContract({ task: 'PRIVATE TASK', goal: `  ${goal}  `, tags: ['PRIVATE TAG'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[0].content).toContain('"' + 'g'.repeat(CLOUD_GOAL_MAX_CHARS) + '"')
+    expect(body.messages[0].content).not.toContain('PRIVATE TAIL')
+    expect(body.messages[0].content).not.toContain('PRIVATE TASK')
+    expect(body.messages[0].content).not.toContain('PRIVATE TAG')
   })
 
   it('does not hang the session behind a slow model', async () => {
