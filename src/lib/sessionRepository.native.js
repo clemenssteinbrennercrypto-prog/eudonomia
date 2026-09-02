@@ -83,12 +83,21 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
     if (isHistoryDeletionPending()) {
       const cleanup = clearLegacyHistory()
       if (cleanup.ok) clearHistoryDeletionPending()
+      // SQLite was already cleared and tombstoned when the delete ran, so it
+      // is authoritative whether or not this retry succeeds. `verified` says
+      // exactly that, and must stay true here: reporting a failed cleanup as
+      // an unverified *import* made the app tell someone who had just deleted
+      // their history "nothing has been deleted, your sessions are still being
+      // read from their original storage, and the import will be retried" —
+      // three claims that are all false once the tombstone exists. A leftover
+      // copy is its own problem and gets its own message.
       migrated = true
       return {
         migrated: false,
         importedCount: 0,
-        verified: cleanup.ok,
-        reason: cleanup.ok ? 'legacy_history_cleanup_retried' : `legacy history cleanup failed: ${cleanup.error}`,
+        verified: true,
+        deletionCleanupError: cleanup.ok ? null : cleanup.error,
+        reason: cleanup.ok ? 'legacy_history_cleanup_retried' : 'legacy_history_cleanup_failed',
       }
     }
     const legacySessions = loadLegacySessions()
@@ -226,12 +235,22 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
 
     async clearAll() {
       await ensureReady()
+      // SQLite first, and its transaction also writes the tombstone that stops
+      // the legacy copy from ever being imported back. If this throws, the
+      // transaction rolled back and the legacy copy is deliberately left
+      // untouched — nothing has been deleted anywhere.
       await invoke('db_clear_all')
       const cleanup = clearLegacyHistory()
       if (!cleanup.ok) {
         const marker = markHistoryDeletionPending()
         const markerError = marker.ok ? '' : `; deletion retry marker failed: ${marker.error}`
-        throw new Error(`History was cleared from the native database, but the legacy copy could not be removed: ${cleanup.error}${markerError}`)
+        const error = new Error(`History was cleared from the native database, but the legacy copy could not be removed: ${cleanup.error}${markerError}`)
+        // Two very different failures reach the caller from this method, and
+        // they mean opposite things to the user: this one deleted the history,
+        // a rejected `db_clear_all` deleted nothing. Callers must be able to
+        // tell them apart before wording a message about it.
+        error.partialDeletion = true
+        throw error
       }
       clearHistoryDeletionPending()
     },

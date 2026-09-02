@@ -173,6 +173,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null)
   const [saveError, setSaveError] = useState(null)
   const [migrationError, setMigrationError] = useState(null)
+  const [deletionCleanupError, setDeletionCleanupError] = useState(null)
   const [historyLoadError, setHistoryLoadError] = useState(null)
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
@@ -216,7 +217,13 @@ export default function App() {
         // A refused or unverified import is not a detail to swallow: it means
         // history is still only in the old store, and the user needs to know
         // why rather than being shown an app that looks empty.
-        if (!cancelled && result && result.verified === false) {
+        //
+        // A leftover copy after a deletion is the opposite situation and must
+        // not borrow that wording: there the history really was deleted, so
+        // "nothing has been deleted" would be exactly backwards.
+        if (!cancelled && result?.deletionCleanupError) {
+          setDeletionCleanupError(result.deletionCleanupError)
+        } else if (!cancelled && result && result.verified === false) {
           setMigrationError(result.reason || 'the import could not be verified')
         }
         return sessionRepository.backfillFocusLedger()
@@ -424,6 +431,17 @@ export default function App() {
             ({migrationError}). Nothing has been deleted — your sessions are
             still being read from their original storage, and the app will try
             the import again next launch.
+          </span>
+        </div>
+      )}
+      {deletionCleanupError && screen !== 'session' && (
+        <div className="session-save-error" role="alert">
+          <span>
+            Your history was deleted from the local database, but the older
+            browser-storage copy could not be removed ({deletionCleanupError}).
+            Nothing is read from that copy any more and it can never be imported
+            back, but it is still on this device. The app will try to remove it
+            again next launch.
           </span>
         </div>
       )}

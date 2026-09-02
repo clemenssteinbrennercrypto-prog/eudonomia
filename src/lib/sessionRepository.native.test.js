@@ -434,6 +434,59 @@ describe('complete native history deletion', () => {
     await expect(repo.clearAll()).rejects.toThrow('database locked')
     expect(localStorage.getItem('eudaimonia_sessions')).not.toBeNull()
   })
+
+  // The two failures are worded very differently for the user, so the error
+  // has to say which one happened. Without this flag a rejected native delete
+  // — which removes nothing at all — was reported as a partial deletion.
+  it('marks a leftover legacy copy as partial and a refused native delete as not', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    await expect(repo.clearAll()).rejects.toMatchObject({ partialDeletion: true })
+
+    globalThis.localStorage = new MemoryStorage()
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_clear_all: () => { throw new Error('database locked') } })
+    repo = createNativeSessionRepository()
+    const refused = await repo.clearAll().catch(error => error)
+    expect(refused.partialDeletion).toBeUndefined()
+  })
+})
+
+// A deletion whose localStorage cleanup failed used to come back from startup
+// as `verified: false`, which is the app's signal for "the import did not
+// land". The user was then told, right after deleting their history, that
+// nothing had been deleted, that their sessions were still being read from the
+// old store, and that the import would be retried next launch. All three were
+// false: SQLite was cleared, its tombstone permanently refuses the old copy,
+// and reads had already moved to SQLite.
+describe('a failed deletion cleanup is not reported as a failed import', () => {
+  beforeEach(() => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.setItem('eudaimonia_history_deletion_pending', 'true')
+  })
+
+  it('keeps the handover verified and names the leftover copy instead', async () => {
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    repo = createNativeSessionRepository()
+
+    const result = await repo.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBe('storage unavailable')
+    // Reads must stay on the cleared SQLite store, never on the leftover copy.
+    expect(repo.migrated).toBe(true)
+    expect(await repo.loadAll()).toEqual([])
+    expect(called('db_migrate_legacy')).toBe(false)
+  })
+
+  it('reports nothing once the retry succeeds', async () => {
+    repo = createNativeSessionRepository()
+
+    const result = await repo.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBeNull()
+    expect(localStorage.getItem('eudaimonia_sessions')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBeNull()
+  })
 })
 
 // Making V2 scoreable only helped sessions recorded afterwards: the ones
