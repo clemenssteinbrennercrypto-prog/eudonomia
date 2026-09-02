@@ -74,7 +74,7 @@ Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rech
 
 Schalten Sie unter Focus Apps auf "Lokal", läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
 
-Schalten Sie auf "Cloud", wird ausschließlich der von Ihnen eingegebene Zielsatz an Anthropic (USA) übermittelt. Nicht übertragen werden Aktivitätsprotokolle, Fenstertitel und Dateinamen. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
+Schalten Sie auf "Cloud", wird ausschließlich das ausdrücklich eingegebene Feld "Ziel" (der Zielsatz) zur Ableitung von Session-Erwartungen an Anthropic (USA) übermittelt. Aufgabenbezeichnung, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nicht übertragen; die Sitzungsbewertung bleibt lokal. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',

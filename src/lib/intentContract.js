@@ -114,6 +114,12 @@ Use lowercase for tool and site names. If the goal is too vague to judge, say
 so with "confidence": "low" rather than inventing specifics.`
 }
 
+// Cloud is deliberately narrower than local: only the explicit goal field is
+// allowed across the device boundary. Keep local task/tag prompts unchanged.
+export function buildCloudPrompt({ goal = '' } = {}) {
+  return buildPrompt({ goal: String(goal || '').trim() })
+}
+
 /** Built-in profiles. No network, no key, always answers. */
 async function keywordContract(intentInput) {
   const intent = deriveSessionIntent(intentInput)
@@ -152,7 +158,14 @@ export async function deriveContract(intentInput, { provider = 'keywords', timeo
   const fallback = await keywordContract(intentInput)
 
   if (chosen !== 'keywords') {
-    const text = await callModel(buildPrompt(intentInput), {
+    const goal = String(intentInput?.goal || '').trim()
+    // A task or tag is not consent to send anything to Anthropic.
+    if (chosen === 'cloud' && !goal) {
+      if (fallback) cache.set(key, fallback)
+      return fallback
+    }
+    const prompt = chosen === 'cloud' ? buildCloudPrompt({ goal }) : buildPrompt(intentInput)
+    const text = await callModel(prompt, {
       ...options,
       provider: chosen,
       timeoutMs: timeoutMs ?? PROVIDER_TIMEOUT_MS,

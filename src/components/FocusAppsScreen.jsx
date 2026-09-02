@@ -1166,8 +1166,9 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             Goal understanding
           </p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            How your goal sentence becomes session expectations. Only that one sentence is
-            ever sent — never your activity, window titles or file names.
+            How your explicit goal field becomes session expectations. With Cloud, only that
+            field is sent to Anthropic — never task labels, tags, activity, window titles or
+            file names. Session evidence stays local.
           </p>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>

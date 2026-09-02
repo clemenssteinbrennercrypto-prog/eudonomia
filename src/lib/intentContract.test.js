@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   PROVIDERS,
   buildPrompt,
+  buildCloudPrompt,
   clearContractCache,
   deriveContract,
   normalizeContract,
@@ -110,6 +111,13 @@ describe('the prompt sends the intention and nothing else', () => {
       expect(p).not.toContain(leak)
     }
   })
+
+  it('cloud prompt contains only the explicit goal field', () => {
+    const p = buildCloudPrompt({ goal: goalInput.goal })
+    expect(p).toContain(goalInput.goal)
+    expect(p).not.toContain(goalInput.task)
+    expect(p).not.toContain('Writing')
+  })
 })
 
 describe('switching providers is safe', () => {
@@ -163,6 +171,34 @@ describe('switching providers is safe', () => {
   it('falls back when the cloud provider has no key', async () => {
     const c = await deriveContract(goalInput, { provider: 'cloud' })
     expect(c.source).toBe('keywords')
+  })
+
+  it('does not call Anthropic when the explicit goal field is absent', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const c = await deriveContract({ task: 'Write thesis', tags: ['Private tag'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    expect(c?.source).toBe('keywords')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends no task, tags, title, URL, path, or filename to Anthropic', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ content: [{ text: JSON.stringify({ kind: 'writing', expectedTools: ['word'] }) }] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    await deriveContract({
+      task: 'PRIVATE TASK thesis_intro_v3.docx',
+      goal: 'Draft the intro chapter',
+      tags: ['PRIVATE TAG youtube.com/watch?v=secret'],
+    }, { provider: 'cloud', apiKey: 'secret-key' })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[0].content).toContain('Draft the intro chapter')
+    for (const leak of ['PRIVATE TASK', 'PRIVATE TAG', 'thesis_intro_v3.docx', 'youtube.com', '/Users/']) {
+      expect(body.messages[0].content).not.toContain(leak)
+    }
   })
 
   it('does not hang the session behind a slow model', async () => {
