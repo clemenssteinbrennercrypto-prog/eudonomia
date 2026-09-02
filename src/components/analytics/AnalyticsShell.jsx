@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { sessionRepository } from '../../lib/sessionRepository'
-import { emptyFocusLedger } from '../../lib/focusMetric'
+import { emptyFocusLedger, removeSessionFromFocusLedger } from '../../lib/focusMetric'
 import Overview from './Overview'
 import Patterns from './Patterns'
 import Sessions from './Sessions'
@@ -65,13 +65,15 @@ export default function AnalyticsShell({ onClose }) {
   const handleDeleteSession = async (id) => {
     await sessionRepository.deleteSession(id)
     if (selectedSessionId === id) setSelectedSessionId(null)
-    await refresh()
+    setSessions(current => current.filter(session => session.id !== id))
+    setFocusLedger(current => removeSessionFromFocusLedger(current, id))
   }
 
   const handleClearAll = async () => {
     await sessionRepository.clearAll()
     setSelectedSessionId(null)
-    await refresh()
+    setSessions([])
+    setFocusLedger(emptyFocusLedger())
   }
 
   const handleUpdateSession = async (id, patch) => {

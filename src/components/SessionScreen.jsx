@@ -62,6 +62,8 @@ import {
   nativeLandmarksForScoring,
 } from '../lib/cameraMeasurement'
 import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/sessionWindowLifecycle'
+import { sessionShortcutAction } from '../lib/destructiveActions'
+import ConfirmDialog from './ConfirmDialog'
 import {
   BLINK_WIN_MS,
   CONF_UNCERTAIN_MAX,
@@ -856,6 +858,7 @@ export default function SessionScreen({
   const nativePreviewHostRef = useRef(null)
   const syncNativePreviewRef = useRef(() => {})
   const sessionEndedRef = useRef(false)
+  const endConfirmRef = useRef(false)
   const startTimeRef    = useRef(Date.now())
   const isPausedRef     = useRef(true)
   const pausedAtRef     = useRef(Date.now()) // timestamp when paused
@@ -1546,25 +1549,46 @@ export default function SessionScreen({
   }, [])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  const requestEndConfirmation = useCallback(() => {
+    endConfirmRef.current = true
+    setEndConfirm(true)
+  }, [])
+
+  const cancelEndConfirmation = useCallback(() => {
+    endConfirmRef.current = false
+    setEndConfirm(false)
+  }, [])
+
   useEffect(() => {
     const handleKey = (e) => {
       if (sessionEndedRef.current) return
-      const tag = e.target.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const action = sessionShortcutAction({
+        key: e.key,
+        target: e.target,
+        endConfirmationOpen: endConfirmRef.current,
+        sessionPlanOpen: showSessionPlan,
+      })
 
-      if (e.key === ' ' || e.key === 'p') {
+      if (action === 'toggle-pause') {
         e.preventDefault()
         if (isPausedRef.current) resumeSession()
         else pauseSession()
-      } else if (e.key === 'Escape') {
-        endSession(false)
-      } else if (e.key === 'h') {
+      } else if (action === 'request-end-confirmation') {
+        e.preventDefault()
+        requestEndConfirmation()
+      } else if (action === 'cancel-end-confirmation') {
+        e.preventDefault()
+        cancelEndConfirmation()
+      } else if (action === 'close-session-plan') {
+        e.preventDefault()
+        setShowSessionPlan(false)
+      } else if (action === 'toggle-camera') {
         setCamHidden(h => !h)
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [endSession, pauseSession, resumeSession])
+  }, [cancelEndConfirmation, pauseSession, requestEndConfirmation, resumeSession, showSessionPlan])
 
   // ── Per-frame analysis ────────────────────────────────────────────────────
   const handleFaceResults = useCallback((results, capturedAt = Date.now()) => {
@@ -2707,7 +2731,7 @@ export default function SessionScreen({
               Try again
             </button>
             <button
-              onClick={() => endSession(false)}
+              onClick={requestEndConfirmation}
               style={{
                 background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 100, padding: '10px 28px',
@@ -2959,22 +2983,9 @@ export default function SessionScreen({
           </p>
         )}
 
-        {endConfirm ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>End session?</span>
-            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13 }}
-              onClick={() => { setEndConfirm(false); endSession(false) }}>Yes</button>
-            <button className="end-session-btn" style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid rgba(122,152,255,0.30)' }}
-              onClick={() => setEndConfirm(false)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="end-session-btn" onClick={() => {
-            setEndConfirm(true)
-            setTimeout(() => setEndConfirm(false), 3000)
-          }}>
-            End session
-          </button>
-        )}
+        <button className="end-session-btn" type="button" onClick={requestEndConfirmation}>
+          End session
+        </button>
 
         {/* Keyboard hint */}
         <div style={{
@@ -2992,6 +3003,19 @@ export default function SessionScreen({
           </span>
         </div>
       </div>
+      {endConfirm && (
+        <ConfirmDialog
+          title="End session?"
+          description="Your session will be saved and you’ll continue to the debrief."
+          confirmLabel="End session"
+          onConfirm={() => {
+            endConfirmRef.current = false
+            setEndConfirm(false)
+            endSession(false)
+          }}
+          onCancel={cancelEndConfirmation}
+        />
+      )}
       {showSessionPlan && (
         <div className="session-plan-backdrop session-plan-backdrop--live" role="presentation" onMouseDown={event => {
           if (event.target === event.currentTarget) setShowSessionPlan(false)
