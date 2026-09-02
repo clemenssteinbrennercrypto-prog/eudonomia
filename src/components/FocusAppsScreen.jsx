@@ -16,6 +16,7 @@ import {
   stopNativeCameraPrototype,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
+import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
@@ -1166,9 +1167,11 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
             Goal understanding
           </p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            How your explicit goal field becomes session expectations. With Cloud, only that
-            field is sent to Anthropic — never task labels, tags, activity, window titles or
-            file names. Session evidence stays local.
+            How your session plan becomes session expectations. With Cloud, only the text you
+            typed into "Definition of plan" is sent to Anthropic, cut to the first{' '}
+            {CLOUD_GOAL_MAX_CHARS} characters — never the session name, tags, activity, window
+            titles or file names, and never anything after the session. Leave that field empty
+            and nothing is sent: the built-in profiles answer instead.
           </p>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>

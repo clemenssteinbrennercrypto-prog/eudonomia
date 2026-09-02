@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 
 const navy = 'var(--ultra)'
 
@@ -74,7 +75,7 @@ Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rech
 
 Schalten Sie unter Focus Apps auf "Lokal", läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
 
-Schalten Sie auf "Cloud", wird ausschließlich das ausdrücklich eingegebene Feld "Ziel" (der Zielsatz) zur Ableitung von Session-Erwartungen an Anthropic (USA) übermittelt. Aufgabenbezeichnung, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nicht übertragen; die Sitzungsbewertung bleibt lokal. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
+Schalten Sie auf "Cloud", wird ausschließlich der Text übermittelt, den Sie selbst in das optionale Feld "Definition of plan" (Dialog "Session plan") geschrieben haben — gekürzt auf die ersten ${CLOUD_GOAL_MAX_CHARS} Zeichen und ausschließlich zur Ableitung der Session-Erwartungen. Dieser Text geht wörtlich an Anthropic (USA); ist das Feld leer, wird nichts übermittelt. Sessionname, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nie übertragen; die Sitzungsbewertung bleibt lokal. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',
