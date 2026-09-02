@@ -31,9 +31,11 @@ import {
 // without a browser or a camera. See attention.test.js — the invariants that
 // used to be prose in CLAUDE.md are enforced there now.
 import {
+  ALERT_SCORE,
   CALIBRATION_SECS,
   FLOW_SCORE,
   FOCUSED_SCORE,
+  GOOD_STREAK_SCORE,
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
@@ -2099,7 +2101,7 @@ export default function SessionScreen({
 
     if (trackingUncertain) {
       // signal unreliable — neither earn nor burn the focus ramp
-    } else if (score >= 72) {
+    } else if (score >= FLOW_SCORE) {
       sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
@@ -2115,9 +2117,9 @@ export default function SessionScreen({
       focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
     }
 
-    const newStatus = focusScoreRef.current >= 65
+    const newStatus = focusScoreRef.current >= GOOD_STREAK_SCORE
       ? 'focused'
-      : focusScoreRef.current >= 38
+      : focusScoreRef.current >= ALERT_SCORE
         ? 'distracted'
         : 'alert'
     // Trust gate: surface "signal weak" instead of a (held, possibly low) status
@@ -2140,7 +2142,7 @@ export default function SessionScreen({
       pitchDeg >= pitchDT * 0.75 &&
       pitchDeg < pitchDT &&
       headDownFramesRef.current >= 3
-    const weakFocus = hasFace && focusScoreRef.current >= 55 && focusScoreRef.current < 72 && primaryReason === 'focused'
+    const weakFocus = hasFace && focusScoreRef.current >= 55 && focusScoreRef.current < FLOW_SCORE && primaryReason === 'focused'
     const preDriftSignals = [
       unstableHead && 'gaze instability',
       earlyAwayGlance && 'away glances',
@@ -2271,7 +2273,7 @@ export default function SessionScreen({
       const distractedFor = now - distractedSinceRef.current
       const gentleCooldownOk = (now - lastGentleReminderRef.current) >= GENTLE_REMINDER_COOLDOWN_MS
       const lowFor = scoreLowSinceRef.current ? now - scoreLowSinceRef.current : 0
-      const severeAlertSoon = focusScoreRef.current < 1 &&
+      const severeAlertSoon = focusScoreRef.current < ALERT_SCORE &&
         scoreLowSinceRef.current &&
         (adaptedAlertMs - lowFor) <= GENTLE_REMINDER_SEVERE_BUFFER_MS
 
@@ -2301,7 +2303,7 @@ export default function SessionScreen({
       distractedSinceRef.current = null
     }
 
-    if (focusScoreRef.current < 1) {
+    if (focusScoreRef.current < ALERT_SCORE) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
@@ -2613,7 +2615,7 @@ export default function SessionScreen({
         { secs: 50 * 60, msg: '50 min — impressive focus ⚡' },
       ]
       for (const m of milestones) {
-        if (elapsedSecs === m.secs && focusScoreRef.current >= 65) {
+        if (elapsedSecs === m.secs && focusScoreRef.current >= GOOD_STREAK_SCORE) {
           setMilestone({ msg: m.msg })
           setTimeout(() => setMilestone(null), 3500)
           break
@@ -2855,8 +2857,8 @@ export default function SessionScreen({
           isCalibrating={isCalibrating}
           isPaused={isPaused}
           calibProgress={calibProgress}
-          focusedThreshold={1}
-          alertThreshold={1}
+          focusedThreshold={GOOD_STREAK_SCORE}
+          alertThreshold={ALERT_SCORE}
           countUp={!hasTimeLimit}
         />
 
