@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { callCloudModel } from './modelClient'
+import { callCloudModel, callModel } from './modelClient'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -30,5 +30,23 @@ describe('cloud transport boundary', () => {
     vi.stubGlobal('fetch', fetch)
     await expect(callCloudModel('goal only', { apiKey: 'sk-fake' })).rejects.toThrow('native cloud bridge unavailable')
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  // Tauri IPC cannot be cancelled, so the deadline has to be enforced on this
+  // side. A native call that never settles — a Keychain prompt waiting on the
+  // user — must not leave callModel pending past its timeout and apply a
+  // session contract long after the session that asked for it started.
+  it('still honours callModel\'s deadline when the native command never settles', async () => {
+    const invoke = vi.fn().mockReturnValue(new Promise(() => {}))
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    await expect(callModel('goal only', { provider: 'cloud', timeoutMs: 10 })).resolves.toBeNull()
+  })
+
+  it('rejects immediately when the caller aborted before the call', async () => {
+    const invoke = vi.fn().mockReturnValue(new Promise(() => {}))
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    const controller = new AbortController()
+    controller.abort()
+    await expect(callCloudModel('goal only', { signal: controller.signal })).rejects.toThrow('aborted')
   })
 })
