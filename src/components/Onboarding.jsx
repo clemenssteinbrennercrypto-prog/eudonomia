@@ -1,4 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  cameraAccessFailureMessage,
+  prepareCameraPreview,
+  releaseCameraStream,
+  stalledCameraMessage,
+} from '../lib/cameraReadiness'
 
 // ── Premium onboarding ────────────────────────────────────────────────────────
 // The whole point of these first 30 seconds: don't *tell* people the webcam
@@ -66,6 +72,7 @@ export default function Onboarding({ onComplete }) {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [awakenPhase, setAwakenPhase] = useState('scanning') // scanning → locked
+  const [awakenError, setAwakenError] = useState(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
@@ -75,14 +82,32 @@ export default function Onboarding({ onComplete }) {
   useEffect(() => {
     if (!isAwakening || !streamRef.current) return
     const v = videoRef.current
-    if (v) {
-      v.srcObject = streamRef.current
-      v.play().catch(() => {})
+    const stream = streamRef.current
+    const controller = new AbortController()
+    let cancelled = false
+
+    // A camera permission grant is not a measurement. Wait for the preview to
+    // present advancing frames before claiming that the tracker is ready.
+    prepareCameraPreview(v, stream, { signal: controller.signal })
+      .then(() => {
+        if (cancelled) return
+        setAwakenPhase('locked')
+        finish()
+      })
+      .catch(error => {
+        if (cancelled || error?.name === 'AbortError') return
+        setAwakenError(error?.code === 'no_advancing_frames'
+          ? stalledCameraMessage()
+          : cameraAccessFailureMessage(error))
+        setAwakenPhase('failed')
+        stopStream()
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      if (streamRef.current === stream) stopStream()
     }
-    // Cinematic beat: scan for a moment, then "lock on", then hand off.
-    const lock = setTimeout(() => setAwakenPhase('locked'), 2600)
-    const done = setTimeout(() => finish(), 4600)
-    return () => { clearTimeout(lock); clearTimeout(done) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAwakening])
 
@@ -91,7 +116,7 @@ export default function Onboarding({ onComplete }) {
 
   function stopStream() {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
+      releaseCameraStream(streamRef.current, videoRef.current)
       streamRef.current = null
     }
   }
@@ -128,6 +153,7 @@ export default function Onboarding({ onComplete }) {
 
   const handleEnableCamera = async () => {
     setError(null)
+    setAwakenError(null)
     setLoading(true)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -148,6 +174,7 @@ export default function Onboarding({ onComplete }) {
   // after install. Offered only once the camera has actually failed, so the
   // happy path is still "grant it".
   const handleContinueWithoutCamera = () => {
+    stopStream()
     localStorage.setItem('eudaimonia_onboarded', 'true')
     onComplete()
   }
@@ -284,13 +311,22 @@ export default function Onboarding({ onComplete }) {
           </div>
 
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
-              {awakenPhase === 'locked' ? "You're locked in." : 'Calibrating to you…'}
+              <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
+              {awakenPhase === 'locked' ? "You're locked in." : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
             </h2>
             <p style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
-              {awakenPhase === 'locked' ? 'Eudaimonia can see your focus now.' : 'Learning what your attention looks like.'}
+              {awakenPhase === 'locked' ? 'Eudaimonia can see your focus now.' : awakenPhase === 'failed' ? awakenError : 'Waiting for live frames from the camera.'}
             </p>
           </div>
+          {awakenPhase === 'failed' && (
+            <button
+              type="button"
+              onClick={handleContinueWithoutCamera}
+              style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}
+            >
+              Continue without camera
+            </button>
+          )}
         </div>
       )}
     </div>
