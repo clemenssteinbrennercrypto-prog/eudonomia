@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   cameraAccessFailureMessage,
+  isReadinessCancellation,
   prepareCameraPreview,
   releaseCameraStream,
   stalledCameraMessage,
@@ -74,6 +75,7 @@ export default function Onboarding({ onComplete }) {
   const [awakenError, setAwakenError] = useState(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const awakenActionRef = useRef(null)
 
   const isAwakening = step === 3
 
@@ -93,7 +95,10 @@ export default function Onboarding({ onComplete }) {
         setAwakenPhase('locked')
       })
       .catch(error => {
-        if (cancelled || error?.name === 'AbortError') return
+        // Filter on OUR signal, never on `error.name`: video.play() rejects
+        // with an AbortError of its own, and swallowing that one strands the
+        // user on "Checking your camera…" with no way forward.
+        if (cancelled || isReadinessCancellation(error, controller.signal)) return
         setAwakenError(error?.code === 'no_advancing_frames'
           ? stalledCameraMessage()
           : cameraAccessFailureMessage(error))
@@ -111,6 +116,15 @@ export default function Onboarding({ onComplete }) {
 
   // Always release the camera when leaving onboarding.
   useEffect(() => () => stopStream(), [])
+
+  // Resolving the check swaps the whole action area in. The button the user
+  // pressed to get here is already unmounted, so without this a keyboard user
+  // is parked on <body> and has to tab in from the top of the document to
+  // reach the only way forward.
+  useEffect(() => {
+    if (!isAwakening || awakenPhase === 'scanning') return
+    awakenActionRef.current?.focus()
+  }, [isAwakening, awakenPhase])
 
   function stopStream() {
     if (streamRef.current) {
@@ -216,7 +230,7 @@ export default function Onboarding({ onComplete }) {
           </div>
 
           {error && (
-            <div style={{ background: 'rgba(127,29,29,0.25)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 12, padding: '11px 15px', fontSize: 13, color: '#fca5a5', lineHeight: 1.5, textAlign: 'center', maxWidth: 400 }}>
+            <div role="alert" style={{ background: 'rgba(127,29,29,0.25)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 12, padding: '11px 15px', fontSize: 13, color: '#fca5a5', lineHeight: 1.5, textAlign: 'center', maxWidth: 400 }}>
               {error}
             </div>
           )}
@@ -295,8 +309,11 @@ export default function Onboarding({ onComplete }) {
             )}
           </div>
 
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
-              <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
+          {/* The outcome of the check is the whole point of this screen, and on
+              failure this text carries the only remedy. Announce it rather than
+              leaving a screen-reader user on a silent "Checking your camera…". */}
+          <div role="status" aria-live="polite" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
               {awakenPhase === 'locked' ? 'Live preview is ready.' : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
             </h2>
             <p style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
@@ -305,7 +322,7 @@ export default function Onboarding({ onComplete }) {
           </div>
           {awakenPhase === 'failed' && (
             <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-              <button type="button" onClick={handleRetryCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
+              <button type="button" ref={awakenActionRef} onClick={handleRetryCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
                 Try camera again
               </button>
               <button type="button" onClick={handleContinueWithoutCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
@@ -314,7 +331,7 @@ export default function Onboarding({ onComplete }) {
             </div>
           )}
           {awakenPhase === 'locked' && (
-            <button type="button" className="ob-cta" onClick={completeOnboarding} style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
+            <button type="button" ref={awakenActionRef} className="ob-cta" onClick={completeOnboarding} style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
               Continue
             </button>
           )}

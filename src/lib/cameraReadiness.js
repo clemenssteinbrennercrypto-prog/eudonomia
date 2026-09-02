@@ -10,10 +10,27 @@ export class CameraReadinessError extends Error {
   }
 }
 
+export const READINESS_CANCELLED = 'readiness_cancelled'
+
 function abortError() {
-  const error = new Error('Camera readiness check was cancelled.')
+  const error = new CameraReadinessError('Camera readiness check was cancelled.', READINESS_CANCELLED)
   error.name = 'AbortError'
   return error
+}
+
+/**
+ * Is this rejection our own cancellation, or a real camera failure?
+ *
+ * The two are NOT distinguishable by `error.name`. HTMLMediaElement.play()
+ * rejects with a DOMException named `AbortError` in the ordinary case where
+ * assigning srcObject interrupts the pending play promise, so a caller that
+ * discards every `AbortError` silently discards a genuine camera failure and
+ * leaves its "checking…" state on screen forever. Ask the signal instead: only
+ * our own cleanup aborts it.
+ */
+export function isReadinessCancellation(error, signal) {
+  if (signal?.aborted) return true
+  return error?.code === READINESS_CANCELLED
 }
 
 /**

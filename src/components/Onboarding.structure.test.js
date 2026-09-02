@@ -25,6 +25,22 @@ describe('onboarding camera handoff', () => {
     expect(source).toContain('onClick={completeOnboarding}')
   })
 
+  // These stay source-level on purpose: the repo has no DOM test environment,
+  // so an internal-state screen like the awakening cannot be driven. The
+  // decision that was actually wrong here — cancellation vs. a real camera
+  // error — lives in cameraReadiness.js and is covered behaviourally there.
+  it('never treats a failure as a cancellation by error name alone', () => {
+    expect(source).toContain('isReadinessCancellation(error, controller.signal)')
+    expect(source).not.toContain("error?.name === 'AbortError'")
+  })
+
+  it('announces the readiness outcome and moves focus to the way forward', () => {
+    expect(source).toContain('role="status" aria-live="polite"')
+    expect(source).toContain('role="alert"')
+    expect(source).toContain('ref={awakenActionRef}')
+    expect(source).toContain('awakenActionRef.current?.focus()')
+  })
+
   it('offers explicit camera retry and explicit skip, both with cleanup', () => {
     expect(source).toContain('Try camera again')
     expect(source).toContain('Continue without camera')

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cameraAccessFailureMessage,
+  isReadinessCancellation,
   prepareCameraPreview,
   releaseCameraStream,
   stalledCameraMessage,
@@ -73,6 +74,37 @@ describe('camera readiness', () => {
     await rejection
     expect(stalledCameraMessage()).toContain('no live frames arrived')
     expect(stalledCameraMessage()).toContain('Sessions cannot measure attention')
+  })
+
+  // A play() rejection is the failure this screen is most likely to hit in the
+  // WebView, and it arrives named AbortError — the same name our own
+  // cancellation uses. Conflating them leaves onboarding stuck on "Checking
+  // your camera…" with no retry, no skip and the camera still held.
+  it('surfaces a play() AbortError instead of mistaking it for a cancellation', async () => {
+    const { video } = controlledVideo()
+    const playAbort = Object.assign(new Error('The play() request was interrupted.'), { name: 'AbortError' })
+    video.play = vi.fn().mockRejectedValue(playAbort)
+    const controller = new AbortController()
+
+    await expect(prepareCameraPreview(video, { getTracks: () => [] }, { signal: controller.signal }))
+      .rejects.toBe(playAbort)
+    expect(isReadinessCancellation(playAbort, controller.signal)).toBe(false)
+    expect(cameraAccessFailureMessage(playAbort)).toContain('Sessions cannot measure attention')
+  })
+
+  it('recognises only its own cancellation, by signal and by code', async () => {
+    const { video } = controlledVideo()
+    const controller = new AbortController()
+    const readiness = waitForAdvancingVideoFrames(video, { signal: controller.signal })
+
+    controller.abort()
+    const cancellation = await readiness.catch(error => error)
+
+    expect(isReadinessCancellation(cancellation, controller.signal)).toBe(true)
+    // The code alone identifies it, so a caller without the signal is safe too.
+    expect(isReadinessCancellation(cancellation, undefined)).toBe(true)
+    expect(isReadinessCancellation({ code: 'no_advancing_frames' }, undefined)).toBe(false)
+    expect(isReadinessCancellation({ name: 'AbortError' }, undefined)).toBe(false)
   })
 
   it('cancels a pending frame check and stops every track during cleanup', async () => {
