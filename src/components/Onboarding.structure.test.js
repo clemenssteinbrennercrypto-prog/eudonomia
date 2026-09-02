@@ -30,7 +30,7 @@ describe('onboarding camera handoff', () => {
   // decision that was actually wrong here — cancellation vs. a real camera
   // error — lives in cameraReadiness.js and is covered behaviourally there.
   it('never treats a failure as a cancellation by error name alone', () => {
-    expect(source).toContain('isReadinessCancellation(error, controller.signal)')
+    expect(source).toContain('isReadinessCancellation(error)')
     expect(source).not.toContain("error?.name === 'AbortError'")
   })
 
@@ -39,12 +39,15 @@ describe('onboarding camera handoff', () => {
     expect(source).toContain('role="alert"')
     expect(source).toContain('ref={awakenActionRef}')
     expect(source).toContain('awakenActionRef.current?.focus()')
+    expect(source).toContain('aria-describedby="onboarding-camera-readiness-message"')
   })
 
   it('offers explicit camera retry and explicit skip, both with cleanup', () => {
     expect(source).toContain('Try camera again')
     expect(source).toContain('Continue without camera')
     expect(source).toContain('const handleRetryCamera')
+    expect(source).toContain('setCameraAttempt(attempt => attempt + 1)')
+    expect(source).not.toContain('transitionTo(2)')
     expect(source).toContain('releaseCameraStream(streamRef.current, videoRef.current)')
     expect(source).toContain('localStorage.setItem(\'eudaimonia_onboarded\', \'true\')')
   })

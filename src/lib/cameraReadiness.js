@@ -25,12 +25,45 @@ function abortError() {
  * rejects with a DOMException named `AbortError` in the ordinary case where
  * assigning srcObject interrupts the pending play promise, so a caller that
  * discards every `AbortError` silently discards a genuine camera failure and
- * leaves its "checking…" state on screen forever. Ask the signal instead: only
- * our own cleanup aborts it.
+ * leaves its "checking…" state on screen forever. Our cancellation carries a
+ * private error code, so callers never have to infer intent from a platform
+ * error name or from a signal that may have raced with another failure.
  */
-export function isReadinessCancellation(error, signal) {
-  if (signal?.aborted) return true
+export function isReadinessCancellation(error) {
   return error?.code === READINESS_CANCELLED
+}
+
+function waitForVideoPlayback(video, { timeoutMs, signal }) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const settle = (callback, value) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback(value)
+    }
+    const onAbort = () => settle(reject, abortError())
+    const timeoutId = setTimeout(() => {
+      settle(reject, new CameraReadinessError(
+        'The camera opened, but video playback did not start.',
+        'no_advancing_frames',
+      ))
+    }, timeoutMs)
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve()
+      .then(() => video.play())
+      .then(value => settle(resolve, value), error => settle(reject, error))
+  })
 }
 
 /**
@@ -125,13 +158,16 @@ export function waitForAdvancingVideoFrames(video, {
   })
 }
 
-export async function prepareCameraPreview(video, stream, options) {
+export async function prepareCameraPreview(video, stream, options = {}) {
   if (!video || !stream) {
     throw new CameraReadinessError('The camera preview is unavailable.', 'preview_unavailable')
   }
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const startedAt = Date.now()
   video.srcObject = stream
-  await video.play()
-  return waitForAdvancingVideoFrames(video, options)
+  await waitForVideoPlayback(video, { timeoutMs, signal: options.signal })
+  const remainingMs = Math.max(1, timeoutMs - (Date.now() - startedAt))
+  return waitForAdvancingVideoFrames(video, { ...options, timeoutMs: remainingMs })
 }
 
 export function releaseCameraStream(stream, video = null) {
@@ -147,7 +183,7 @@ export function cameraAccessFailureMessage(error) {
   switch (error?.name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return `Camera access was denied. Allow Eudaimonia under System Settings › Privacy & Security › Camera, then come back. ${measurementWarning}`
+      return `Camera access was denied. macOS will not ask again until you allow Eudaimonia under System Settings › Privacy & Security › Camera. Change it there, then try again. ${measurementWarning}`
     case 'NotReadableError':
     case 'AbortError':
       return `Another app may be using the camera. Quit Zoom, Teams, FaceTime, or Photo Booth and try again. ${measurementWarning}`

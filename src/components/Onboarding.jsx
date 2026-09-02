@@ -73,6 +73,7 @@ export default function Onboarding({ onComplete }) {
   const [loading, setLoading] = useState(false)
   const [awakenPhase, setAwakenPhase] = useState('scanning') // scanning → locked
   const [awakenError, setAwakenError] = useState(null)
+  const [cameraAttempt, setCameraAttempt] = useState(0)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const awakenActionRef = useRef(null)
@@ -98,7 +99,7 @@ export default function Onboarding({ onComplete }) {
         // Filter on OUR signal, never on `error.name`: video.play() rejects
         // with an AbortError of its own, and swallowing that one strands the
         // user on "Checking your camera…" with no way forward.
-        if (cancelled || isReadinessCancellation(error, controller.signal)) return
+        if (cancelled || isReadinessCancellation(error)) return
         setAwakenError(error?.code === 'no_advancing_frames'
           ? stalledCameraMessage()
           : cameraAccessFailureMessage(error))
@@ -112,7 +113,7 @@ export default function Onboarding({ onComplete }) {
       if (streamRef.current === stream) stopStream()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAwakening])
+  }, [isAwakening, cameraAttempt])
 
   // Always release the camera when leaving onboarding.
   useEffect(() => () => stopStream(), [])
@@ -171,11 +172,21 @@ export default function Onboarding({ onComplete }) {
     onComplete()
   }
 
-  const handleRetryCamera = () => {
+  const handleRetryCamera = async () => {
     stopStream()
     setAwakenError(null)
-    setAwakenPhase('scanning')
-    transitionTo(2)
+    setLoading(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      streamRef.current = stream
+      setAwakenPhase('scanning')
+      setCameraAttempt(attempt => attempt + 1)
+    } catch (error) {
+      setAwakenError(cameraAccessFailureMessage(error))
+      setAwakenPhase('failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const slide = SLIDES[step] || SLIDES[0]
@@ -316,22 +327,22 @@ export default function Onboarding({ onComplete }) {
             <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
               {awakenPhase === 'locked' ? 'Live preview is ready.' : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
             </h2>
-            <p style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
+            <p id="onboarding-camera-readiness-message" style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
               {awakenPhase === 'locked' ? 'Live preview works. Attention measurement begins when a session starts.' : awakenPhase === 'failed' ? awakenError : 'Waiting for live frames from the camera.'}
             </p>
           </div>
           {awakenPhase === 'failed' && (
             <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-              <button type="button" ref={awakenActionRef} onClick={handleRetryCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
-                Try camera again
+              <button type="button" ref={awakenActionRef} onClick={handleRetryCamera} disabled={loading} aria-describedby="onboarding-camera-readiness-message" style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: loading ? 'default' : 'pointer', textDecoration: 'underline', textUnderlineOffset: 4, opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Requesting camera…' : 'Try camera again'}
               </button>
-              <button type="button" onClick={handleContinueWithoutCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
+              <button type="button" onClick={handleContinueWithoutCamera} disabled={loading} aria-describedby="onboarding-camera-readiness-message" style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: loading ? 'default' : 'pointer', textDecoration: 'underline', textUnderlineOffset: 4, opacity: loading ? 0.7 : 1 }}>
                 Continue without camera
               </button>
             </div>
           )}
           {awakenPhase === 'locked' && (
-            <button type="button" ref={awakenActionRef} className="ob-cta" onClick={completeOnboarding} style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
+            <button type="button" ref={awakenActionRef} className="ob-cta" onClick={completeOnboarding} aria-describedby="onboarding-camera-readiness-message" style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
               Continue
             </button>
           )}

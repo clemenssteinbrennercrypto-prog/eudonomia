@@ -43,7 +43,9 @@ describe('camera readiness', () => {
     const stream = { getTracks: () => [] }
     const readiness = prepareCameraPreview(video, stream, { timeoutMs: 1000 })
 
+    await Promise.resolve()
     await video.play.mock.results[0].value
+    await vi.waitFor(() => expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1))
     present(0)
     present(0.033)
     present(0.066)
@@ -56,6 +58,7 @@ describe('camera readiness', () => {
   it('gives denied permission an actionable explanation without implying measurement', () => {
     const message = cameraAccessFailureMessage({ name: 'NotAllowedError' })
     expect(message).toContain('System Settings › Privacy & Security › Camera')
+    expect(message).toContain('macOS will not ask again')
     expect(message).toContain('Sessions cannot measure attention')
     expect(message).not.toMatch(/learn|calibrat|focus lock/i)
   })
@@ -88,7 +91,7 @@ describe('camera readiness', () => {
 
     await expect(prepareCameraPreview(video, { getTracks: () => [] }, { signal: controller.signal }))
       .rejects.toBe(playAbort)
-    expect(isReadinessCancellation(playAbort, controller.signal)).toBe(false)
+    expect(isReadinessCancellation(playAbort)).toBe(false)
     expect(cameraAccessFailureMessage(playAbort)).toContain('Sessions cannot measure attention')
   })
 
@@ -100,11 +103,48 @@ describe('camera readiness', () => {
     controller.abort()
     const cancellation = await readiness.catch(error => error)
 
-    expect(isReadinessCancellation(cancellation, controller.signal)).toBe(true)
-    // The code alone identifies it, so a caller without the signal is safe too.
-    expect(isReadinessCancellation(cancellation, undefined)).toBe(true)
-    expect(isReadinessCancellation({ code: 'no_advancing_frames' }, undefined)).toBe(false)
-    expect(isReadinessCancellation({ name: 'AbortError' }, undefined)).toBe(false)
+    expect(isReadinessCancellation(cancellation)).toBe(true)
+    expect(isReadinessCancellation({ code: 'no_advancing_frames' })).toBe(false)
+    expect(isReadinessCancellation({ name: 'AbortError' })).toBe(false)
+  })
+
+  it('times out while play() itself remains pending', async () => {
+    vi.useFakeTimers()
+    const { video } = controlledVideo()
+    video.play = vi.fn().mockReturnValue(new Promise(() => {}))
+    const readiness = prepareCameraPreview(video, { getTracks: () => [] }, { timeoutMs: 500 })
+    const rejection = expect(readiness).rejects.toMatchObject({ code: 'no_advancing_frames' })
+
+    await vi.advanceTimersByTimeAsync(500)
+
+    await rejection
+  })
+
+  it('aborts while play() itself remains pending', async () => {
+    const { video } = controlledVideo()
+    video.play = vi.fn().mockReturnValue(new Promise(() => {}))
+    const controller = new AbortController()
+    const readiness = prepareCameraPreview(video, { getTracks: () => [] }, { signal: controller.signal })
+
+    controller.abort()
+
+    await expect(readiness).rejects.toMatchObject({ code: 'readiness_cancelled' })
+  })
+
+  it('detects advancing frames through the older-WebView polling fallback', async () => {
+    vi.useFakeTimers()
+    const { video } = controlledVideo()
+    delete video.requestVideoFrameCallback
+    delete video.cancelVideoFrameCallback
+    const readiness = waitForAdvancingVideoFrames(video, { timeoutMs: 500 })
+
+    await vi.advanceTimersByTimeAsync(50)
+    video.currentTime = 0.033
+    await vi.advanceTimersByTimeAsync(50)
+    video.currentTime = 0.066
+    await vi.advanceTimersByTimeAsync(50)
+
+    await expect(readiness).resolves.toMatchObject({ advances: 2, mediaTime: 0.066 })
   })
 
   it('cancels a pending frame check and stops every track during cleanup', async () => {
