@@ -98,6 +98,20 @@ describe('SessionScreen accumulation wiring', () => {
     // Flow is a claim about measured time; a fault must retract it, not freeze it.
     expect(reset).toContain('inFlowRef.current = false')
     expect(reset).toContain('setInFlowState(false)')
+
+    // Keep this open-ended: a newly introduced camera-duration ref must join
+    // the reset without someone remembering to extend a hand-maintained list.
+    // Activity classification continues natively while camera frames are
+    // absent, so its own duration is deliberately independent of this reset.
+    const cameraDurationRefs = [...source.matchAll(
+      /const\s+([A-Za-z0-9]+(?:SinceRef|StartRef|ChargeMsRef))\s*=\s*useRef/g,
+    )]
+      .map(match => match[1])
+      .filter(name => name !== 'activeDistractionSinceRef')
+    for (const refName of cameraDurationRefs) {
+      expect(reset, `${refName} must reset with camera evidence`)
+        .toContain(`${refName}.current =`)
+    }
   })
 
   it('applies the camera-evidence reset to faults and listener restarts', () => {

@@ -299,7 +299,7 @@ describe('the score bands stay separated', () => {
 
   it('keeps every bar well clear of the score floor', () => {
     // A bar near 0 makes every second qualify. That is the whole failure.
-    for (const bar of [FOCUSED_SCORE, GOOD_STREAK_SCORE, FLOW_SCORE]) {
+    for (const bar of [ALERT_SCORE, FOCUSED_SCORE, GOOD_STREAK_SCORE, FLOW_SCORE]) {
       expect(bar).toBeGreaterThan(30)
     }
   })

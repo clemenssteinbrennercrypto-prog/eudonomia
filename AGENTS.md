@@ -47,7 +47,7 @@ app but could never run the native measurement engine.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 442 tests — must stay green
+npm test           # vitest, currently 448 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -164,8 +164,9 @@ scoring or detection.**
    convention. Scoring depends on that opposition. Do not "simplify" it without
    re-deriving from data.
 8. **The score bands are named constants and must stay separated.**
-   `FOCUSED_SCORE` (40) < `GOOD_STREAK_SCORE` (65) < `FLOW_SCORE` (72), all in
-   `attention.js`. `FOCUSED_SCORE` decides `focusedSeconds`, which IS the
+   `ALERT_SCORE` (38) < `FOCUSED_SCORE` (40) < `GOOD_STREAK_SCORE` (65) <
+   `FLOW_SCORE` (72), all in `attention.js`. `FOCUSED_SCORE` decides
+   `focusedSeconds`, which IS the
    reported focus percentage — history trends, calibration, the end screen and
    the CSV export are all derived from it. Removing the energy profile replaced
    all three with the literal `1`, so every second at score ≥ 1 counted as
@@ -279,7 +280,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 442 JS tests and 72 Rust tests (13 native-camera library
+There are currently 448 JS tests and 72 Rust tests (13 native-camera library
 tests plus 59 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
