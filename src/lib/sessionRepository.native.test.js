@@ -450,6 +450,29 @@ describe('complete native history deletion', () => {
     const refused = await repo.clearAll().catch(error => error)
     expect(refused.partialDeletion).toBeUndefined()
   })
+
+  // The native clear commits a tombstone, so the legacy copy stops being a
+  // store the moment it lands. A launch still served by the legacy adapter
+  // used to go on reading the history the user had just deleted, and wrote new
+  // sessions into that copy — which the next launch's cleanup then destroyed.
+  it('stops reading and writing the legacy copy the moment the native clear commits', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'a' }, { id: 'b' }]))
+    // db_migrate_legacy answers with nothing, so the import is unverified and
+    // this launch is still served by the legacy adapter.
+    repo = createNativeSessionRepository()
+    await repo.migrateLegacyIfNeeded()
+    expect(repo.migrated).toBe(false)
+
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    await expect(repo.clearAll()).rejects.toMatchObject({ partialDeletion: true })
+
+    expect(repo.migrated).toBe(true)
+    expect(await repo.loadAll()).toEqual([])
+    await repo.saveSession({ task: 'after the delete', actualSeconds: 60 })
+    expect(called('db_save_session')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('eudaimonia_sessions')))
+      .not.toContainEqual(expect.objectContaining({ task: 'after the delete' }))
+  })
 })
 
 // A deletion whose localStorage cleanup failed used to come back from startup

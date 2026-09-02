@@ -240,6 +240,13 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
       // transaction rolled back and the legacy copy is deliberately left
       // untouched — nothing has been deleted anywhere.
       await invoke('db_clear_all')
+      // From this commit on, SQLite is authoritative no matter what the
+      // migration had decided: the tombstone means the legacy copy can never
+      // be imported, so it is not a store any more, just a leftover. Without
+      // this, a launch still served by the legacy adapter kept answering reads
+      // from the copy the user had just deleted, and — worse — wrote new
+      // sessions into it, which the next launch's cleanup then destroyed.
+      migrated = true
       const cleanup = clearLegacyHistory()
       if (!cleanup.ok) {
         const marker = markHistoryDeletionPending()
