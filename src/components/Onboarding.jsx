@@ -8,9 +8,8 @@ import {
 
 // ── Premium onboarding ────────────────────────────────────────────────────────
 // The whole point of these first 30 seconds: don't *tell* people the webcam
-// reads their focus — *show* them. The flow ends on a live "awakening" moment
-// where their own face appears inside a ring that scans + locks on. That single
-// moment is the product's promise made real.
+// reads their focus — *show* them. The flow ends on a live preview moment so
+// the user can see that camera presentation works before entering the app.
 
 const font = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", system-ui, sans-serif'
 
@@ -92,7 +91,6 @@ export default function Onboarding({ onComplete }) {
       .then(() => {
         if (cancelled) return
         setAwakenPhase('locked')
-        finish()
       })
       .catch(error => {
         if (cancelled || error?.name === 'AbortError') return
@@ -121,34 +119,15 @@ export default function Onboarding({ onComplete }) {
     }
   }
 
-  function finish() {
+  function completeOnboarding() {
     stopStream()
+    localStorage.setItem('eudaimonia_onboarded', 'true')
     onComplete()
   }
 
   const transitionTo = (next) => {
     setVisible(false)
     setTimeout(() => { setStep(next); setVisible(true) }, 220)
-  }
-
-  // Why the camera failed decides what the user should do about it, and the
-  // remedies are not interchangeable: a denial needs System Settings and will
-  // NOT re-prompt on a second click, while a camera held by Zoom just needs the
-  // other app closed. One generic "try again" sent both down a dead end.
-  const cameraFailureMessage = (err) => {
-    switch (err?.name) {
-      case 'NotAllowedError':
-      case 'SecurityError':
-        return 'Camera access was denied. macOS will not ask a second time — allow Eudaimonia under System Settings › Privacy & Security › Camera, then come back.'
-      case 'NotReadableError':
-      case 'AbortError':
-        return 'Another app is using the camera. Quit it (Zoom, Teams, FaceTime, Photo Booth) and try again.'
-      case 'NotFoundError':
-      case 'OverconstrainedError':
-        return 'No camera found. Connect one, then try again.'
-      default:
-        return 'The camera could not be started. Try again, or continue without it for now.'
-    }
   }
 
   const handleEnableCamera = async () => {
@@ -158,13 +137,12 @@ export default function Onboarding({ onComplete }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       streamRef.current = stream
-      localStorage.setItem('eudaimonia_onboarded', 'true')
       setLoading(false)
       setAwakenPhase('scanning')
       transitionTo(3) // → the awakening
     } catch (err) {
       setLoading(false)
-      setError(cameraFailureMessage(err))
+      setError(cameraAccessFailureMessage(err))
     }
   }
 
@@ -177,6 +155,13 @@ export default function Onboarding({ onComplete }) {
     stopStream()
     localStorage.setItem('eudaimonia_onboarded', 'true')
     onComplete()
+  }
+
+  const handleRetryCamera = () => {
+    stopStream()
+    setAwakenError(null)
+    setAwakenPhase('scanning')
+    transitionTo(2)
   }
 
   const slide = SLIDES[step] || SLIDES[0]
@@ -312,19 +297,25 @@ export default function Onboarding({ onComplete }) {
 
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
               <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
-              {awakenPhase === 'locked' ? "You're locked in." : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
+              {awakenPhase === 'locked' ? 'Live preview is ready.' : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
             </h2>
             <p style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
-              {awakenPhase === 'locked' ? 'Eudaimonia can see your focus now.' : awakenPhase === 'failed' ? awakenError : 'Waiting for live frames from the camera.'}
+              {awakenPhase === 'locked' ? 'Live preview works. Attention measurement begins when a session starts.' : awakenPhase === 'failed' ? awakenError : 'Waiting for live frames from the camera.'}
             </p>
           </div>
           {awakenPhase === 'failed' && (
-            <button
-              type="button"
-              onClick={handleContinueWithoutCamera}
-              style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}
-            >
-              Continue without camera
+            <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
+              <button type="button" onClick={handleRetryCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                Try camera again
+              </button>
+              <button type="button" onClick={handleContinueWithoutCamera} style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                Continue without camera
+              </button>
+            </div>
+          )}
+          {awakenPhase === 'locked' && (
+            <button type="button" className="ob-cta" onClick={completeOnboarding} style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
+              Continue
             </button>
           )}
         </div>
