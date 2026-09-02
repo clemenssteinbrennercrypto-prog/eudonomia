@@ -25,6 +25,7 @@ export default function AnalyticsShell({ onClose }) {
   const [selectedSessionId, setSelectedSessionId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const [mutationError, setMutationError] = useState(null)
 
   // Overview and Patterns both run over the full history (calibration needs
   // every qualifying session), so the shell loads once and shares the result
@@ -69,9 +70,15 @@ export default function AnalyticsShell({ onClose }) {
   }
 
   const handleClearAll = async () => {
-    await sessionRepository.clearAll()
-    setSelectedSessionId(null)
-    await refresh()
+    try {
+      await sessionRepository.clearAll()
+      setMutationError(null)
+      setSelectedSessionId(null)
+      await refresh()
+    } catch (error) {
+      setMutationError(String(error?.message || error))
+      try { await refresh() } catch {}
+    }
   }
 
   const handleUpdateSession = async (id, patch) => {
@@ -81,6 +88,7 @@ export default function AnalyticsShell({ onClose }) {
 
   return (
     <div style={{ minHeight: 'calc(100vh - 64px)', background: 'var(--bg)' }}>
+      {mutationError && <div role="alert" className="session-save-error">History deletion was only partially completed: {mutationError}</div>}
       <div style={{ maxWidth: 1180, margin: '0 auto', padding: '40px 32px 80px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0 }}>

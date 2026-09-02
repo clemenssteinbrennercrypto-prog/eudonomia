@@ -15,7 +15,11 @@
 // hands them over as data.
 
 import {
+  clearLegacyHistory,
+  clearHistoryDeletionPending,
+  isHistoryDeletionPending,
   loadSessions as loadLegacySessions,
+  markHistoryDeletionPending,
   loadFocusLedger as loadLegacyFocusLedger,
 } from './storage'
 import {
@@ -76,6 +80,17 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
   let readyPromise = null
 
   async function migrateLegacyOnce() {
+    if (isHistoryDeletionPending()) {
+      const cleanup = clearLegacyHistory()
+      if (cleanup.ok) clearHistoryDeletionPending()
+      migrated = true
+      return {
+        migrated: false,
+        importedCount: 0,
+        verified: cleanup.ok,
+        reason: cleanup.ok ? 'legacy_history_cleanup_retried' : `legacy history cleanup failed: ${cleanup.error}`,
+      }
+    }
     const legacySessions = loadLegacySessions()
     const legacyLedger = loadLegacyFocusLedger()
     if (legacySessions.length === 0) {
@@ -210,8 +225,15 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
     },
 
     async clearAll() {
-      if (await servedByLegacy()) return legacy.clearAll()
+      await ensureReady()
       await invoke('db_clear_all')
+      const cleanup = clearLegacyHistory()
+      if (!cleanup.ok) {
+        const marker = markHistoryDeletionPending()
+        const markerError = marker.ok ? '' : `; deletion retry marker failed: ${marker.error}`
+        throw new Error(`History was cleared from the native database, but the legacy copy could not be removed: ${cleanup.error}${markerError}`)
+      }
+      clearHistoryDeletionPending()
     },
 
     async loadFocusLedger() {

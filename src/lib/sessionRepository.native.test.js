@@ -278,7 +278,7 @@ describe('never shows an empty app while history is still in the old store', () 
   it('clears the store it is reading from', async () => {
     withLegacyHistory()
     await repo.clearAll()
-    expect(called('db_clear_all')).toBe(false)
+    expect(called('db_clear_all')).toBe(true)
     expect(await repo.loadAll()).toEqual([])
   })
 
@@ -356,6 +356,51 @@ describe('never shows an empty app while history is still in the old store', () 
     expect(await repo.loadFocusLedger()).toBeTruthy()
     expect(called('db_get_session')).toBe(false)
     expect(called('db_load_focus_ledger')).toBe(false)
+  })
+})
+
+describe('complete native history deletion', () => {
+  it('clears SQLite before removing the legacy copy and preserves preferences', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.setItem('eudaimonia_focus_daily_v1', JSON.stringify({ schemaVersion: 1, days: {} }))
+    localStorage.setItem('eudaimonia_focus_apps', JSON.stringify({ focusApps: ['Writing'] }))
+    localStorage.setItem('eudaimonia_focus_mode_enabled', 'true')
+    await repo.clearAll()
+    expect(called('db_clear_all')).toBe(true)
+    expect(localStorage.getItem('eudaimonia_sessions')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_daily_v1')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_apps')).not.toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_mode_enabled')).toBe('true')
+  })
+
+  it('reports a legacy cleanup failure after native success and prevents resurrection', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    const originalRemove = localStorage.removeItem.bind(localStorage)
+    localStorage.removeItem = (key) => {
+      if (key === 'eudaimonia_sessions') throw new Error('storage unavailable')
+      originalRemove(key)
+    }
+    await expect(repo.clearAll()).rejects.toThrow('cleared from the native database')
+    expect(called('db_clear_all')).toBe(true)
+    expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBe('true')
+
+    // A new repository must not import the stale localStorage copy.
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_load_all: () => [],
+      db_load_focus_ledger: () => ({ schemaVersion: 1, days: {} }),
+    })
+    invoked = []
+    const retry = createNativeSessionRepository()
+    await retry.migrateLegacyIfNeeded()
+    expect(called('db_migrate_legacy')).toBe(false)
+  })
+
+  it('does not touch legacy history when SQLite deletion fails', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_clear_all: () => { throw new Error('database locked') } })
+    repo = createNativeSessionRepository()
+    await expect(repo.clearAll()).rejects.toThrow('database locked')
+    expect(localStorage.getItem('eudaimonia_sessions')).not.toBeNull()
   })
 })
 

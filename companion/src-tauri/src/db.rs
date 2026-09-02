@@ -1311,6 +1311,7 @@ mod tests {
     fn clear_all_empties_sessions_and_ledger_together() {
         let mut connection = db();
         let day = json!({ "sessions": { "a": { "version": 1 } } });
+        meta_set(&connection, MIGRATION_STATUS_KEY, MIGRATION_DONE).unwrap();
         save_session(
             &mut connection,
             &session_value("a"),
@@ -1326,6 +1327,9 @@ mod tests {
             .as_object()
             .unwrap()
             .is_empty());
+        // Deleting history must not erase migration state: a stale legacy
+        // copy must never be imported again after the native store is clear.
+        assert_eq!(meta_get(&connection, MIGRATION_STATUS_KEY).unwrap().as_deref(), Some(MIGRATION_DONE));
     }
 
     #[test]

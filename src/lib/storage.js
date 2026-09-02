@@ -16,6 +16,7 @@ const MAX_SESSIONS = 100
 export const FOCUS_LEDGER_KEY = 'eudaimonia_focus_daily_v1'
 export const FOCUS_APPS_KEY = 'eudaimonia_focus_apps'
 export const FOCUS_MODE_KEY = 'eudaimonia_focus_mode_enabled'
+export const HISTORY_DELETION_PENDING_KEY = 'eudaimonia_history_deletion_pending'
 
 function normalizeAppList(apps) {
   if (!Array.isArray(apps)) return []
@@ -114,6 +115,39 @@ export function updateSession(id, patch) {
 export function clearAllSessions() {
   localStorage.removeItem(STORAGE_KEY)
   localStorage.removeItem(FOCUS_LEDGER_KEY)
+}
+
+/** Remove only history, reporting storage failures instead of hiding them. */
+export function clearLegacyHistory() {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(FOCUS_LEDGER_KEY)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  }
+}
+
+export function markHistoryDeletionPending() {
+  try {
+    localStorage.setItem(HISTORY_DELETION_PENDING_KEY, 'true')
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  }
+}
+
+export function clearHistoryDeletionPending() {
+  try {
+    localStorage.removeItem(HISTORY_DELETION_PENDING_KEY)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  }
+}
+
+export function isHistoryDeletionPending() {
+  try { return localStorage.getItem(HISTORY_DELETION_PENDING_KEY) === 'true' } catch { return false }
 }
 
 export function loadFocusLedger() {
