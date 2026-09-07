@@ -238,6 +238,13 @@ describe('deriveVerdict degrades to silence, never to fiction', () => {
     expect(await deriveVerdict(sessionFixture(), { provider: 'cloud' })).toBeNull()
   })
 
+  it('never sends session evidence to the cloud provider', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await deriveVerdict(sessionFixture(), { provider: 'cloud', apiKey: 'secret-key' })).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('does not hang the end screen behind a slow model', async () => {
     vi.stubGlobal('fetch', vi.fn((_url, opts) => new Promise((_resolve, reject) => {
       opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')))

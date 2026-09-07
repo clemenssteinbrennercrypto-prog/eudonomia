@@ -248,6 +248,10 @@ export function normalizeVerdict(raw, { source = 'local' } = {}) {
 export async function deriveVerdict(session, { provider = 'keywords', timeoutMs, ...options } = {}) {
   if (provider !== 'local' && provider !== 'cloud') return null
 
+  // Cloud may receive only the explicit goal field. A verdict requires
+  // activity/output evidence, so refuse rather than leak that session data.
+  if (provider === 'cloud') return null
+
   const input = buildVerdictInput(session)
   if (!input) return null
 

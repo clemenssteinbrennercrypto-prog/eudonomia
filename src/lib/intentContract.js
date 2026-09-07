@@ -28,6 +28,10 @@ import { PROVIDERS, callModel, parseModelJson, strList } from './modelClient'
 
 export { PROVIDERS, parseModelJson }
 
+// Keep the explicit cloud consent narrow and deterministic. Trim first so
+// whitespace does not consume the user's useful goal budget.
+export const CLOUD_GOAL_MAX_CHARS = 500
+
 /** A model gets this long before we stop waiting and use the keyword contract.
  *  Session start must never hang behind a model. */
 const PROVIDER_TIMEOUT_MS = 12_000
@@ -85,8 +89,9 @@ export function normalizeContract(raw, { source = 'keywords', fallbackKind = 'ge
 }
 
 // ── The prompt ───────────────────────────────────────────────────────────────
-// Only the goal line is sent. Never the activity log, window titles or file
-// names — those are the sensitive part and they stay on the machine.
+// The local model may use every explicit setup field. Activity logs, window
+// titles and file names are never inputs here. Cloud narrows this further via
+// buildCloudPrompt below.
 export function buildPrompt({ task = '', goal = '', tags = [] } = {}) {
   const stated = [task, goal, (tags || []).join(' ')].filter(Boolean).join(' — ')
   return `A person is starting a focused work session. This is what they wrote:
@@ -114,6 +119,17 @@ Use lowercase for tool and site names. If the goal is too vague to judge, say
 so with "confidence": "low" rather than inventing specifics.`
 }
 
+// Cloud is deliberately narrower than local: only the explicit goal field is
+// allowed across the device boundary. Keep local task/tag prompts unchanged.
+function boundedCloudGoal(goal) {
+  return [...String(goal ?? '').trim()].slice(0, CLOUD_GOAL_MAX_CHARS).join('')
+}
+
+export function buildCloudPrompt({ goal = '' } = {}) {
+  const boundedGoal = boundedCloudGoal(goal)
+  return buildPrompt({ goal: boundedGoal })
+}
+
 /** Built-in profiles. No network, no key, always answers. */
 async function keywordContract(intentInput) {
   const intent = deriveSessionIntent(intentInput)
@@ -133,8 +149,9 @@ async function keywordContract(intentInput) {
 // Same goal, same contract — a model is asked once per distinct goal, not once
 // per session.
 const cache = new Map()
-const cacheKey = (provider, input) =>
-  `${provider}|${input?.task || ''}|${input?.goal || ''}|${(input?.tags || []).join(',')}`
+const cacheKey = (provider, input) => provider === 'cloud'
+  ? `${provider}|${boundedCloudGoal(input?.goal)}`
+  : `${provider}|${input?.task || ''}|${input?.goal || ''}|${(input?.tags || []).join(',')}`
 
 export function clearContractCache() {
   cache.clear()
@@ -152,7 +169,14 @@ export async function deriveContract(intentInput, { provider = 'keywords', timeo
   const fallback = await keywordContract(intentInput)
 
   if (chosen !== 'keywords') {
-    const text = await callModel(buildPrompt(intentInput), {
+    const goal = String(intentInput?.goal || '').trim()
+    // A task or tag is not consent to send anything to Anthropic.
+    if (chosen === 'cloud' && !goal) {
+      if (fallback) cache.set(key, fallback)
+      return fallback
+    }
+    const prompt = chosen === 'cloud' ? buildCloudPrompt({ goal }) : buildPrompt(intentInput)
+    const text = await callModel(prompt, {
       ...options,
       provider: chosen,
       timeoutMs: timeoutMs ?? PROVIDER_TIMEOUT_MS,

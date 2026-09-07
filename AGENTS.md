@@ -249,10 +249,12 @@ a fabricated one costs trust.
 
 ### The one thing that leaves the device
 
-Goal understanding is **opt-in and off by default** (`keywords` provider). If the
-user switches to `local` (Ollama) or `cloud` (Anthropic API), **only the goal
-sentence they typed** is sent — never the activity log, window titles or file
-names. A test asserts the prompt contains none of them. Keep it that way.
+Goal understanding is **opt-in and off by default** (`keywords` provider). The
+`local` provider may receive the explicit session name, plan and tags, but it
+runs through Ollama on the same device. The `cloud` provider sends only the
+trimmed, bounded text from “Definition of plan” — never the session name, tags,
+activity log, window titles or file names — and sends nothing when that field is
+empty. Tests pin both boundaries. Keep them that way.
 
 All three providers are async, return the identical shape, and **fall back to
 `keywords`** on any failure. A model that is absent, slow or talking nonsense

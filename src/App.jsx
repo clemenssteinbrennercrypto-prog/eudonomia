@@ -11,7 +11,7 @@ import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
 import HistoryStorageAlerts from './components/HistoryStorageAlerts'
-import { loadFocusModeEnabled, saveFocusModeEnabled, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
+import { loadContractSettings, loadFocusModeEnabled, saveFocusModeEnabled, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
 import { setCloudApiKey } from './lib/nativeCompanion'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
@@ -373,6 +373,7 @@ export default function App() {
           setTags={setTags}
           workspaces={workspaceState.workspaces}
           activeWorkspaceId={workspaceState.activeWorkspaceId}
+          contractProvider={loadContractSettings().provider}
           onWorkspaceChange={(id) => setWorkspaceState({ ...workspaceState, activeWorkspaceId: id })}
           onEditWorkspaces={() => setScreen('setup')}
           onStart={handleStart}

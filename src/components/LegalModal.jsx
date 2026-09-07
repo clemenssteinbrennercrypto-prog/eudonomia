@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 
 const navy = 'var(--ultra)'
 
@@ -51,7 +52,7 @@ Gesichtsmerkmale werden NICHT zur Identifizierung von Personen verarbeitet. Es f
     body: `Auf Ihrem Gerät gespeichert werden (localStorage):
 – Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse, Zeitverlauf
 – Namen der während der Sitzung aktiven Apps und Websites
-– Ihr eingegebenes Ziel sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
+– Sessionname, optionale "Definition of plan" sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
 – Workspace-Konfiguration, Blockierlisten, Onboarding-Status
 
 Sie können alles jederzeit über History → Clear all oder Ihre Browser-Einstellungen löschen.`,
@@ -74,7 +75,7 @@ Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rech
 
 Schalten Sie unter Focus Apps auf "Lokal", läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
 
-Schalten Sie auf "Cloud", wird ausschließlich der von Ihnen eingegebene Zielsatz an Anthropic (USA) übermittelt. Nicht übertragen werden Aktivitätsprotokolle, Fenstertitel und Dateinamen. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
+Schalten Sie auf "Cloud", wird ausschließlich der Text übermittelt, den Sie selbst in das optionale Feld "Definition of plan" (Dialog "Session plan") geschrieben haben — gekürzt auf die ersten ${CLOUD_GOAL_MAX_CHARS} Zeichen und ausschließlich zur Ableitung der Session-Erwartungen. Dieser Text geht wörtlich an Anthropic (USA); ist das Feld leer, wird nichts übermittelt. Sessionname, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nie übertragen; die Sitzungsbewertung bleibt lokal. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',

@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   PROVIDERS,
+  CLOUD_GOAL_MAX_CHARS,
   buildPrompt,
+  buildCloudPrompt,
   clearContractCache,
   deriveContract,
   normalizeContract,
@@ -104,11 +106,50 @@ describe('the prompt sends the intention and nothing else', () => {
     expect(buildPrompt(goalInput)).toContain('Write the intro chapter')
   })
 
+  it('keeps task and tags in the local/general prompt', () => {
+    const p = buildPrompt(goalInput)
+    expect(p).toContain('Thesis')
+    expect(p).toContain('Writing')
+  })
+
   it('never carries activity, window titles or file names', () => {
     const p = buildPrompt(goalInput)
     for (const leak of ['thesis_intro_v3.docx', 'localhost', 'youtube.com/watch', '/Users/']) {
       expect(p).not.toContain(leak)
     }
+  })
+
+  it('cloud prompt contains only the explicit goal field', () => {
+    const p = buildCloudPrompt({ goal: goalInput.goal })
+    expect(p).toContain(goalInput.goal)
+    expect(p).not.toContain(goalInput.task)
+    expect(p).not.toContain('Writing')
+  })
+
+  it('trims cloud goal whitespace before applying the character bound', () => {
+    const p = buildCloudPrompt({ goal: `  ${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}  ` })
+    expect(p).toContain(`"${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}"`)
+    expect(p).not.toContain(` ${'a'.repeat(CLOUD_GOAL_MAX_CHARS)}`)
+  })
+
+  it('keeps an exact-boundary cloud goal intact', () => {
+    const goal = 'b'.repeat(CLOUD_GOAL_MAX_CHARS)
+    expect(buildCloudPrompt({ goal })).toContain(`"${goal}"`)
+  })
+
+  it('bounds an overlong cloud goal after trimming', () => {
+    const goal = `${'c'.repeat(CLOUD_GOAL_MAX_CHARS)}TAIL`
+    const p = buildCloudPrompt({ goal: ` \n${goal}\t ` })
+    expect(p).toContain(`"${'c'.repeat(CLOUD_GOAL_MAX_CHARS)}"`)
+    expect(p).not.toContain('TAIL')
+  })
+
+  it('does not split a Unicode character at the cloud boundary', () => {
+    const goal = `${'a'.repeat(CLOUD_GOAL_MAX_CHARS - 1)}🧠TAIL`
+    const p = buildCloudPrompt({ goal })
+    expect(p).toContain(`${'a'.repeat(CLOUD_GOAL_MAX_CHARS - 1)}🧠`)
+    expect(p).not.toContain('TAIL')
+    expect(p).not.toContain('�')
   })
 })
 
@@ -161,8 +202,68 @@ describe('switching providers is safe', () => {
   })
 
   it('falls back when the cloud provider has no key', async () => {
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke: vi.fn().mockRejectedValue(new Error('missing key')) } } })
     const c = await deriveContract(goalInput, { provider: 'cloud' })
     expect(c.source).toBe('keywords')
+  })
+
+  it('does not call Anthropic when the explicit goal field is absent', async () => {
+    const invoke = vi.fn()
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    const c = await deriveContract({ task: 'Write thesis', tags: ['Private tag'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    expect(c?.source).toBe('keywords')
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('sends no task, tags, title, URL, path, or filename to Anthropic', async () => {
+    const invoke = vi.fn().mockResolvedValue(JSON.stringify({ kind: 'writing', expectedTools: ['word'] }))
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    await deriveContract({
+      task: 'PRIVATE TASK thesis_intro_v3.docx',
+      goal: 'Draft the intro chapter',
+      tags: ['PRIVATE TAG youtube.com/watch?v=secret'],
+      activity: [{ app: 'PRIVATE ACTIVITY APP', title: 'PRIVATE WINDOW TITLE' }],
+      privateField: 'PRIVATE FIELD',
+    }, { provider: 'cloud', apiKey: 'secret-key' })
+    const prompt = invoke.mock.calls[0][1].request.prompt
+    expect(prompt).toContain('Draft the intro chapter')
+    for (const leak of [
+      'PRIVATE TASK', 'PRIVATE TAG', 'PRIVATE ACTIVITY APP', 'PRIVATE WINDOW TITLE',
+      'PRIVATE FIELD', 'thesis_intro_v3.docx', 'youtube.com', '/Users/',
+    ]) {
+      expect(prompt).not.toContain(leak)
+    }
+  })
+
+  it('sends only the bounded, trimmed goal to Anthropic', async () => {
+    const invoke = vi.fn().mockResolvedValue(JSON.stringify({ kind: 'writing', expectedTools: ['word'] }))
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    const goal = `${'g'.repeat(CLOUD_GOAL_MAX_CHARS)}PRIVATE TAIL`
+    await deriveContract({ task: 'PRIVATE TASK', goal: `  ${goal}  `, tags: ['PRIVATE TAG'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    const prompt = invoke.mock.calls[0][1].request.prompt
+    expect(prompt).toContain('"' + 'g'.repeat(CLOUD_GOAL_MAX_CHARS) + '"')
+    expect(prompt).not.toContain('PRIVATE TAIL')
+    expect(prompt).not.toContain('PRIVATE TASK')
+    expect(prompt).not.toContain('PRIVATE TAG')
+  })
+
+  it('caches cloud contracts by the exact payload rather than local-only fields', async () => {
+    const invoke = vi.fn().mockResolvedValue(JSON.stringify({ kind: 'writing', expectedTools: ['word'] }))
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke } } })
+    const sharedPrefix = 'g'.repeat(CLOUD_GOAL_MAX_CHARS)
+
+    await deriveContract({ task: 'Private task A', goal: `${sharedPrefix} first tail`, tags: ['Private A'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    await deriveContract({ task: 'Private task B', goal: `${sharedPrefix} second tail`, tags: ['Private B'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+
+    expect(invoke).toHaveBeenCalledOnce()
   })
 
   it('does not hang the session behind a slow model', async () => {
