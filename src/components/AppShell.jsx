@@ -19,7 +19,7 @@ function Clock() {
   return <span className="app-shell-clock" aria-label={`${date}, ${time}`}>{date}<b>{time}</b></span>
 }
 
-export default function AppShell({ active, onNavigate, utility, children }) {
+export default function AppShell({ active, onNavigate, onLegal, utility, children }) {
   return (
     <div className="app-shell">
       <header className="app-shell-header">
@@ -44,6 +44,7 @@ export default function AppShell({ active, onNavigate, utility, children }) {
         </nav>
         <div className="app-shell-utilities">
           <Clock />
+          {onLegal && <button type="button" className="app-shell-nav-item" onClick={onLegal}>Legal</button>}
           {utility}
         </div>
       </header>

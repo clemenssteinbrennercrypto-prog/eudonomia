@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 
 const navy = 'var(--ultra)'
@@ -8,11 +8,11 @@ const navy = 'var(--ultra)'
 // abgemahnte Einzelpunkt überhaupt, weil er trivial nachprüfbar ist. Eine
 // Ausnahme für Einzelunternehmer gibt es nicht: ohne andere Niederlassung muss
 // die Wohnadresse hier stehen. Vor dem Launch ausfüllen.
-const IMPRESSUM = [
+export const IMPRESSUM = [
   {
     heading: 'Angaben gemäß § 5 ECG',
     body: `Name: Clemens Steinbrenner
-Adresse: Wien, Österreich
+Adresse: [Straße, Hausnummer, PLZ und Ort ergänzen]
 E-Mail: clemenssteinbrenner.crypto@gmail.com`,
   },
   {
@@ -32,10 +32,10 @@ E-Mail: clemenssteinbrenner.crypto@gmail.com`,
 //   Cloud-Anbieter        src/lib/intentContract.js      (cloudProvider)
 //   Standard = aus        src/lib/storage.js             (CONTRACT_DEFAULTS)
 //   Nur Metadaten         companion/src-tauri/src/output.rs
-const DATENSCHUTZ = [
+export const DATENSCHUTZ = [
   {
     heading: 'Verantwortlicher',
-    body: `Clemens Steinbrenner, Wien, Österreich (siehe Impressum)`,
+    body: `Clemens Steinbrenner (siehe Impressum)`,
   },
   {
     heading: 'Grundsatz',
@@ -43,39 +43,39 @@ const DATENSCHUTZ = [
   },
   {
     heading: 'Kamera',
-    body: `Die Kamera dient ausschließlich der Aufmerksamkeitsanalyse auf Ihrem Gerät. Es werden keine Video- oder Bilddaten gespeichert, gepuffert oder übertragen. Die Analyse läuft lokal mit MediaPipe; aus dem Kamerabild werden nur Messwerte wie Lidöffnung, Blinzelrate und Kopfhaltung abgeleitet, und auch diese verlassen das Gerät nicht.
+    body: `Die Kamera dient ausschließlich der Aufmerksamkeitsanalyse auf Ihrem Gerät. Einzelne Kamerabilder werden dafür kurzzeitig im Arbeitsspeicher verarbeitet, aber weder dauerhaft gespeichert noch übertragen. Die Analyse läuft lokal mit MediaPipe; aus dem Kamerabild werden nur Messwerte wie Lidöffnung, Blinzelrate und Kopfhaltung abgeleitet, und auch diese verlassen das Gerät nicht.
 
 Gesichtsmerkmale werden NICHT zur Identifizierung von Personen verarbeitet. Es findet kein Gesichtsabgleich und keine Wiedererkennung statt. Damit handelt es sich nicht um biometrische Daten im Sinne von Art. 9 DSGVO, der nur die Verarbeitung zum Zweck der eindeutigen Identifizierung erfasst.`,
   },
   {
     heading: 'Lokale Speicherung',
-    body: `Auf Ihrem Gerät gespeichert werden (localStorage):
-– Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse, Zeitverlauf
-– Namen der während der Sitzung aktiven Apps und Websites
-– Sessionname, optionale "Definition of plan" sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
-– Workspace-Konfiguration, Blockierlisten, Onboarding-Status
+    body: `In der nativen macOS-App werden Ihre Sitzungsdaten in einer lokalen SQLite-Datenbank im App-Datenordner gespeichert. Im Web- und Entwicklungsmodus verwendet die App localStorage. Es werden gespeichert:
+– Sitzungsstatistiken: Dauer, Fokus-Score, Ablenkungsereignisse und Zeitverlauf
+– beobachtete Apps, Websites und — soweit vom System geliefert — Fenstertitel
+– Sessionname, optionale „Definition of plan“ sowie Namen bearbeiteter Dateien, falls Sie die Fortschrittsmessung nutzen
+– Workspace-Konfiguration, Blockierlisten, Onboarding-Status und lokale Einstellungen
 
-Sie können alles jederzeit über History → Clear all oder Ihre Browser-Einstellungen löschen.`,
+In der App können Sie einzelne Sitzungen oder die gesamte Sitzungshistorie unter Analytics → Sessions löschen. „Clear all history“ löscht die lokale Sitzungshistorie einschließlich der zugehörigen Tageswerte; Workspace-Konfiguration und andere Einstellungen bleiben bestehen. Im Web-/Entwicklungsmodus können Sie zusätzlich die Website-Daten Ihres Browsers löschen.`,
   },
   {
     heading: 'Companion-App (macOS)',
-    body: `Während einer Sitzung fragt die Companion-App alle drei Sekunden ab, welche App im Vordergrund ist, und bei Browsern die Adresse des aktiven Tabs. Das dient dem Blockieren und der Ablenkungserkennung und bleibt im Arbeitsspeicher.
+    body: `Während einer Sitzung fragt die Companion-App ungefähr alle drei Sekunden ab, welche App im Vordergrund ist, und bei unterstützten Browsern die Adresse des aktiven Tabs. Diese Aktivitätsdaten werden für Ablenkungserkennung, Blockieren und die lokale Sitzungsübersicht verwendet und in der lokalen Sitzungshistorie gespeichert.
 
 Wenn Sie einen Projektordner für die Fortschrittsmessung auswählen, werden ausschließlich Metadaten gelesen: Dateinamen, Größen, Änderungszeitpunkte und Git-Zähler. Dateiinhalte werden nie geöffnet oder gelesen, Tastatureingaben nie aufgezeichnet.`,
   },
   {
     heading: 'Update-Prüfung (verlässt das Gerät)',
-    body: `Die App fragt beim Start und anschließend alle fünf Minuten bei GitHub an, ob eine neuere signierte Version vorliegt. Dabei werden technisch bedingt Ihre IP-Adresse und die installierte Versionsnummer an GitHub Inc. (Microsoft Corporation, USA) übermittelt.
+    body: `Die App fragt beim Start und anschließend ungefähr alle fünf Minuten bei GitHub Releases an, ob eine neuere signierte Version vorliegt. GitHub erhält dabei technisch bedingt Ihre IP-Adresse und übliche Verbindungsdaten. Die installierte Version wird von der App lokal mit der Antwort verglichen; Sitzungs-, Kamera- und Aktivitätsdaten werden nicht übertragen.
 
 Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rechtsgrundlage ist unser berechtigtes Interesse an sicheren und aktuellen Installationen (Art. 6 Abs. 1 lit. f DSGVO).`,
   },
   {
     heading: 'Zielverständnis per Sprachmodell (optional)',
-    body: `Standardmäßig ausgeschaltet. Die Voreinstellung arbeitet mit lokalen Stichwortprofilen und ohne jede Netzwerkverbindung.
+    body: `Standardmäßig ausgeschaltet. Die Voreinstellung „Built-in“ arbeitet mit lokalen Stichwortprofilen und ohne jede Netzwerkverbindung.
 
-Schalten Sie unter Focus Apps auf "Lokal", läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
+Schalten Sie unter Focus Apps auf „Local model“, läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
 
-Schalten Sie auf "Cloud", wird ausschließlich der Text übermittelt, den Sie selbst in das optionale Feld "Definition of plan" (Dialog "Session plan") geschrieben haben — gekürzt auf die ersten ${CLOUD_GOAL_MAX_CHARS} Zeichen und ausschließlich zur Ableitung der Session-Erwartungen. Dieser Text geht wörtlich an Anthropic (USA); ist das Feld leer, wird nichts übermittelt. Sessionname, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nie übertragen; die Sitzungsbewertung bleibt lokal. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
+Schalten Sie auf „Claude API“, wird ausschließlich der Text übermittelt, den Sie selbst in das optionale Feld „Definition of plan“ (Dialog „Session plan“) geschrieben haben — gekürzt auf die ersten ${CLOUD_GOAL_MAX_CHARS} Zeichen und ausschließlich zur Ableitung der Session-Erwartungen. Dieser Text geht wörtlich an Anthropic (USA); ist das Feld leer, wird nichts übermittelt. Sessionname, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nie übertragen; die Sitzungsbewertung bleibt lokal. Wenn der Cloud-Aufruf scheitert, fällt die App auf die lokalen Stichwortprofile zurück. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',
@@ -85,7 +85,7 @@ Schalten Sie auf "Cloud", wird ausschließlich der Text übermittelt, den Sie se
     heading: 'Ihre Rechte',
     body: `Ihnen stehen die Rechte auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch zu, ebenso ein Beschwerderecht bei der Österreichischen Datenschutzbehörde.
 
-In der Praxis liegen Ihre Daten ausschließlich bei Ihnen: Wir speichern keine Sitzungsdaten und können Sie anhand einer Update-Anfrage nicht identifizieren, weshalb wir Auskunfts- oder Löschbegehren dazu nicht zuordnen können (Art. 11 DSGVO). Ihre lokalen Daten löschen Sie selbst über History → Clear all.`,
+In der Praxis liegen die Sitzungsdaten ausschließlich bei Ihnen: Wir speichern keine Sitzungsdaten und können Sie anhand einer Update-Anfrage nicht identifizieren, weshalb wir Auskunfts- oder Löschbegehren dazu nicht zuordnen können (Art. 11 DSGVO). Ihre lokale Sitzungshistorie löschen Sie selbst über Analytics → Sessions → Clear all history; einzelne Sitzungen können dort ebenfalls gelöscht werden.`,
   },
   {
     heading: 'Kontakt',
@@ -115,18 +115,61 @@ function Section({ heading, body }) {
 
 export default function LegalModal({ open, onClose, initialTab }) {
   const [tab, setTab] = useState(initialTab ?? 'impressum')
+  const closeRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  const titleId = useId()
+
+  useLayoutEffect(() => {
+    if (open && initialTab) setTab(initialTab)
+  }, [open, initialTab])
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const previousFocus = document.activeElement
+    closeRef.current?.focus()
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onCloseRef.current?.()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus?.()
+    }
+  }, [open])
 
   if (!open) return null
-  // Sync active tab whenever the modal is reopened with a different initialTab
-  if (tab !== initialTab && initialTab) {
-    setTab(initialTab)
-  }
 
   const sections = tab === 'impressum' ? IMPRESSUM : DATENSCHUTZ
+  const keepFocusInside = (event) => {
+    if (event.key !== 'Tab') return
+    const controls = [...event.currentTarget.querySelectorAll(
+      'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
+    )]
+    if (controls.length === 0) return
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   return (
     <div
       className="legal-modal-enter"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onKeyDown={keepFocusInside}
       style={{
         position: 'fixed', inset: 0,
         background: 'var(--bg)',
@@ -139,10 +182,12 @@ export default function LegalModal({ open, onClose, initialTab }) {
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: 'var(--text)', margin: 0 }}>
+          <h1 id={titleId} style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: 'var(--text)', margin: 0 }}>
             {tab === 'impressum' ? 'Impressum' : 'Datenschutz'}
           </h1>
           <button
+            ref={closeRef}
+            type="button"
             onClick={onClose}
             style={{
               padding: '9px 22px', fontSize: 14, fontWeight: 600,
@@ -156,13 +201,15 @@ export default function LegalModal({ open, onClose, initialTab }) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
+        <div role="group" aria-label="Legal information" style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
           {[
             { id: 'impressum',   label: 'Impressum'   },
             { id: 'datenschutz', label: 'Datenschutz' },
           ].map(t => (
             <button
               key={t.id}
+              type="button"
+              aria-pressed={tab === t.id}
               onClick={() => setTab(t.id)}
               style={{
                 padding: '8px 20px', fontSize: 13, fontWeight: 600,
