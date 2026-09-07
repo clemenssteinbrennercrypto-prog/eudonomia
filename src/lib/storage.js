@@ -301,13 +301,13 @@ const CONTRACT_DEFAULTS = {
   localModel: 'qwen2.5:3b',
   localEndpoint: 'http://127.0.0.1:11434',
   cloudModel: 'claude-sonnet-5',
-  apiKey: '',
 }
 
 export function loadContractSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
-    return { ...CONTRACT_DEFAULTS, ...raw }
+    const { apiKey: _legacyKey, ...safe } = raw
+    return { ...CONTRACT_DEFAULTS, ...safe }
   } catch {
     return { ...CONTRACT_DEFAULTS }
   }
@@ -317,4 +317,23 @@ export function saveContractSettings(patch) {
   const next = { ...loadContractSettings(), ...patch }
   try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(next)) } catch {}
   return next
+}
+
+// One-shot compatibility bridge for versions that kept the key in WebView
+// storage. It is removed only after the native Keychain write succeeds.
+export function loadLegacyCloudApiKey() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
+    const key = typeof raw.apiKey === 'string' ? raw.apiKey.trim() : ''
+    if (!key) return ''
+    return key
+  } catch { return '' }
+}
+
+export function clearLegacyCloudApiKey() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
+    delete raw.apiKey
+    localStorage.setItem(CONTRACT_KEY, JSON.stringify(raw))
+  } catch {}
 }

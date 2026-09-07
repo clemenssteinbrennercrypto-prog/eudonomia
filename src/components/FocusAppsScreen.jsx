@@ -14,6 +14,9 @@ import {
   pushCompanionSession,
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
+  setCloudApiKey,
+  deleteCloudApiKey,
+  hasCloudApiKey,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
@@ -816,6 +819,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
   const [contract, setContract] = useState(loadContractSettings)
+  const [cloudKey, setCloudKey] = useState('')
+  const [cloudKeyStatus, setCloudKeyStatus] = useState('pending')
   const testTimerRef = useRef(null)
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
@@ -840,6 +845,14 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
       clearInterval(heartbeat)
       stopActivityUpdates()
     }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    hasCloudApiKey().then(configured => {
+      if (!cancelled) setCloudKeyStatus(configured === null ? 'error' : configured ? 'configured' : 'not-configured')
+    })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => () => {
@@ -877,6 +890,29 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const toggleStrictMode = () => {
     setStrictMode(saveStrictMode(!strictMode))
   }
+
+  const handleSaveCloudKey = async () => {
+    const key = cloudKey.trim()
+    if (!key) {
+      setCloudKeyStatus('error')
+      return
+    }
+    setCloudKeyStatus('saving')
+    const ok = await setCloudApiKey(key)
+    if (ok) setCloudKey('')
+    setCloudKeyStatus(ok ? 'configured' : 'error')
+  }
+
+  const handleRemoveCloudKey = async () => {
+    setCloudKeyStatus('removing')
+    const ok = await deleteCloudApiKey()
+    if (ok) setCloudKey('')
+    setCloudKeyStatus(ok ? 'not-configured' : 'error')
+  }
+
+  const cloudKeyBusy = cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending'
+  const saveKeyDisabled = !cloudKey.trim() || cloudKeyBusy
+  const removeKeyDisabled = cloudKeyBusy || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'
 
   // Leaving this screen used to discard unsaved edits without a word, while the
   // header meanwhile counted them as if they were live ("1 focus apps · 1
@@ -1219,14 +1255,45 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
               <input
                 type="password"
                 className="text-input"
-                value={contract.apiKey}
-                onChange={e => setContract(saveContractSettings({ apiKey: e.target.value.trim() }))}
+                value={cloudKey}
+                onChange={e => {
+                  setCloudKey(e.target.value)
+                  setCloudKeyStatus('not-saved')
+                }}
                 placeholder="Anthropic API key"
                 style={{ fontSize: 13 }}
               />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveCloudKey}
+                  disabled={saveKeyDisabled}
+                  style={{
+                    border: 'none', borderRadius: 10, padding: '8px 13px', fontFamily: 'inherit',
+                    background: saveKeyDisabled ? 'var(--line)' : 'var(--ultra)', color: 'var(--text)',
+                    cursor: saveKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 900,
+                  }}
+                >
+                  Save key
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveCloudKey}
+                  disabled={removeKeyDisabled}
+                  style={{
+                    border: '1px solid var(--line)', borderRadius: 10, padding: '8px 13px',
+                    fontFamily: 'inherit', background: 'var(--surface)', color: 'var(--text-secondary)',
+                    cursor: removeKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 850,
+                  }}
+                >
+                  Remove key
+                </button>
+                <span role="status" aria-live="polite" style={{ fontSize: 11, color: cloudKeyStatus === 'error' ? 'var(--bad)' : 'var(--text-muted)' }}>
+                  {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Keychain unavailable' })[cloudKeyStatus]}
+                </span>
+              </div>
               <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                The key is kept in this app's local storage, unencrypted. Use a key scoped to
-                this purpose that you can revoke.
+                The key is kept in your macOS Keychain and is used only for goal understanding.
               </p>
             </>
           )}

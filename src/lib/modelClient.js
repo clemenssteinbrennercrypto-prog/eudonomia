@@ -15,6 +15,28 @@ export const DEFAULT_TIMEOUT_MS = 12_000
 
 export const PROVIDERS = ['keywords', 'local', 'cloud']
 
+async function callNativeCloud(prompt, signal) {
+  const invoke = globalThis.window?.__TAURI__?.core?.invoke
+  if (!invoke) throw new Error('native cloud bridge unavailable')
+  if (signal?.aborted) throw new Error('aborted')
+  const call = invoke('call_cloud_model', { request: { prompt } })
+  if (!signal) return call
+  // Tauri IPC has no cancellation, so the native side runs to completion. What
+  // this restores is callModel's deadline: without it a native call that never
+  // settles — a Keychain access prompt waiting on the user, a stalled worker —
+  // leaves a pending promise that can apply a session contract minutes late.
+  let rejectOnAbort
+  const aborted = new Promise((_, reject) => {
+    rejectOnAbort = () => reject(new Error('aborted'))
+    signal.addEventListener('abort', rejectOnAbort, { once: true })
+  })
+  try {
+    return await Promise.race([call, aborted])
+  } finally {
+    signal.removeEventListener('abort', rejectOnAbort)
+  }
+}
+
 /** A model on this machine via Ollama. Nothing leaves the device. */
 export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', endpoint = 'http://127.0.0.1:11434' } = {}) {
   const res = await fetch(`${endpoint}/api/generate`, {
@@ -35,26 +57,10 @@ export async function callLocalModel(prompt, { signal, model = 'qwen2.5:3b', end
 }
 
 /** The Anthropic API. Only what the caller put in the prompt is sent. */
-export async function callCloudModel(prompt, { signal, apiKey, model = 'claude-sonnet-5', maxTokens = 700 } = {}) {
-  if (!apiKey) throw new Error('no api key')
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  })
-  if (!res.ok) throw new Error(`anthropic ${res.status}`)
-  const data = await res.json()
-  return data?.content?.map(c => c.text).join('') || ''
+export async function callCloudModel(prompt, { signal } = {}) {
+  // Cloud credentials and network access are native-only. In particular, do
+  // not add a browser fallback: a fake caller-supplied key must be inert.
+  return callNativeCloud(prompt, signal)
 }
 
 /**

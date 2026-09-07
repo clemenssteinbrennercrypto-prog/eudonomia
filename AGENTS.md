@@ -55,7 +55,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 73 tests (13 library + 60 app)
+cargo test         # currently 75 tests (13 library + 62 app)
 cargo check
 ```
 
@@ -280,8 +280,8 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 459 JS tests and 73 Rust tests (13 native-camera library
-tests plus 60 app tests). Both suites must stay green. Treat these counts as a
+There are currently 459 JS tests and 75 Rust tests (13 native-camera library
+tests plus 62 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
 Test the **refusals and the boundaries**, not just the happy path. The valuable

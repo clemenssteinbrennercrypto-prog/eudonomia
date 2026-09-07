@@ -11,7 +11,8 @@ import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
 import HistoryStorageAlerts from './components/HistoryStorageAlerts'
-import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
+import { loadFocusModeEnabled, saveFocusModeEnabled, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
+import { setCloudApiKey } from './lib/nativeCompanion'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
 import {
@@ -163,6 +164,10 @@ function BuildIdentity() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const legacy = loadLegacyCloudApiKey()
+    if (legacy) setCloudApiKey(legacy).then(ok => { if (ok) clearLegacyCloudApiKey() }).catch(() => {})
+  }, [])
   // Public web stays marketing/download only. Native and local dev expose the app.
   const [flow, setFlow] = useState(getInitialFlow)
   const [screen,   setScreen]   = useState(() => getActiveWorkspace(loadWorkspaceState()) ? 'lab' : 'setup')
