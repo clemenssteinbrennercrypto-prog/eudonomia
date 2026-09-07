@@ -89,8 +89,9 @@ export function normalizeContract(raw, { source = 'keywords', fallbackKind = 'ge
 }
 
 // ── The prompt ───────────────────────────────────────────────────────────────
-// Only the goal line is sent. Never the activity log, window titles or file
-// names — those are the sensitive part and they stay on the machine.
+// The local model may use every explicit setup field. Activity logs, window
+// titles and file names are never inputs here. Cloud narrows this further via
+// buildCloudPrompt below.
 export function buildPrompt({ task = '', goal = '', tags = [] } = {}) {
   const stated = [task, goal, (tags || []).join(' ')].filter(Boolean).join(' — ')
   return `A person is starting a focused work session. This is what they wrote:
@@ -120,8 +121,12 @@ so with "confidence": "low" rather than inventing specifics.`
 
 // Cloud is deliberately narrower than local: only the explicit goal field is
 // allowed across the device boundary. Keep local task/tag prompts unchanged.
+function boundedCloudGoal(goal) {
+  return [...String(goal ?? '').trim()].slice(0, CLOUD_GOAL_MAX_CHARS).join('')
+}
+
 export function buildCloudPrompt({ goal = '' } = {}) {
-  const boundedGoal = String(goal ?? '').trim().slice(0, CLOUD_GOAL_MAX_CHARS)
+  const boundedGoal = boundedCloudGoal(goal)
   return buildPrompt({ goal: boundedGoal })
 }
 
@@ -144,8 +149,9 @@ async function keywordContract(intentInput) {
 // Same goal, same contract — a model is asked once per distinct goal, not once
 // per session.
 const cache = new Map()
-const cacheKey = (provider, input) =>
-  `${provider}|${input?.task || ''}|${input?.goal || ''}|${(input?.tags || []).join(',')}`
+const cacheKey = (provider, input) => provider === 'cloud'
+  ? `${provider}|${boundedCloudGoal(input?.goal)}`
+  : `${provider}|${input?.task || ''}|${input?.goal || ''}|${(input?.tags || []).join(',')}`
 
 export function clearContractCache() {
   cache.clear()

@@ -143,6 +143,14 @@ describe('the prompt sends the intention and nothing else', () => {
     expect(p).toContain(`"${'c'.repeat(CLOUD_GOAL_MAX_CHARS)}"`)
     expect(p).not.toContain('TAIL')
   })
+
+  it('does not split a Unicode character at the cloud boundary', () => {
+    const goal = `${'a'.repeat(CLOUD_GOAL_MAX_CHARS - 1)}🧠TAIL`
+    const p = buildCloudPrompt({ goal })
+    expect(p).toContain(`${'a'.repeat(CLOUD_GOAL_MAX_CHARS - 1)}🧠`)
+    expect(p).not.toContain('TAIL')
+    expect(p).not.toContain('�')
+  })
 })
 
 describe('switching providers is safe', () => {
@@ -246,6 +254,24 @@ describe('switching providers is safe', () => {
     expect(body.messages[0].content).not.toContain('PRIVATE TAIL')
     expect(body.messages[0].content).not.toContain('PRIVATE TASK')
     expect(body.messages[0].content).not.toContain('PRIVATE TAG')
+  })
+
+  it('caches cloud contracts by the exact payload rather than local-only fields', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ content: [{ text: JSON.stringify({ kind: 'writing', expectedTools: ['word'] }) }] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const sharedPrefix = 'g'.repeat(CLOUD_GOAL_MAX_CHARS)
+
+    await deriveContract({ task: 'Private task A', goal: `${sharedPrefix} first tail`, tags: ['Private A'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+    await deriveContract({ task: 'Private task B', goal: `${sharedPrefix} second tail`, tags: ['Private B'] }, {
+      provider: 'cloud', apiKey: 'secret-key',
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('does not hang the session behind a slow model', async () => {

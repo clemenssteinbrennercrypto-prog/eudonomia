@@ -47,7 +47,7 @@ app but could never run the native measurement engine.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 458 tests — must stay green
+npm test           # vitest, currently 460 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -248,10 +248,12 @@ a fabricated one costs trust.
 
 ### The one thing that leaves the device
 
-Goal understanding is **opt-in and off by default** (`keywords` provider). If the
-user switches to `local` (Ollama) or `cloud` (Anthropic API), **only the goal
-sentence they typed** is sent — never the activity log, window titles or file
-names. A test asserts the prompt contains none of them. Keep it that way.
+Goal understanding is **opt-in and off by default** (`keywords` provider). The
+`local` provider may receive the explicit session name, plan and tags, but it
+runs through Ollama on the same device. The `cloud` provider sends only the
+trimmed, bounded text from “Definition of plan” — never the session name, tags,
+activity log, window titles or file names — and sends nothing when that field is
+empty. Tests pin both boundaries. Keep them that way.
 
 All three providers are async, return the identical shape, and **fall back to
 `keywords`** on any failure. A model that is absent, slow or talking nonsense
@@ -279,7 +281,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 458 JS tests and 72 Rust tests (13 native-camera library
+There are currently 460 JS tests and 72 Rust tests (13 native-camera library
 tests plus 59 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
