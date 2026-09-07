@@ -18,19 +18,23 @@ export const PROVIDERS = ['keywords', 'local', 'cloud']
 async function callNativeCloud(prompt, signal) {
   const invoke = globalThis.window?.__TAURI__?.core?.invoke
   if (!invoke) throw new Error('native cloud bridge unavailable')
+  if (signal?.aborted) throw new Error('aborted')
   const call = invoke('call_cloud_model', { request: { prompt } })
   if (!signal) return call
-  if (signal.aborted) throw new Error('aborted')
   // Tauri IPC has no cancellation, so the native side runs to completion. What
   // this restores is callModel's deadline: without it a native call that never
   // settles — a Keychain access prompt waiting on the user, a stalled worker —
   // leaves a pending promise that can apply a session contract minutes late.
-  return Promise.race([
-    call,
-    new Promise((_, reject) => {
-      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
-    }),
-  ])
+  let rejectOnAbort
+  const aborted = new Promise((_, reject) => {
+    rejectOnAbort = () => reject(new Error('aborted'))
+    signal.addEventListener('abort', rejectOnAbort, { once: true })
+  })
+  try {
+    return await Promise.race([call, aborted])
+  } finally {
+    signal.removeEventListener('abort', rejectOnAbort)
+  }
 }
 
 /** A model on this machine via Ollama. Nothing leaves the device. */

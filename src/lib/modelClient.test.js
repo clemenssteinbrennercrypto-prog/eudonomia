@@ -48,5 +48,6 @@ describe('cloud transport boundary', () => {
     const controller = new AbortController()
     controller.abort()
     await expect(callCloudModel('goal only', { signal: controller.signal })).rejects.toThrow('aborted')
+    expect(invoke).not.toHaveBeenCalled()
   })
 })
