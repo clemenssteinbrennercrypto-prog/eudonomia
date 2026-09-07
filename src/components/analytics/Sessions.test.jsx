@@ -1,8 +1,13 @@
+/** @vitest-environment jsdom */
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import Sessions from './Sessions'
 import { emptyFocusLedger } from '../../lib/focusMetric'
+
+afterEach(cleanup)
 
 function session({ id, daysAgo = 1, pct = 70, extra = {} } = {}) {
   const actualSeconds = 1800
@@ -29,6 +34,19 @@ function render(sessions, props = {}) {
     onUpdateSession() {},
     ...props,
   })).replaceAll('<!-- -->', '')
+}
+
+function renderInteractive(sessions, props = {}) {
+  return renderComponent(<Sessions
+    sessions={sessions}
+    focusLedger={emptyFocusLedger()}
+    selectedSessionId={null}
+    onSelectSession={() => {}}
+    onDeleteSession={() => {}}
+    onClearAll={() => {}}
+    onUpdateSession={() => {}}
+    {...props}
+  />)
 }
 
 describe('Sessions — filters', () => {
@@ -72,5 +90,59 @@ describe('Sessions — detail view', () => {
     const s = session({ id: 'a', extra: { task: 'Write docs', goalOutcome: 'yes' } })
     const html = render([s], { selectedSessionId: 'a' })
     expect(html).toContain('Quick check-in')
+  })
+})
+
+describe('Sessions — destructive actions', () => {
+  it('requires explicit confirmation and preserves the item when deletion is cancelled', () => {
+    const onDeleteSession = vi.fn()
+    renderInteractive([session({ id: 'a', extra: { task: 'Keep this' } })], { onDeleteSession })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Keep this' })[0])
+    expect(screen.getByRole('dialog', { name: 'Delete this session?' })).toBeInTheDocument()
+    expect(onDeleteSession).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Keep this')).toBeInTheDocument()
+  })
+
+  it('keeps the item and reports an honest error when deletion is rejected', async () => {
+    const onDeleteSession = vi.fn().mockRejectedValue(new Error('disk unavailable'))
+    renderInteractive([session({ id: 'a', extra: { task: 'Keep this' } })], { onDeleteSession })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Keep this' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete session' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The session is still in your history. The local database reported: disk unavailable'))
+    expect(screen.getByText('Keep this')).toBeInTheDocument()
+    expect(onDeleteSession).toHaveBeenCalledOnce()
+  })
+
+  it('disables destructive controls while a deletion is pending', async () => {
+    let resolveDelete
+    const onDeleteSession = vi.fn(() => new Promise(resolve => { resolveDelete = resolve }))
+    renderInteractive([session({ id: 'a', extra: { task: 'Keep this' } })], { onDeleteSession })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Keep this' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete session' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Keep this' })).toBeDisabled()
+
+    resolveDelete()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('does not clear anything when the clear-all confirmation is cancelled', () => {
+    const onClearAll = vi.fn()
+    renderInteractive([session({ id: 'a', extra: { task: 'Keep this' } })], { onClearAll })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear all history' })[0])
+    expect(screen.getByRole('dialog', { name: 'Clear all history?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(onClearAll).not.toHaveBeenCalled()
+    expect(screen.getByText('Keep this')).toBeInTheDocument()
   })
 })

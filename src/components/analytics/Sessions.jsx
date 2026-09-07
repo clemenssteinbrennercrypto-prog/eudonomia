@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { sessionAverageFocus, sessionFocusPct, hasMeasuredFocus } from '../../lib/historyTrend'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
+import ConfirmDialog from '../ConfirmDialog'
 import SessionDetailView from './sessions/SessionDetailView'
 
 const PAGE_SIZE = 10
@@ -100,7 +101,7 @@ function FilterPill({ active, onClick, children }) {
   )
 }
 
-function SessionRow({ session, onSelect, onDelete }) {
+function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
   const pct = sessionAverageFocus(session)
   const color = focusColor(pct)
   const outcome = normalizedOutcome(session)
@@ -132,8 +133,11 @@ function SessionRow({ session, onSelect, onDelete }) {
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete() }}
-          title="Delete"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--line-strong)', fontSize: 16, lineHeight: 1, padding: '2px 4px' }}
+          type="button"
+          disabled={deleteDisabled}
+          aria-label={`Delete ${session.task || 'Untitled session'}`}
+          title="Delete session"
+          style={{ background: 'none', border: 'none', cursor: deleteDisabled ? 'default' : 'pointer', color: 'var(--line-strong)', fontSize: 16, lineHeight: 1, padding: '6px 8px', opacity: deleteDisabled ? 0.5 : 1 }}
         >×</button>
       </div>
     </div>
@@ -167,6 +171,56 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
   const [measuredFilter, setMeasuredFilter] = useState('all')
   const [page, setPage] = useState(0)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [pendingAction, setPendingAction] = useState(null)
+  const [actionError, setActionError] = useState(null)
+  const mutationPendingRef = useRef(false)
+
+  const requestDelete = (id) => {
+    if (mutationPendingRef.current) return
+    setActionError(null)
+    setConfirmDeleteId(id)
+  }
+
+  const cancelConfirmation = () => {
+    if (mutationPendingRef.current) return
+    setActionError(null)
+    setConfirmDeleteId(null)
+    setConfirmClear(false)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteId || mutationPendingRef.current) return
+    const id = confirmDeleteId
+    mutationPendingRef.current = true
+    setPendingAction({ kind: 'delete', id })
+    setActionError(null)
+    try {
+      await onDeleteSession(id)
+      setConfirmDeleteId(null)
+    } catch (error) {
+      setActionError(`The session is still in your history. The local database reported: ${String(error?.message || error)}`)
+    } finally {
+      mutationPendingRef.current = false
+      setPendingAction(null)
+    }
+  }
+
+  const confirmClearAll = async () => {
+    if (mutationPendingRef.current) return
+    mutationPendingRef.current = true
+    setPendingAction({ kind: 'clear' })
+    setActionError(null)
+    try {
+      await onClearAll()
+      setConfirmClear(false)
+    } catch (error) {
+      setActionError(`No history was cleared. The local database reported: ${String(error?.message || error)}`)
+    } finally {
+      mutationPendingRef.current = false
+      setPendingAction(null)
+    }
+  }
 
   const workspaceOptions = useMemo(() => {
     const seen = new Map()
@@ -263,7 +317,13 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
         {paged.length === 0 ? (
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No sessions match these filters.</p>
         ) : paged.map(s => (
-          <SessionRow key={s.id} session={s} onSelect={() => onSelectSession(s.id)} onDelete={() => onDeleteSession(s.id)} />
+          <SessionRow
+            key={s.id}
+            session={s}
+            onSelect={() => onSelectSession(s.id)}
+            onDelete={() => requestDelete(s.id)}
+            deleteDisabled={Boolean(pendingAction)}
+          />
         ))}
       </div>
 
@@ -278,20 +338,36 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
       )}
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-        {!confirmClear ? (
-          <>
-            <button onClick={() => exportCSV(filtered)} style={ghostBtnStyle}>Export CSV</button>
-            <button onClick={() => exportFullArchive(sessions, focusLedger)} style={ghostBtnStyle}>Export full backup (JSON)</button>
-            <button onClick={() => setConfirmClear(true)} style={ghostBtnStyle}>Clear all history</button>
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', alignSelf: 'center' }}>Are you sure?</span>
-            <button onClick={() => { onClearAll(); setConfirmClear(false) }} style={{ ...ghostBtnStyle, background: 'var(--bad)', color: '#fff', border: 'none', fontWeight: 600 }}>Yes, delete all</button>
-            <button onClick={() => setConfirmClear(false)} style={ghostBtnStyle}>Cancel</button>
-          </>
-        )}
+        <button type="button" onClick={() => exportCSV(filtered)} style={ghostBtnStyle}>Export CSV</button>
+        <button type="button" onClick={() => exportFullArchive(sessions, focusLedger)} style={ghostBtnStyle}>Export full backup (JSON)</button>
+        <button type="button" disabled={Boolean(pendingAction)} onClick={() => { setActionError(null); setConfirmClear(true) }} style={{ ...ghostBtnStyle, opacity: pendingAction ? 0.5 : 1 }}>Clear all history</button>
       </div>
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="Delete this session?"
+          description={`“${sessions.find(session => session.id === confirmDeleteId)?.task || 'Untitled session'}” will be permanently removed from your history and focus trends.`}
+          confirmLabel="Delete session"
+          pendingLabel="Deleting…"
+          busy={pendingAction?.kind === 'delete'}
+          error={actionError}
+          onConfirm={confirmDelete}
+          onCancel={cancelConfirmation}
+        />
+      )}
+
+      {confirmClear && (
+        <ConfirmDialog
+          title="Clear all history?"
+          description="Every saved session and its focus-trend contribution will be permanently removed from this device."
+          confirmLabel="Delete all history"
+          pendingLabel="Deleting…"
+          busy={pendingAction?.kind === 'clear'}
+          error={actionError}
+          onConfirm={confirmClearAll}
+          onCancel={cancelConfirmation}
+        />
+      )}
     </div>
   )
 }
