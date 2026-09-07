@@ -83,16 +83,16 @@ npm run build:companion
   file. Do not commit the bumped version.
 - **`/Applications/Eudonomia.app` is what the user actually launches.** Building
   into `target/release/bundle` changes nothing for them until it is copied there.
-- **Pushing to `main` never updates the installed app.** Two release channels
-  exist and they do not meet. `companion-test.yml` builds every push to `main`
-  and publishes to the `internal-test` tag; `companion-release.yml` fills
-  `releases/latest` and fires only on a `release-v*` tag. A build made from the
-  default `tauri.conf.json` asks `releases/latest` — which sat at v0.1.10 from
-  July 2026 for weeks. So the user reported "I see no change" after a correct,
-  green, pushed commit, twice. Building from `tauri.test.conf.json` instead
-  points the updater at `internal-test`, so every push to `main` reaches the
-  machine within minutes. **Before telling the user to look at something, check
-  which channel their installed build asks and when that channel last moved.**
+- **A push to `main` updates only internal-channel installs.** Two release
+  channels exist and they do not meet. `companion-test.yml` builds every push to
+  `main` and publishes to the `internal-test` tag; the checked-in base config
+  and `tauri.test.conf.json` both ask that channel. `companion-release.yml`
+  overlays `tauri.release.conf.json`, asks `releases/latest`, and fires only on
+  a `release-v*` tag (or an explicitly started live publication). A public
+  install therefore does not receive a pushed main commit, while an internal
+  install should receive it within minutes. **Before telling the user to look
+  at something, check the installed build badge/channel and when that channel
+  last moved.**
 
 ---
 

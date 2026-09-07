@@ -2,6 +2,8 @@
 
 This is a point-in-time checklist for commit `ab3a07fb4e28a7316a63ef9b6a70406c11e3e17f` (`ab3a07f`). It records what was verified from the Mac Mini/build worktree and what still requires a real target Mac, a human decision, or protected release credentials. The durable product constraints and owner-held blockers remain in [`AGENTS.md`](../AGENTS.md); this dated record supplies evidence rather than replacing that source.
 
+Rechecked on 7 September 2026: `origin/main` was still `ab3a07f`, the latest internal CI run and updater assets were unchanged, the production release was still `companion-v0.1.10`, and the 442-test JavaScript suite passed again. The open gates below therefore remain current.
+
 ## Evidence collected
 
 | Gate | Result | Evidence |
@@ -31,7 +33,7 @@ This is a point-in-time checklist for commit `ab3a07fb4e28a7316a63ef9b6a70406c11
 ### Production release pipeline
 
 - The successful CI evidence above is from `companion-test.yml`, not the signed production pipeline. `companion-release.yml` has not run since 16 July 2026; its seven most recent runs failed, and its last successful run predates the current arm64 target and bundle-path changes. No `release-v*` tag exists, so the current tag trigger has never exercised this workflow. Signing, notarization, stapling, Gatekeeper assessment, production updater generation, and final publication therefore remain a release blocker rather than a routine last step.
-- The internal workflow asserts a single `darwin-aarch64` updater target. The production manifest is generated separately by `tauri-action`, has no equivalent platform assertion, and currently contains both `darwin-aarch64` and `darwin-aarch64-app`. The arm64-only contract is therefore unverified on the channel users actually receive.
+- The internal workflow asserts a single `darwin-aarch64` updater target. The current production manifest contains only the arm64 labels `darwin-aarch64` and `darwin-aarch64-app`, but it predates the native camera migration. The production workflow generates its manifest separately through `tauri-action`, has no equivalent platform assertion, and never checks the built executable with `lipo`; the next public build can therefore regress the arm64-only contract without a release gate catching it.
 - `workflow_dispatch` is not a safe dry-run path in its current form: after verification it reaches the same `Publish verified release` step and marks the release public/latest. Before the first production attempt, the workflow needs an authorized non-publishing validation path, or the release owner must explicitly treat the run as a live publication. Workflow ownership stays with Stony.
 
 ## Channel warning
