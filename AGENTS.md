@@ -164,8 +164,9 @@ scoring or detection.**
    convention. Scoring depends on that opposition. Do not "simplify" it without
    re-deriving from data.
 8. **The score bands are named constants and must stay separated.**
-   `FOCUSED_SCORE` (40) < `GOOD_STREAK_SCORE` (65) < `FLOW_SCORE` (72), all in
-   `attention.js`. `FOCUSED_SCORE` decides `focusedSeconds`, which IS the
+   `ALERT_SCORE` (38) < `FOCUSED_SCORE` (40) < `GOOD_STREAK_SCORE` (65) <
+   `FLOW_SCORE` (72), all in `attention.js`. `FOCUSED_SCORE` decides
+   `focusedSeconds`, which IS the
    reported focus percentage — history trends, calibration, the end screen and
    the CSV export are all derived from it. Removing the energy profile replaced
    all three with the literal `1`, so every second at score ≥ 1 counted as

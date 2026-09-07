@@ -49,6 +49,7 @@ export const LOCK_IN_STREAK_SECS = 240  // …and 4 min of it → Lock-in
 // briefly replaced by the literal 1, every second of every session counted as
 // focused and the metric stopped telling a good session from a bad one.
 export const FOCUSED_SCORE     = 40  // a second counts toward focusedSeconds
+export const ALERT_SCORE       = 38  // below this band is severe enough to alert
 export const GOOD_STREAK_SCORE = 65  // …and toward the ramp / lock-in streak
 export const FLOW_SCORE        = 72  // flow needs "good", not merely "not drifting"
 
@@ -131,13 +132,16 @@ export function classifyFocusPhase({
   preDriftActive,
   inFlow,
 }) {
-  if (score < 40) return 'drift'
+  // Phase progression follows the focused ruler. ALERT_SCORE is deliberately
+  // narrower: it only controls severe intervention, so scores 38–39 must not
+  // become Arrival merely because they are outside the severe-alert band.
+  if (score < FOCUSED_SCORE) return 'drift'
   if (msSinceDistraction < RECOVERY_WINDOW_MS) return 'recovery'
-  if (preDriftActive || (score >= 55 && score < 65)) return 'fade'
+  if (preDriftActive || (score >= 55 && score < GOOD_STREAK_SCORE)) return 'fade'
   if (inFlow || goodStreakSecs >= LOCK_IN_STREAK_SECS) return 'lock_in'
   if (goodStreakSecs >= RAMP_STREAK_SECS) return 'ramp'
   if (elapsedSecs < CALIBRATION_SECS + 90) return 'arrival'
-  return score >= 65 ? 'ramp' : 'arrival'
+  return score >= GOOD_STREAK_SCORE ? 'ramp' : 'arrival'
 }
 
 // ── Where the user is looking ────────────────────────────────────────────────

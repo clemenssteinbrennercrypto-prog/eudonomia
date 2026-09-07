@@ -1,4 +1,5 @@
 import {
+  FLOW_SCORE,
   CALIBRATION_SECS,
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
@@ -372,7 +373,7 @@ export function createCameraScoreReplay({
       const msSinceDistraction = state.lastDistractionAt ? now - state.lastDistractionAt : Infinity
       const rampRate = msSinceDistraction < RECOVERY_WINDOW_MS ? 0.4 : 1
       if (!trackingUncertain) {
-        state.sustainedGoodMs = score >= 72
+        state.sustainedGoodMs = score >= FLOW_SCORE
           ? Math.min(120_000, state.sustainedGoodMs + frameDelta * rampRate)
           : Math.max(0, state.sustainedGoodMs - frameDelta * 3)
       }

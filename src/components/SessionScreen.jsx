@@ -31,9 +31,11 @@ import {
 // without a browser or a camera. See attention.test.js — the invariants that
 // used to be prose in CLAUDE.md are enforced there now.
 import {
+  ALERT_SCORE,
   CALIBRATION_SECS,
   FLOW_SCORE,
   FOCUSED_SCORE,
+  GOOD_STREAK_SCORE,
   PHONE_PITCH_THRESH,
   RECOVERY_WINDOW_MS,
   analyzeFrame,
@@ -900,6 +902,7 @@ export default function SessionScreen({
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
   const lastFrameTsRef         = useRef(0)
   const lastDistractionRef     = useRef(0)   // timestamp of last distraction event (alert or prolonged low score)
+  const recoveryElapsedBeforeFaultRef = useRef(null) // measured recovery time preserved across camera outages
   const lastAlertTimeRef       = useRef(0)
   const overlayActiveRef       = useRef(false)
   const attentionStatusRef     = useRef('focused')
@@ -1072,12 +1075,70 @@ export default function SessionScreen({
     return true
   }, [])
 
+  const resetCameraEvidence = useCallback(() => {
+    // Preserve only recovery time that was actually measured. Wall-clock time
+    // while capture is silent must neither complete nor erase the recovery
+    // window; the first trustworthy frame resumes it below.
+    const lastMeasuredAt = lastDeliveredFrameAtRef.current
+    if (
+      recoveryElapsedBeforeFaultRef.current == null &&
+      lastDistractionRef.current &&
+      lastMeasuredAt
+    ) {
+      const measuredRecoveryMs = Math.max(0, lastMeasuredAt - lastDistractionRef.current)
+      recoveryElapsedBeforeFaultRef.current = measuredRecoveryMs < RECOVERY_WINDOW_MS
+        ? measuredRecoveryMs
+        : null
+    }
+    lastDistractionRef.current = 0
+
+    goodStreakSecsRef.current = 0
+    currentStreakRef.current = 0
+    sustainedGoodMsRef.current = 0
+    lastFrameTsRef.current = 0
+    scoreLowSinceRef.current = null
+    flowGoodSinceRef.current = null
+    distractedSinceRef.current = null
+    preDriftChargeMsRef.current = 0
+    headDownStartRef.current = null
+    headTurnLeftStartRef.current = null
+    headTurnRightStartRef.current = null
+    eyesClosedSinceRef.current = null
+    yawnStartRef.current = null
+    phoneStartRef.current = null
+    distractionDownStartRef.current = null
+    lookingUpStartRef.current = null
+    faceAbsentSinceRef.current = null
+    eyesOffStartRef.current = null
+    lowConfSinceRef.current = null
+    headTurnLeftFramesRef.current = 0
+    headTurnRightFramesRef.current = 0
+    headDownFramesRef.current = 0
+    eyesOffFramesRef.current = 0
+    wasClosedRef.current = false
+    blinkTimestampsRef.current = []
+    perclosHistRef.current = []
+    nosePtHistRef.current = []
+    setCurrentStreak(0)
+    setFaceAbsentPrompt(false)
+
+    if (preDriftRiskRef.current.active || preDriftRiskRef.current.level !== 0) {
+      preDriftRiskRef.current = { active: false, level: 0, reason: 'stable' }
+      setPreDriftRisk(preDriftRiskRef.current)
+    }
+    if (inFlowRef.current) {
+      inFlowRef.current = false
+      setInFlowState(false)
+    }
+  }, [])
+
   // Replace the WebView's native-camera listener generation. The native worker
   // remains the camera owner during this hand-off and either resumes delivering
   // frames or reports an honest fault through its own heartbeat.
   const restartCamera = useCallback((manual = false) => {
     const now = Date.now()
     if (!manual && now - lastRecoverAtRef.current < CAMERA_RECOVER_MS) return
+    resetCameraEvidence()
     lastRecoverAtRef.current = now
     cameraRecoverTriesRef.current = manual ? 0 : cameraRecoverTriesRef.current + 1
     cameraReadyRef.current = false
@@ -1089,7 +1150,7 @@ export default function SessionScreen({
       setCameraFault(null)
     }
     setCameraEpoch(e => e + 1)
-  }, [])
+  }, [resetCameraEvidence])
 
   const pushBlockingState = useCallback(async (active, sessionState = active ? 'active' : 'inactive') => {
     // Unlimited sessions use a rolling lease. The 30s keepalive renews it;
@@ -1135,6 +1196,7 @@ export default function SessionScreen({
 
   const interruptCamera = useCallback((fault = null) => {
     if (sessionEndedRef.current) return
+    resetCameraEvidence()
     cameraReadyRef.current = false
     lastFrameAtRef.current = 0
     lastDeliveredFrameAtRef.current = 0
@@ -1145,22 +1207,9 @@ export default function SessionScreen({
       setCameraFault(fault)
     }
     // A camera outage withholds measurement; it is not a user pause. Keep the
-    // wall clock and native protection running, and erase every stateful hold
-    // that could otherwise leak a pre-fault bonus or penalty into recovery.
-    goodStreakSecsRef.current = 0
-    currentStreakRef.current = 0
-    sustainedGoodMsRef.current = 0
-    scoreLowSinceRef.current = null
-    headDownStartRef.current = null
-    headTurnLeftStartRef.current = null
-    headTurnRightStartRef.current = null
-    eyesClosedSinceRef.current = null
-    yawnStartRef.current = null
-    phoneStartRef.current = null
-    distractionDownStartRef.current = null
-    lookingUpStartRef.current = null
-    setCurrentStreak(0)
-  }, [])
+    // wall clock and native protection running while resetCameraEvidence erases
+    // every stateful camera hold that could leak through recovery.
+  }, [resetCameraEvidence])
 
   // Window focus, visibility and the red close button are presentation state,
   // not session state. The webcam must keep tracking while Eudonomia is behind
@@ -1599,6 +1648,10 @@ export default function SessionScreen({
       : Date.now()
     lastFrameAtRef.current = deliveredAt
     lastDeliveredFrameAtRef.current = deliveredAt
+    if (recoveryElapsedBeforeFaultRef.current != null) {
+      lastDistractionRef.current = deliveredAt - recoveryElapsedBeforeFaultRef.current
+      recoveryElapsedBeforeFaultRef.current = null
+    }
     if (sessionEndedRef.current || isPausedRef.current) return
 
     const lmArray        = results.multiFaceLandmarks
@@ -2123,7 +2176,7 @@ export default function SessionScreen({
 
     if (trackingUncertain) {
       // signal unreliable — neither earn nor burn the focus ramp
-    } else if (score >= 72) {
+    } else if (score >= FLOW_SCORE) {
       sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
@@ -2139,9 +2192,9 @@ export default function SessionScreen({
       focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
     }
 
-    const newStatus = focusScoreRef.current >= 65
+    const newStatus = focusScoreRef.current >= GOOD_STREAK_SCORE
       ? 'focused'
-      : focusScoreRef.current >= 38
+      : focusScoreRef.current >= ALERT_SCORE
         ? 'distracted'
         : 'alert'
     // Trust gate: surface "signal weak" instead of a (held, possibly low) status
@@ -2164,7 +2217,7 @@ export default function SessionScreen({
       pitchDeg >= pitchDT * 0.75 &&
       pitchDeg < pitchDT &&
       headDownFramesRef.current >= 3
-    const weakFocus = hasFace && focusScoreRef.current >= 55 && focusScoreRef.current < 72 && primaryReason === 'focused'
+    const weakFocus = hasFace && focusScoreRef.current >= 55 && focusScoreRef.current < FLOW_SCORE && primaryReason === 'focused'
     const preDriftSignals = [
       unstableHead && 'gaze instability',
       earlyAwayGlance && 'away glances',
@@ -2295,7 +2348,7 @@ export default function SessionScreen({
       const distractedFor = now - distractedSinceRef.current
       const gentleCooldownOk = (now - lastGentleReminderRef.current) >= GENTLE_REMINDER_COOLDOWN_MS
       const lowFor = scoreLowSinceRef.current ? now - scoreLowSinceRef.current : 0
-      const severeAlertSoon = focusScoreRef.current < 1 &&
+      const severeAlertSoon = focusScoreRef.current < ALERT_SCORE &&
         scoreLowSinceRef.current &&
         (adaptedAlertMs - lowFor) <= GENTLE_REMINDER_SEVERE_BUFFER_MS
 
@@ -2325,7 +2378,7 @@ export default function SessionScreen({
       distractedSinceRef.current = null
     }
 
-    if (focusScoreRef.current < 1) {
+    if (focusScoreRef.current < ALERT_SCORE) {
       if (!scoreLowSinceRef.current) scoreLowSinceRef.current = now
       const lowFor     = now - scoreLowSinceRef.current
       const cooldownOk = (now - lastAlertTimeRef.current) >= ALERT_COOLDOWN_MS
@@ -2637,7 +2690,7 @@ export default function SessionScreen({
         { secs: 50 * 60, msg: '50 min — impressive focus ⚡' },
       ]
       for (const m of milestones) {
-        if (elapsedSecs === m.secs && focusScoreRef.current >= 65) {
+        if (elapsedSecs === m.secs && focusScoreRef.current >= GOOD_STREAK_SCORE) {
           setMilestone({ msg: m.msg })
           setTimeout(() => setMilestone(null), 3500)
           break
@@ -2879,8 +2932,8 @@ export default function SessionScreen({
           isCalibrating={isCalibrating}
           isPaused={isPaused}
           calibProgress={calibProgress}
-          focusedThreshold={1}
-          alertThreshold={1}
+          focusedThreshold={GOOD_STREAK_SCORE}
+          alertThreshold={ALERT_SCORE}
           countUp={!hasTimeLimit}
         />
 

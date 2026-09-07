@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ALERT_SCORE,
   CALIBRATION_SECS,
   FLOW_SCORE,
   FOCUSED_SCORE,
@@ -284,6 +285,13 @@ describe('headVariance', () => {
 // test touched them, and every downstream test fabricates focusedSeconds from a
 // percentage instead of measuring it.
 describe('the score bands stay separated', () => {
+  it('keeps the named alert band immediately below focused', () => {
+    expect(ALERT_SCORE).toBe(38)
+    expect(ALERT_SCORE).toBeLessThan(FOCUSED_SCORE)
+    expect(isFocusedSecond(ALERT_SCORE)).toBe(false)
+    expect(isFocusedSecond(FOCUSED_SCORE)).toBe(true)
+  })
+
   it('orders them: focused < good streak < flow', () => {
     expect(FOCUSED_SCORE).toBeLessThan(GOOD_STREAK_SCORE)
     expect(GOOD_STREAK_SCORE).toBeLessThan(FLOW_SCORE)
@@ -291,7 +299,7 @@ describe('the score bands stay separated', () => {
 
   it('keeps every bar well clear of the score floor', () => {
     // A bar near 0 makes every second qualify. That is the whole failure.
-    for (const bar of [FOCUSED_SCORE, GOOD_STREAK_SCORE, FLOW_SCORE]) {
+    for (const bar of [ALERT_SCORE, FOCUSED_SCORE, GOOD_STREAK_SCORE, FLOW_SCORE]) {
       expect(bar).toBeGreaterThan(30)
     }
   })
@@ -336,5 +344,34 @@ describe('the score bands stay separated', () => {
       preDriftActive: false,
       inFlow: false,
     })).not.toBe('lock_in')
+  })
+})
+
+describe('focus phase score boundaries', () => {
+  const stable = {
+    elapsedSecs: 300,
+    goodStreakSecs: 0,
+    msSinceDistraction: Infinity,
+    preDriftActive: false,
+    inFlow: false,
+  }
+
+  it('keeps the focused boundary independent from the severe alert boundary', () => {
+    // ALERT_SCORE only gates severe intervention; phase arrival still requires
+    // the independently named FOCUSED_SCORE. This protects 38/39 from falling
+    // through to Arrival while preserving the exact focused-second boundary.
+    expect(ALERT_SCORE).toBe(38)
+    expect(FOCUSED_SCORE).toBe(40)
+    for (const score of [37, 38, 39]) {
+      expect(classifyFocusPhase({ ...stable, score })).toBe('drift')
+      expect(isFocusedSecond(score)).toBe(false)
+    }
+    expect(classifyFocusPhase({ ...stable, score: FOCUSED_SCORE })).toBe('arrival')
+    expect(isFocusedSecond(FOCUSED_SCORE)).toBe(true)
+  })
+
+  it('does not promote a score below the good-streak band to ramp', () => {
+    expect(classifyFocusPhase({ ...stable, score: GOOD_STREAK_SCORE - 1 })).toBe('fade')
+    expect(classifyFocusPhase({ ...stable, score: GOOD_STREAK_SCORE })).toBe('ramp')
   })
 })

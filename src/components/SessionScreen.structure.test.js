@@ -64,6 +64,70 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source.slice(interruptStart, lifecycleStart)).not.toContain('pauseSession')
   })
 
+  // A camera blackout must not be able to *satisfy* a hold. The first recovered
+  // frame is scored before markReady(), with an empty nose history, every
+  // detection hold cleared and the frozen pre-fault score — so any duration
+  // timer still holding a pre-fault timestamp is met instantly by time nothing
+  // measured. flowGoodSince did exactly that: it granted flow, and with it the
+  // 'lock_in' phase, straight out of a >90 s outage.
+  it('clears every duration hold on a camera fault, not just the accumulators', () => {
+    const resetStart = source.indexOf('const resetCameraEvidence = useCallback')
+    const restartStart = source.indexOf('const restartCamera = useCallback', resetStart)
+    const reset = source.slice(resetStart, restartStart)
+    expect(resetStart).toBeGreaterThan(-1)
+    expect(restartStart).toBeGreaterThan(resetStart)
+    for (const cleared of [
+      'goodStreakSecsRef.current = 0',
+      'currentStreakRef.current = 0',
+      'sustainedGoodMsRef.current = 0',
+      'lastFrameTsRef.current = 0',
+      'scoreLowSinceRef.current = null',
+      'flowGoodSinceRef.current = null',
+      'distractedSinceRef.current = null',
+      'preDriftChargeMsRef.current = 0',
+      'preDriftRiskRef.current = { active: false, level: 0, reason: \'stable\' }',
+      'headTurnLeftFramesRef.current = 0',
+      'headTurnRightFramesRef.current = 0',
+      'headDownFramesRef.current = 0',
+      'eyesOffFramesRef.current = 0',
+      'blinkTimestampsRef.current = []',
+      'nosePtHistRef.current = []',
+    ]) {
+      expect(reset).toContain(cleared)
+    }
+    // Flow is a claim about measured time; a fault must retract it, not freeze it.
+    expect(reset).toContain('inFlowRef.current = false')
+    expect(reset).toContain('setInFlowState(false)')
+
+    // Keep this open-ended: a newly introduced camera-duration ref must join
+    // the reset without someone remembering to extend a hand-maintained list.
+    // Activity classification continues natively while camera frames are
+    // absent, so its own duration is deliberately independent of this reset.
+    const cameraDurationRefs = [...source.matchAll(
+      /const\s+([A-Za-z0-9]+(?:SinceRef|StartRef|ChargeMsRef))\s*=\s*useRef/g,
+    )]
+      .map(match => match[1])
+      .filter(name => name !== 'activeDistractionSinceRef')
+    for (const refName of cameraDurationRefs) {
+      expect(reset, `${refName} must reset with camera evidence`)
+        .toContain(`${refName}.current =`)
+    }
+  })
+
+  it('applies the camera-evidence reset to faults and listener restarts', () => {
+    const restartStart = source.indexOf('const restartCamera = useCallback')
+    const interruptStart = source.indexOf('const interruptCamera = useCallback', restartStart)
+    const lifecycleStart = source.indexOf('// Window focus', interruptStart)
+    expect(source.slice(restartStart, interruptStart)).toContain('resetCameraEvidence()')
+    expect(source.slice(interruptStart, lifecycleStart)).toContain('resetCameraEvidence()')
+  })
+
+  it('resumes the recovery window from measured time instead of outage wall time', () => {
+    expect(source).toContain('lastMeasuredAt - lastDistractionRef.current')
+    expect(source).toContain('measuredRecoveryMs < RECOVERY_WINDOW_MS')
+    expect(source).toContain('lastDistractionRef.current = deliveredAt - recoveryElapsedBeforeFaultRef.current')
+  })
+
   it('feeds validated native landmarks into the unchanged scoring callback', () => {
     expect(source).toContain('nativeLandmarksForScoring(payload)')
     expect(source).toContain('{ multiFaceLandmarks: landmarks.length ? [landmarks] : [] },')
