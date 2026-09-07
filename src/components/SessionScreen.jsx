@@ -1546,8 +1546,10 @@ export default function SessionScreen({
       { task, goal, tags },
       {
         provider: settings.provider,
-        model: settings.provider === 'cloud' ? settings.cloudModel : settings.localModel,
-        endpoint: settings.localEndpoint,
+        ...(settings.provider === 'local' ? {
+          model: settings.localModel,
+          endpoint: settings.localEndpoint,
+        } : {}),
       }
     ).then(contract => {
       if (!cancelled && contract) sessionContractRef.current = contract

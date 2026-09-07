@@ -300,7 +300,6 @@ const CONTRACT_DEFAULTS = {
   provider: 'keywords',                    // off by default: no network, no key
   localModel: 'qwen2.5:3b',
   localEndpoint: 'http://127.0.0.1:11434',
-  cloudModel: 'claude-sonnet-5',
 }
 
 export function loadContractSettings() {
