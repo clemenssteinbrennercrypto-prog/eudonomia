@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 
 const navy = 'var(--ultra)'
 
@@ -115,11 +115,16 @@ function Section({ heading, body }) {
 export default function LegalModal({ open, onClose, initialTab }) {
   const [tab, setTab] = useState(initialTab ?? 'impressum')
   const closeRef = useRef(null)
+  const onCloseRef = useRef(onClose)
   const titleId = useId()
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && initialTab) setTab(initialTab)
   }, [open, initialTab])
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return undefined
@@ -128,21 +133,23 @@ export default function LegalModal({ open, onClose, initialTab }) {
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      onClose()
+      onCloseRef.current?.()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       previousFocus?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
   const sections = tab === 'impressum' ? IMPRESSUM : DATENSCHUTZ
   const keepFocusInside = (event) => {
     if (event.key !== 'Tab') return
-    const controls = [...event.currentTarget.querySelectorAll('button:not([disabled]), a[href]')]
+    const controls = [...event.currentTarget.querySelectorAll(
+      'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
+    )]
     if (controls.length === 0) return
     const first = controls[0]
     const last = controls[controls.length - 1]
@@ -193,7 +200,7 @@ export default function LegalModal({ open, onClose, initialTab }) {
         </div>
 
         {/* Tabs */}
-        <div role="tablist" aria-label="Legal information" style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
+        <div role="group" aria-label="Legal information" style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
           {[
             { id: 'impressum',   label: 'Impressum'   },
             { id: 'datenschutz', label: 'Datenschutz' },
@@ -201,8 +208,7 @@ export default function LegalModal({ open, onClose, initialTab }) {
             <button
               key={t.id}
               type="button"
-              role="tab"
-              aria-selected={tab === t.id}
+              aria-pressed={tab === t.id}
               onClick={() => setTab(t.id)}
               style={{
                 padding: '8px 20px', fontSize: 13, fontWeight: 600,
