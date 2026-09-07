@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  cameraAccessFailureMessage,
+  isReadinessCancellation,
+  prepareCameraPreview,
+  releaseCameraStream,
+  stalledCameraMessage,
+} from '../lib/cameraReadiness'
 
 // ── Premium onboarding ────────────────────────────────────────────────────────
 // The whole point of these first 30 seconds: don't *tell* people the webcam
-// reads their focus — *show* them. The flow ends on a live "awakening" moment
-// where their own face appears inside a ring that scans + locks on. That single
-// moment is the product's promise made real.
+// reads their focus — *show* them. The flow ends on a live preview moment so
+// the user can see that camera presentation works before entering the app.
 
 const font = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", system-ui, sans-serif'
 
@@ -66,8 +72,11 @@ export default function Onboarding({ onComplete }) {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [awakenPhase, setAwakenPhase] = useState('scanning') // scanning → locked
+  const [awakenError, setAwakenError] = useState(null)
+  const [cameraAttempt, setCameraAttempt] = useState(0)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const awakenActionRef = useRef(null)
 
   const isAwakening = step === 3
 
@@ -75,29 +84,59 @@ export default function Onboarding({ onComplete }) {
   useEffect(() => {
     if (!isAwakening || !streamRef.current) return
     const v = videoRef.current
-    if (v) {
-      v.srcObject = streamRef.current
-      v.play().catch(() => {})
+    const stream = streamRef.current
+    const controller = new AbortController()
+    let cancelled = false
+
+    // A camera permission grant is not a measurement. Wait for the preview to
+    // present advancing frames before claiming that the tracker is ready.
+    prepareCameraPreview(v, stream, { signal: controller.signal })
+      .then(() => {
+        if (cancelled) return
+        setAwakenPhase('locked')
+      })
+      .catch(error => {
+        // Filter on OUR signal, never on `error.name`: video.play() rejects
+        // with an AbortError of its own, and swallowing that one strands the
+        // user on "Checking your camera…" with no way forward.
+        if (cancelled || isReadinessCancellation(error)) return
+        setAwakenError(error?.code === 'no_advancing_frames'
+          ? stalledCameraMessage()
+          : cameraAccessFailureMessage(error))
+        setAwakenPhase('failed')
+        stopStream()
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      if (streamRef.current === stream) stopStream()
     }
-    // Cinematic beat: scan for a moment, then "lock on", then hand off.
-    const lock = setTimeout(() => setAwakenPhase('locked'), 2600)
-    const done = setTimeout(() => finish(), 4600)
-    return () => { clearTimeout(lock); clearTimeout(done) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAwakening])
+  }, [isAwakening, cameraAttempt])
 
   // Always release the camera when leaving onboarding.
   useEffect(() => () => stopStream(), [])
 
+  // Resolving the check swaps the whole action area in. The button the user
+  // pressed to get here is already unmounted, so without this a keyboard user
+  // is parked on <body> and has to tab in from the top of the document to
+  // reach the only way forward.
+  useEffect(() => {
+    if (!isAwakening || awakenPhase === 'scanning') return
+    awakenActionRef.current?.focus()
+  }, [isAwakening, awakenPhase])
+
   function stopStream() {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
+      releaseCameraStream(streamRef.current, videoRef.current)
       streamRef.current = null
     }
   }
 
-  function finish() {
+  function completeOnboarding() {
     stopStream()
+    localStorage.setItem('eudaimonia_onboarded', 'true')
     onComplete()
   }
 
@@ -106,39 +145,19 @@ export default function Onboarding({ onComplete }) {
     setTimeout(() => { setStep(next); setVisible(true) }, 220)
   }
 
-  // Why the camera failed decides what the user should do about it, and the
-  // remedies are not interchangeable: a denial needs System Settings and will
-  // NOT re-prompt on a second click, while a camera held by Zoom just needs the
-  // other app closed. One generic "try again" sent both down a dead end.
-  const cameraFailureMessage = (err) => {
-    switch (err?.name) {
-      case 'NotAllowedError':
-      case 'SecurityError':
-        return 'Camera access was denied. macOS will not ask a second time — allow Eudaimonia under System Settings › Privacy & Security › Camera, then come back.'
-      case 'NotReadableError':
-      case 'AbortError':
-        return 'Another app is using the camera. Quit it (Zoom, Teams, FaceTime, Photo Booth) and try again.'
-      case 'NotFoundError':
-      case 'OverconstrainedError':
-        return 'No camera found. Connect one, then try again.'
-      default:
-        return 'The camera could not be started. Try again, or continue without it for now.'
-    }
-  }
-
   const handleEnableCamera = async () => {
     setError(null)
+    setAwakenError(null)
     setLoading(true)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       streamRef.current = stream
-      localStorage.setItem('eudaimonia_onboarded', 'true')
       setLoading(false)
       setAwakenPhase('scanning')
       transitionTo(3) // → the awakening
     } catch (err) {
       setLoading(false)
-      setError(cameraFailureMessage(err))
+      setError(cameraAccessFailureMessage(err))
     }
   }
 
@@ -148,8 +167,26 @@ export default function Onboarding({ onComplete }) {
   // after install. Offered only once the camera has actually failed, so the
   // happy path is still "grant it".
   const handleContinueWithoutCamera = () => {
+    stopStream()
     localStorage.setItem('eudaimonia_onboarded', 'true')
     onComplete()
+  }
+
+  const handleRetryCamera = async () => {
+    stopStream()
+    setAwakenError(null)
+    setLoading(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      streamRef.current = stream
+      setAwakenPhase('scanning')
+      setCameraAttempt(attempt => attempt + 1)
+    } catch (error) {
+      setAwakenError(cameraAccessFailureMessage(error))
+      setAwakenPhase('failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const slide = SLIDES[step] || SLIDES[0]
@@ -204,7 +241,7 @@ export default function Onboarding({ onComplete }) {
           </div>
 
           {error && (
-            <div style={{ background: 'rgba(127,29,29,0.25)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 12, padding: '11px 15px', fontSize: 13, color: '#fca5a5', lineHeight: 1.5, textAlign: 'center', maxWidth: 400 }}>
+            <div role="alert" style={{ background: 'rgba(127,29,29,0.25)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 12, padding: '11px 15px', fontSize: 13, color: '#fca5a5', lineHeight: 1.5, textAlign: 'center', maxWidth: 400 }}>
               {error}
             </div>
           )}
@@ -283,14 +320,32 @@ export default function Onboarding({ onComplete }) {
             )}
           </div>
 
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
+          {/* The outcome of the check is the whole point of this screen, and on
+              failure this text carries the only remedy. Announce it rather than
+              leaving a screen-reader user on a silent "Checking your camera…". */}
+          <div role="status" aria-live="polite" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
             <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', margin: 0, transition: 'all .4s ease' }}>
-              {awakenPhase === 'locked' ? "You're locked in." : 'Calibrating to you…'}
+              {awakenPhase === 'locked' ? 'Live preview is ready.' : awakenPhase === 'failed' ? 'Camera is not ready.' : 'Checking your camera…'}
             </h2>
-            <p style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
-              {awakenPhase === 'locked' ? 'Eudaimonia can see your focus now.' : 'Learning what your attention looks like.'}
+            <p id="onboarding-camera-readiness-message" style={{ fontSize: 14.5, color: '#93a1bd', margin: 0, lineHeight: 1.5 }}>
+              {awakenPhase === 'locked' ? 'Live preview works. Attention measurement begins when a session starts.' : awakenPhase === 'failed' ? awakenError : 'Waiting for live frames from the camera.'}
             </p>
           </div>
+          {awakenPhase === 'failed' && (
+            <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
+              <button type="button" ref={awakenActionRef} onClick={handleRetryCamera} disabled={loading} aria-describedby="onboarding-camera-readiness-message" style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: loading ? 'default' : 'pointer', textDecoration: 'underline', textUnderlineOffset: 4, opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Requesting camera…' : 'Try camera again'}
+              </button>
+              <button type="button" onClick={handleContinueWithoutCamera} disabled={loading} aria-describedby="onboarding-camera-readiness-message" style={{ background: 'none', border: 'none', padding: '2px 6px', fontSize: 13.5, color: '#93a1bd', fontFamily: font, cursor: loading ? 'default' : 'pointer', textDecoration: 'underline', textUnderlineOffset: 4, opacity: loading ? 0.7 : 1 }}>
+                Continue without camera
+              </button>
+            </div>
+          )}
+          {awakenPhase === 'locked' && (
+            <button type="button" ref={awakenActionRef} className="ob-cta" onClick={completeOnboarding} aria-describedby="onboarding-camera-readiness-message" style={{ width: '100%', maxWidth: 340, height: 54, fontSize: 15.5, fontWeight: 700, background: 'linear-gradient(135deg,var(--ultra) 0%,#243d61 100%)', color: 'var(--text)', border: '1px solid rgba(100,149,237,0.3)', borderRadius: 15, cursor: 'pointer', fontFamily: font, letterSpacing: '0.01em', boxShadow: '0 6px 24px rgba(122,152,255,0.45)' }}>
+              Continue
+            </button>
+          )}
         </div>
       )}
     </div>
