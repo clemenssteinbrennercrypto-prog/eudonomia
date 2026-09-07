@@ -5,6 +5,10 @@ function readConfig(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8'))
 }
 
+function readText(relativePath) {
+  return readFileSync(new URL(relativePath, import.meta.url), 'utf8')
+}
+
 describe('native updater channels', () => {
   it('keeps local and internal builds on the moving main-branch channel', () => {
     const base = readConfig('../../companion/src-tauri/tauri.conf.json')
@@ -21,5 +25,13 @@ describe('native updater channels', () => {
     expect(release.plugins.updater.endpoints).toEqual([
       'https://github.com/clemenssteinbrennercrypto-prog/eudonomia/releases/latest/download/latest.json',
     ])
+  })
+
+  it('applies the production endpoint overlay in the signed release workflow', () => {
+    const workflow = readText('../../.github/workflows/companion-release.yml')
+
+    expect(workflow).toMatch(
+      /args:\s*--target aarch64-apple-darwin --verbose --config src-tauri\/tauri\.release\.conf\.json/,
+    )
   })
 })

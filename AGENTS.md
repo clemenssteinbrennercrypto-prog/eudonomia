@@ -83,16 +83,18 @@ npm run build:companion
   file. Do not commit the bumped version.
 - **`/Applications/Eudonomia.app` is what the user actually launches.** Building
   into `target/release/bundle` changes nothing for them until it is copied there.
-- **Pushing to `main` never updates the installed app.** Two release channels
-  exist and they do not meet. `companion-test.yml` builds every push to `main`
-  and publishes to the `internal-test` tag; `companion-release.yml` fills
-  `releases/latest` and fires only on a `release-v*` tag. A build made from the
-  default `tauri.conf.json` asks `releases/latest` — which sat at v0.1.10 from
-  July 2026 for weeks. So the user reported "I see no change" after a correct,
-  green, pushed commit, twice. Building from `tauri.test.conf.json` instead
-  points the updater at `internal-test`, so every push to `main` reaches the
-  machine within minutes. **Before telling the user to look at something, check
-  which channel their installed build asks and when that channel last moved.**
+- **A push to `main` that touches companion build inputs updates only
+  internal-channel installs.** Two release channels exist and they do not meet.
+  `companion-test.yml` has a `paths` filter; a matching push builds and publishes
+  to the `internal-test` tag, while docs-only and other excluded pushes do not
+  move that channel. The checked-in base config and `tauri.test.conf.json` both
+  ask `internal-test`. `companion-release.yml` must apply
+  `tauri.release.conf.json` to ask `releases/latest`, and fires only on a
+  `release-v*` tag (or an explicitly started live publication). A public install
+  therefore does not receive a pushed main commit, while an internal install
+  receives a matching one within minutes. **Before telling the user to look at
+  something, check the build badge, the config/endpoint that build used, and
+  when that channel last moved.**
 
 ---
 
@@ -290,6 +292,10 @@ Test the **refusals and the boundaries**, not just the happy path. The valuable
 tests here assert that the code stays quiet on thin data, rejects malformed model
 output, and survives records written before a field existed.
 
+The dated release-gate evidence and its still-open manual/credentialed checks
+live in [`docs/release-readiness-2026-09-02.md`](docs/release-readiness-2026-09-02.md).
+Update that record instead of creating a second unlinked launch checklist.
+
 **A green build is not verification.** The live-session camera is native, so
 `npm run dev` and a browser `getUserMedia` stub cannot exercise it. Use the
 internal native diagnostic for frame flow and the installed app with a real
@@ -330,8 +336,10 @@ Working and verified: ultramarine design across the app, motion layer with
 `prefers-reduced-motion`, real 2D gaze tracking, camera fault detection and
 sleep/wake recovery, bundled offline MediaPipe, artifact tracking, output
 evidence in Rust, personal calibration, switchable goal-understanding providers.
-CI runs the unit tests on every push to `main` (job `test-build`, step "Run unit
-tests") — confirmed green 11 Aug 2026, so a red suite will be caught.
+CI runs the unit tests on every push to `main` that matches
+`companion-test.yml`'s path filter (job `test-build`, step "Run unit tests") —
+confirmed green 11 Aug 2026. A docs-only or otherwise excluded push runs no
+suite and does not move `internal-test`.
 
 Open, in rough priority order:
 
