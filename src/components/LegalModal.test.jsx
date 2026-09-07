@@ -26,6 +26,22 @@ describe('legal copy', () => {
     expect(output).toContain('Fenstertitel')
   })
 
+  it('describes transient camera processing without denying the in-memory frame buffer', () => {
+    const output = html()
+    expect(output).toContain('kurzzeitig im Arbeitsspeicher verarbeitet')
+    expect(output).toContain('weder dauerhaft gespeichert noch übertragen')
+    expect(output).not.toContain('nicht gespeichert, gepuffert oder übertragen')
+  })
+
+  it('exposes the full-screen legal view as a labelled modal with tabs', () => {
+    const output = html()
+    expect(output).toContain('role="dialog"')
+    expect(output).toContain('aria-modal="true"')
+    expect(output).toContain('aria-labelledby=')
+    expect(output).toContain('role="tablist"')
+    expect(output).toContain('role="tab"')
+  })
+
   it('names the actual provider labels and update behavior', () => {
     const output = html()
     expect(output).toContain('„Local model“')

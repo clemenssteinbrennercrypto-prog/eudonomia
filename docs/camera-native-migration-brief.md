@@ -279,7 +279,7 @@ the tag and the displayed build ID before asking the user to test.
 Automated baseline is updated whenever the suites change:
 
 ```bash
-npm test -- --run                 # 446 tests
+npm test -- --run                 # 448 tests
 npm run build
 cd companion/src-tauri
 cargo test                        # 72 tests: 13 library + 59 app

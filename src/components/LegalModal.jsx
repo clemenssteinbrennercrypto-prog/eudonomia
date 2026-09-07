@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 const navy = 'var(--ultra)'
 
@@ -42,7 +42,7 @@ export const DATENSCHUTZ = [
   },
   {
     heading: 'Kamera',
-    body: `Die Kamera dient ausschließlich der Aufmerksamkeitsanalyse auf Ihrem Gerät. Es werden keine Video- oder Bilddaten gespeichert, gepuffert oder übertragen. Die Analyse läuft lokal mit MediaPipe; aus dem Kamerabild werden nur Messwerte wie Lidöffnung, Blinzelrate und Kopfhaltung abgeleitet, und auch diese verlassen das Gerät nicht.
+    body: `Die Kamera dient ausschließlich der Aufmerksamkeitsanalyse auf Ihrem Gerät. Einzelne Kamerabilder werden dafür kurzzeitig im Arbeitsspeicher verarbeitet, aber weder dauerhaft gespeichert noch übertragen. Die Analyse läuft lokal mit MediaPipe; aus dem Kamerabild werden nur Messwerte wie Lidöffnung, Blinzelrate und Kopfhaltung abgeleitet, und auch diese verlassen das Gerät nicht.
 
 Gesichtsmerkmale werden NICHT zur Identifizierung von Personen verarbeitet. Es findet kein Gesichtsabgleich und keine Wiedererkennung statt. Damit handelt es sich nicht um biometrische Daten im Sinne von Art. 9 DSGVO, der nur die Verarbeitung zum Zweck der eindeutigen Identifizierung erfasst.`,
   },
@@ -114,18 +114,54 @@ function Section({ heading, body }) {
 
 export default function LegalModal({ open, onClose, initialTab }) {
   const [tab, setTab] = useState(initialTab ?? 'impressum')
+  const closeRef = useRef(null)
+  const titleId = useId()
+
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab)
+  }, [open, initialTab])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const previousFocus = document.activeElement
+    closeRef.current?.focus()
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus?.()
+    }
+  }, [open, onClose])
 
   if (!open) return null
-  // Sync active tab whenever the modal is reopened with a different initialTab
-  if (tab !== initialTab && initialTab) {
-    setTab(initialTab)
-  }
 
   const sections = tab === 'impressum' ? IMPRESSUM : DATENSCHUTZ
+  const keepFocusInside = (event) => {
+    if (event.key !== 'Tab') return
+    const controls = [...event.currentTarget.querySelectorAll('button:not([disabled]), a[href]')]
+    if (controls.length === 0) return
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   return (
     <div
       className="legal-modal-enter"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onKeyDown={keepFocusInside}
       style={{
         position: 'fixed', inset: 0,
         background: 'var(--bg)',
@@ -138,10 +174,12 @@ export default function LegalModal({ open, onClose, initialTab }) {
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: 'var(--text)', margin: 0 }}>
+          <h1 id={titleId} style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.022em', color: 'var(--text)', margin: 0 }}>
             {tab === 'impressum' ? 'Impressum' : 'Datenschutz'}
           </h1>
           <button
+            ref={closeRef}
+            type="button"
             onClick={onClose}
             style={{
               padding: '9px 22px', fontSize: 14, fontWeight: 600,
@@ -155,13 +193,16 @@ export default function LegalModal({ open, onClose, initialTab }) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
+        <div role="tablist" aria-label="Legal information" style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
           {[
             { id: 'impressum',   label: 'Impressum'   },
             { id: 'datenschutz', label: 'Datenschutz' },
           ].map(t => (
             <button
               key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
               style={{
                 padding: '8px 20px', fontSize: 13, fontWeight: 600,
