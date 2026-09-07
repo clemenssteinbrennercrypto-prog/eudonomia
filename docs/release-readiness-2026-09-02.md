@@ -2,7 +2,7 @@
 
 This is a point-in-time checklist for commit `ab3a07fb4e28a7316a63ef9b6a70406c11e3e17f` (`ab3a07f`). It records what was verified from the Mac Mini/build worktree and what still requires a real target Mac, a human decision, or protected release credentials. The durable product constraints and owner-held blockers remain in [`AGENTS.md`](../AGENTS.md); this dated record supplies evidence rather than replacing that source.
 
-Rechecked on 7 September 2026: `origin/main` was still `ab3a07f`, the latest internal CI run and updater assets were unchanged, the production release was still `companion-v0.1.10`, and the 442-test JavaScript suite passed again. The open gates below therefore remain current.
+Rechecked on 7 September 2026: `origin/main` was still `ab3a07f`, the latest internal CI run and updater assets were unchanged, the production release was still `companion-v0.1.10`, and the 442-test JavaScript suite passed again. A workflow/config regression test was then added on this branch, bringing its local suite to 443 tests. The open gates below therefore remain current.
 
 ## Evidence collected
 

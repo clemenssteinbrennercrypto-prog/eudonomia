@@ -47,7 +47,7 @@ app but could never run the native measurement engine.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 442 tests — must stay green
+npm test           # vitest, currently 443 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -83,16 +83,18 @@ npm run build:companion
   file. Do not commit the bumped version.
 - **`/Applications/Eudonomia.app` is what the user actually launches.** Building
   into `target/release/bundle` changes nothing for them until it is copied there.
-- **A push to `main` updates only internal-channel installs.** Two release
-  channels exist and they do not meet. `companion-test.yml` builds every push to
-  `main` and publishes to the `internal-test` tag; the checked-in base config
-  and `tauri.test.conf.json` both ask that channel. `companion-release.yml`
-  overlays `tauri.release.conf.json`, asks `releases/latest`, and fires only on
-  a `release-v*` tag (or an explicitly started live publication). A public
-  install therefore does not receive a pushed main commit, while an internal
-  install should receive it within minutes. **Before telling the user to look
-  at something, check the installed build badge/channel and when that channel
-  last moved.**
+- **A push to `main` that touches companion build inputs updates only
+  internal-channel installs.** Two release channels exist and they do not meet.
+  `companion-test.yml` has a `paths` filter; a matching push builds and publishes
+  to the `internal-test` tag, while docs-only and other excluded pushes do not
+  move that channel. The checked-in base config and `tauri.test.conf.json` both
+  ask `internal-test`. `companion-release.yml` must apply
+  `tauri.release.conf.json` to ask `releases/latest`, and fires only on a
+  `release-v*` tag (or an explicitly started live publication). A public install
+  therefore does not receive a pushed main commit, while an internal install
+  receives a matching one within minutes. **Before telling the user to look at
+  something, check the build badge, the config/endpoint that build used, and
+  when that channel last moved.**
 
 ---
 
@@ -279,7 +281,7 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 442 JS tests and 72 Rust tests (13 native-camera library
+There are currently 443 JS tests and 72 Rust tests (13 native-camera library
 tests plus 59 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
@@ -331,8 +333,10 @@ Working and verified: ultramarine design across the app, motion layer with
 `prefers-reduced-motion`, real 2D gaze tracking, camera fault detection and
 sleep/wake recovery, bundled offline MediaPipe, artifact tracking, output
 evidence in Rust, personal calibration, switchable goal-understanding providers.
-CI runs the unit tests on every push to `main` (job `test-build`, step "Run unit
-tests") — confirmed green 11 Aug 2026, so a red suite will be caught.
+CI runs the unit tests on every push to `main` that matches
+`companion-test.yml`'s path filter (job `test-build`, step "Run unit tests") —
+confirmed green 11 Aug 2026. A docs-only or otherwise excluded push runs no
+suite and does not move `internal-test`.
 
 Open, in rough priority order:
 
