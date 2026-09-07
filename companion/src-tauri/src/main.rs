@@ -271,6 +271,8 @@ fn main() {
             db::db_update_session,
             db::db_delete_session,
             db::db_clear_all,
+            db::db_is_legacy_cleanup_pending,
+            db::db_acknowledge_legacy_cleanup,
             db::db_load_focus_ledger,
             db::db_replace_focus_ledger,
             db::db_apply_focus_backfill,

@@ -10,6 +10,7 @@ import FocusAppsScreen from './components/FocusAppsScreen'
 import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
+import HistoryStorageAlerts from './components/HistoryStorageAlerts'
 import { loadFocusModeEnabled, saveFocusModeEnabled } from './lib/storage'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
@@ -173,6 +174,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null)
   const [saveError, setSaveError] = useState(null)
   const [migrationError, setMigrationError] = useState(null)
+  const [deletionCleanupError, setDeletionCleanupError] = useState(null)
   const [historyLoadError, setHistoryLoadError] = useState(null)
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
@@ -216,7 +218,13 @@ export default function App() {
         // A refused or unverified import is not a detail to swallow: it means
         // history is still only in the old store, and the user needs to know
         // why rather than being shown an app that looks empty.
-        if (!cancelled && result && result.verified === false) {
+        //
+        // A leftover copy after a deletion is the opposite situation and must
+        // not borrow that wording: there the history really was deleted, so
+        // "nothing has been deleted" would be exactly backwards.
+        if (!cancelled && result?.deletionCleanupError) {
+          setDeletionCleanupError(result.deletionCleanupError)
+        } else if (!cancelled && result && result.verified === false) {
           setMigrationError(result.reason || 'the import could not be verified')
         }
         return sessionRepository.backfillFocusLedger()
@@ -242,6 +250,16 @@ export default function App() {
       const next = typeof val === 'function' ? val(prev) : val
       return saveFocusModeEnabled(next)
     })
+  }, [])
+
+  const handleHistoryCleared = useCallback((cleanupError) => {
+    // A committed delete permanently ends the legacy-import state. Clear any
+    // earlier banner before it can keep asserting that the old store is still
+    // authoritative, and preserve only a real residual-copy warning.
+    setMigrationError(null)
+    setDeletionCleanupError(cleanupError || null)
+    setHistoryLoadError(null)
+    setSessionRevision(value => value + 1)
   }, [])
 
   const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
@@ -404,7 +422,10 @@ export default function App() {
         </>
       )}
       {screen === 'analytics' && (
-        <AnalyticsShell onClose={() => setScreen('lab')} />
+        <AnalyticsShell
+          onClose={() => setScreen('lab')}
+          onHistoryCleared={handleHistoryCleared}
+        />
       )}
     </div>
   )
@@ -417,16 +438,11 @@ export default function App() {
 
   return (
     <>
-      {migrationError && screen !== 'session' && (
-        <div className="session-save-error" role="alert">
-          <span>
-            Your history could not be imported into the new local database
-            ({migrationError}). Nothing has been deleted — your sessions are
-            still being read from their original storage, and the app will try
-            the import again next launch.
-          </span>
-        </div>
-      )}
+      <HistoryStorageAlerts
+        migrationError={migrationError}
+        deletionCleanupError={deletionCleanupError}
+        screen={screen}
+      />
       {historyLoadError && screen !== 'session' && (
         <div className="session-save-error" role="alert">
           <span>

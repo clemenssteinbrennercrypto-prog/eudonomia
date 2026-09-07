@@ -35,7 +35,18 @@ const SCHEMA_VERSION: i64 = 1;
 
 const MIGRATION_STATUS_KEY: &str = "legacy_migration_status";
 const MIGRATION_COUNTS_KEY: &str = "legacy_migration_counts";
+// Unlike the JS retry marker, this lives in the same durable SQLite store as
+// the deletion itself. It is the safety boundary when localStorage cannot be
+// written (including when the retry marker cannot be written either).
+const LEGACY_DELETION_TOMBSTONE_KEY: &str = "legacy_history_deletion_tombstone";
+// Written in the same transaction as clear_all and removed only after the
+// WebView confirms its old browser-storage copy is gone. Keeping this separate
+// from the tombstone matters: the tombstone is permanent, while this flag is a
+// retryable piece of cleanup work and the only durable signal available when
+// localStorage itself refuses both reads and writes.
+const LEGACY_CLEANUP_PENDING_KEY: &str = "legacy_history_cleanup_pending";
 const MIGRATION_DONE: &str = "completed";
+const CLEANUP_PENDING: &str = "pending";
 
 pub struct DbState(pub Mutex<Connection>);
 
@@ -671,6 +682,30 @@ pub fn clear_all(connection: &mut Connection) -> Result<(), String> {
     tx.execute("DELETE FROM sessions", []).map_err(to_err)?;
     tx.execute("DELETE FROM focus_ledger_days", [])
         .map_err(to_err)?;
+    // Clearing native history permanently ends the legacy import window. This
+    // must commit with the rows, because localStorage cleanup is best-effort
+    // and may be unavailable or may fail after this transaction succeeds.
+    meta_set(&tx, LEGACY_DELETION_TOMBSTONE_KEY, MIGRATION_DONE)?;
+    meta_set(&tx, MIGRATION_STATUS_KEY, MIGRATION_DONE)?;
+    meta_set(&tx, LEGACY_CLEANUP_PENDING_KEY, CLEANUP_PENDING)?;
+    tx.commit().map_err(to_err)?;
+    Ok(())
+}
+
+pub fn legacy_cleanup_pending(connection: &Connection) -> Result<bool, String> {
+    Ok(
+        meta_get(connection, LEGACY_CLEANUP_PENDING_KEY)?.as_deref()
+            == Some(CLEANUP_PENDING),
+    )
+}
+
+pub fn acknowledge_legacy_cleanup(connection: &mut Connection) -> Result<(), String> {
+    let tx = connection.transaction().map_err(to_err)?;
+    tx.execute(
+        "DELETE FROM schema_meta WHERE key = ?1",
+        params![LEGACY_CLEANUP_PENDING_KEY],
+    )
+    .map_err(to_err)?;
     tx.commit().map_err(to_err)?;
     Ok(())
 }
@@ -771,7 +806,9 @@ pub fn migrate_legacy(
     summaries: &[SessionSummary],
     ledger: &Value,
 ) -> Result<MigrationOutcome, String> {
-    if meta_get(connection, MIGRATION_STATUS_KEY)?.as_deref() == Some(MIGRATION_DONE) {
+    if meta_get(connection, MIGRATION_STATUS_KEY)?.as_deref() == Some(MIGRATION_DONE)
+        || meta_get(connection, LEGACY_DELETION_TOMBSTONE_KEY)?.as_deref() == Some(MIGRATION_DONE)
+    {
         return Ok(MigrationOutcome {
             migrated: false,
             imported_count: 0,
@@ -943,6 +980,16 @@ pub fn db_delete_session(state: tauri::State<'_, DbState>, id: String) -> Result
 #[tauri::command]
 pub fn db_clear_all(state: tauri::State<'_, DbState>) -> Result<(), String> {
     with_connection(&state, clear_all)
+}
+
+#[tauri::command]
+pub fn db_is_legacy_cleanup_pending(state: tauri::State<'_, DbState>) -> Result<bool, String> {
+    with_connection(&state, |connection| legacy_cleanup_pending(connection))
+}
+
+#[tauri::command]
+pub fn db_acknowledge_legacy_cleanup(state: tauri::State<'_, DbState>) -> Result<(), String> {
+    with_connection(&state, acknowledge_legacy_cleanup)
 }
 
 #[tauri::command]
@@ -1311,6 +1358,12 @@ mod tests {
     fn clear_all_empties_sessions_and_ledger_together() {
         let mut connection = db();
         let day = json!({ "sessions": { "a": { "version": 1 } } });
+        connection
+            .execute(
+                "INSERT INTO schema_meta (key, value) VALUES (?1, ?2)",
+                params![MIGRATION_STATUS_KEY, MIGRATION_DONE],
+            )
+            .unwrap();
         save_session(
             &mut connection,
             &session_value("a"),
@@ -1326,6 +1379,59 @@ mod tests {
             .as_object()
             .unwrap()
             .is_empty());
+        // Deleting history must not erase migration state: a stale legacy
+        // copy must never be imported again after the native store is clear.
+        assert_eq!(meta_get(&connection, MIGRATION_STATUS_KEY).unwrap().as_deref(), Some(MIGRATION_DONE));
+        assert_eq!(
+            meta_get(&connection, LEGACY_DELETION_TOMBSTONE_KEY)
+                .unwrap()
+                .as_deref(),
+            Some(MIGRATION_DONE)
+        );
+        assert!(legacy_cleanup_pending(&connection).unwrap());
+
+        acknowledge_legacy_cleanup(&mut connection).unwrap();
+        assert!(!legacy_cleanup_pending(&connection).unwrap());
+    }
+
+    #[test]
+    fn clear_all_turns_an_old_or_failed_migration_into_a_durable_tombstone() {
+        let mut connection = db();
+        connection
+            .execute(
+                "INSERT INTO schema_meta (key, value) VALUES (?1, ?2)",
+                params![MIGRATION_STATUS_KEY, "failed"],
+            )
+            .unwrap();
+
+        clear_all(&mut connection).unwrap();
+
+        // A later launch must refuse stale localStorage even though the prior
+        // migration did not complete and the JS retry marker may be missing.
+        assert_eq!(
+            meta_get(&connection, MIGRATION_STATUS_KEY)
+                .unwrap()
+                .as_deref(),
+            Some(MIGRATION_DONE)
+        );
+        assert_eq!(
+            meta_get(&connection, LEGACY_DELETION_TOMBSTONE_KEY)
+                .unwrap()
+                .as_deref(),
+            Some(MIGRATION_DONE)
+        );
+        assert!(legacy_cleanup_pending(&connection).unwrap());
+        let outcome = migrate_legacy(
+            &mut connection,
+            &[session_value("stale")],
+            &[summary("stale", 1)],
+            &json!({ "days": {} }),
+        )
+        .unwrap();
+        assert!(!outcome.migrated);
+        assert!(outcome.verified);
+        assert_eq!(outcome.reason.as_deref(), Some("already_migrated"));
+        assert!(load_all(&connection).unwrap().is_empty());
     }
 
     #[test]

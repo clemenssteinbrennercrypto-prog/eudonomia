@@ -278,7 +278,8 @@ describe('never shows an empty app while history is still in the old store', () 
   it('clears the store it is reading from', async () => {
     withLegacyHistory()
     await repo.clearAll()
-    expect(called('db_clear_all')).toBe(false)
+    expect(called('db_clear_all')).toBe(true)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(true)
     expect(await repo.loadAll()).toEqual([])
   })
 
@@ -356,6 +357,171 @@ describe('never shows an empty app while history is still in the old store', () 
     expect(await repo.loadFocusLedger()).toBeTruthy()
     expect(called('db_get_session')).toBe(false)
     expect(called('db_load_focus_ledger')).toBe(false)
+  })
+})
+
+describe('complete native history deletion', () => {
+  it('clears SQLite before removing the legacy copy and preserves preferences', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.setItem('eudaimonia_focus_daily_v1', JSON.stringify({ schemaVersion: 1, days: {} }))
+    localStorage.setItem('eudaimonia_focus_apps', JSON.stringify({ focusApps: ['Writing'] }))
+    localStorage.setItem('eudaimonia_focus_mode_enabled', 'true')
+    await repo.clearAll()
+    expect(called('db_clear_all')).toBe(true)
+    expect(localStorage.getItem('eudaimonia_sessions')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_daily_v1')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_apps')).not.toBeNull()
+    expect(localStorage.getItem('eudaimonia_focus_mode_enabled')).toBe('true')
+  })
+
+  it('reports a legacy cleanup failure after native success and prevents resurrection', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    const originalRemove = localStorage.removeItem.bind(localStorage)
+    localStorage.removeItem = (key) => {
+      if (key === 'eudaimonia_sessions') throw new Error('storage unavailable')
+      originalRemove(key)
+    }
+    await expect(repo.clearAll()).rejects.toThrow('cleared from the native database')
+    expect(called('db_clear_all')).toBe(true)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
+    expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBe('true')
+
+    // A new repository must not import the stale localStorage copy.
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_load_all: () => [],
+      db_load_focus_ledger: () => ({ schemaVersion: 1, days: {} }),
+    })
+    invoked = []
+    const retry = createNativeSessionRepository()
+    await retry.migrateLegacyIfNeeded()
+    expect(called('db_migrate_legacy')).toBe(false)
+  })
+
+  it('cannot resurrect history when both legacy cleanup and the JS retry marker fail', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    localStorage.setItem = () => { throw new Error('storage unavailable') }
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_clear_all: () => undefined,
+    })
+    repo = createNativeSessionRepository()
+
+    await expect(repo.clearAll()).rejects.toThrow('browser retry marker unavailable')
+    expect(called('db_clear_all')).toBe(true)
+
+    // The native transaction carries both the permanent tombstone and the
+    // cleanup retry. localStorage cannot carry either state in this case.
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_is_legacy_cleanup_pending: () => true,
+      db_load_all: () => [],
+    })
+    invoked = []
+    const retry = createNativeSessionRepository()
+    const result = await retry.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBe('storage unavailable')
+    expect(called('db_migrate_legacy')).toBe(false)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
+    expect(retry.migrated).toBe(true)
+    expect(await retry.loadAll()).toEqual([])
+    expect(called('db_load_all')).toBe(true)
+  })
+
+  it('does not touch legacy history when SQLite deletion fails', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_clear_all: () => { throw new Error('database locked') } })
+    repo = createNativeSessionRepository()
+    await expect(repo.clearAll()).rejects.toThrow('database locked')
+    expect(localStorage.getItem('eudaimonia_sessions')).not.toBeNull()
+  })
+
+  // The two failures are worded very differently for the user, so the error
+  // has to say which one happened. Without this flag a rejected native delete
+  // — which removes nothing at all — was reported as a partial deletion.
+  it('marks a leftover legacy copy as partial and a refused native delete as not', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    await expect(repo.clearAll()).rejects.toMatchObject({ partialDeletion: true })
+
+    globalThis.localStorage = new MemoryStorage()
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({ db_clear_all: () => { throw new Error('database locked') } })
+    repo = createNativeSessionRepository()
+    const refused = await repo.clearAll().catch(error => error)
+    expect(refused.partialDeletion).toBeUndefined()
+  })
+
+  // The native clear commits a tombstone, so the legacy copy stops being a
+  // store the moment it lands. A launch still served by the legacy adapter
+  // used to go on reading the history the user had just deleted, and wrote new
+  // sessions into that copy — which the next launch's cleanup then destroyed.
+  it('stops reading and writing the legacy copy the moment the native clear commits', async () => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'a' }, { id: 'b' }]))
+    // db_migrate_legacy answers with nothing, so the import is unverified and
+    // this launch is still served by the legacy adapter.
+    repo = createNativeSessionRepository()
+    await repo.migrateLegacyIfNeeded()
+    expect(repo.migrated).toBe(false)
+
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    await expect(repo.clearAll()).rejects.toMatchObject({ partialDeletion: true })
+
+    expect(repo.migrated).toBe(true)
+    await expect(repo.migrateLegacyIfNeeded()).resolves.toMatchObject({
+      verified: true,
+      reason: 'history_cleared',
+    })
+    expect(await repo.loadAll()).toEqual([])
+    await repo.saveSession({ task: 'after the delete', actualSeconds: 60 })
+    expect(called('db_save_session')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('eudaimonia_sessions')))
+      .not.toContainEqual(expect.objectContaining({ task: 'after the delete' }))
+  })
+})
+
+// A deletion whose localStorage cleanup failed used to come back from startup
+// as `verified: false`, which is the app's signal for "the import did not
+// land". The user was then told, right after deleting their history, that
+// nothing had been deleted, that their sessions were still being read from the
+// old store, and that the import would be retried next launch. All three were
+// false: SQLite was cleared, its tombstone permanently refuses the old copy,
+// and reads had already moved to SQLite.
+describe('a failed deletion cleanup is not reported as a failed import', () => {
+  beforeEach(() => {
+    localStorage.setItem('eudaimonia_sessions', JSON.stringify([{ id: 'old' }]))
+    localStorage.setItem('eudaimonia_history_deletion_pending', 'true')
+  })
+
+  it('keeps the handover verified and names the leftover copy instead', async () => {
+    localStorage.removeItem = () => { throw new Error('storage unavailable') }
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_is_legacy_cleanup_pending: () => true,
+      db_load_all: () => [],
+    })
+    repo = createNativeSessionRepository()
+
+    const result = await repo.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBe('storage unavailable')
+    // Reads must stay on the cleared SQLite store, never on the leftover copy.
+    expect(repo.migrated).toBe(true)
+    expect(await repo.loadAll()).toEqual([])
+    expect(called('db_migrate_legacy')).toBe(false)
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(false)
+  })
+
+  it('reports nothing once the retry succeeds', async () => {
+    globalThis.window.__TAURI__.core.invoke = fakeInvoke({
+      db_is_legacy_cleanup_pending: () => true,
+    })
+    repo = createNativeSessionRepository()
+
+    const result = await repo.migrateLegacyIfNeeded()
+    expect(result.verified).toBe(true)
+    expect(result.deletionCleanupError).toBeNull()
+    expect(localStorage.getItem('eudaimonia_sessions')).toBeNull()
+    expect(localStorage.getItem('eudaimonia_history_deletion_pending')).toBeNull()
+    expect(called('db_acknowledge_legacy_cleanup')).toBe(true)
   })
 })
 

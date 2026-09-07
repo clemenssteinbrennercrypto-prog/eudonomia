@@ -47,7 +47,7 @@ app but could never run the native measurement engine.
 ```bash
 npm install
 npm run dev        # isolated UI development only; native features unavailable
-npm test           # vitest, currently 452 tests — must stay green
+npm test           # vitest, currently 459 tests — must stay green
 npm run build      # production bundle
 ```
 
@@ -55,7 +55,7 @@ Rust side:
 
 ```bash
 cd companion/src-tauri
-cargo test         # currently 72 tests (13 library + 59 app)
+cargo test         # currently 73 tests (13 library + 60 app)
 cargo check
 ```
 
@@ -279,8 +279,8 @@ degrades the result; it never breaks a session.
 
 ## 7. Testing and verification
 
-There are currently 452 JS tests and 72 Rust tests (13 native-camera library
-tests plus 59 app tests). Both suites must stay green. Treat these counts as a
+There are currently 459 JS tests and 73 Rust tests (13 native-camera library
+tests plus 60 app tests). Both suites must stay green. Treat these counts as a
 checkpoint, not a substitute for reading the runner output when tests are added.
 
 Test the **refusals and the boundaries**, not just the happy path. The valuable
