@@ -60,6 +60,32 @@ describe('dashboard data', () => {
     expect(bins[10]).toMatchObject({ state: 'drift', score: 22 })
   })
 
+  it('keeps resumed work at its wall-clock time and marks the pause separately', () => {
+    const startedAt = new Date(2026, 7, 25, 14, 0, 0).getTime()
+    const endedAt = new Date(2026, 7, 25, 18, 0, 0).getTime()
+    const bins = buildAttentionField([{
+      startedAt,
+      endedAt,
+      timestamp: endedAt,
+      actualSeconds: 3600,
+      pausedSeconds: 3 * 3600,
+      pauseIntervals: [{
+        startedAt: new Date(2026, 7, 25, 14, 30, 0).getTime(),
+        endedAt: new Date(2026, 7, 25, 17, 30, 0).getTime(),
+      }],
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      timeline: [
+        { second: 15 * 60, wallSecond: 15 * 60, score: 82 },
+        { second: 40 * 60, wallSecond: 3 * 60 * 60 + 40 * 60, score: 55 },
+      ],
+    }], { range: 'day', now: new Date(2026, 7, 25, 20, 0, 0).getTime(), bins: 24 })
+
+    expect(bins[14]).toMatchObject({ state: 'strong', score: 82 })
+    expect(bins[15]).toMatchObject({ state: 'paused', score: null })
+    expect(bins[16]).toMatchObject({ state: 'paused', score: null })
+    expect(bins[17]).toMatchObject({ state: 'focused', score: 55 })
+  })
+
   it('refuses unknown or unversioned timelines instead of guessing their ruler', () => {
     const start = new Date(2026, 7, 25, 8, 0, 0).getTime()
     const bins = buildAttentionField([

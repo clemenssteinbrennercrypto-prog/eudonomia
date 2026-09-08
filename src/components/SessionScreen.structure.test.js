@@ -9,6 +9,14 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source).toContain('forceTimelineSample: true')
   })
 
+  it('stores wall-clock pause evidence without feeding it into score accumulation', () => {
+    expect(source).toContain('pauseIntervalsRef.current.push({ startedAt: pausedAt, endedAt: resumedAt })')
+    expect(source).toContain('timelineSnapshotsRef.current.push({ ...result.timelineSample, wallSecond })')
+    expect(source).toContain('pausedSeconds,')
+    expect(source).toContain('pauseIntervals,')
+    expect(source).not.toMatch(/accumulateMeasurement\(\{[^}]*pausedSeconds/s)
+  })
+
   it('stops a finished session before the tick can touch camera health', () => {
     const tickStart = source.indexOf('const tick = setInterval(() => {')
     const guard = source.indexOf('if (sessionEndedRef.current) return', tickStart)

@@ -1,6 +1,7 @@
 import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
 import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod } from './focusMetric'
 import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
+import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
 
 const RANGE_MS = {
   day: 24 * 60 * 60 * 1000,
@@ -15,13 +16,6 @@ function startOfRange(range, now) {
   return start.getTime()
 }
 
-function sessionStart(session) {
-  if (Number.isFinite(session?.startedAt)) return session.startedAt
-  const end = Number.isFinite(session?.timestamp) ? session.timestamp : null
-  const duration = Number.isFinite(session?.actualSeconds) ? session.actualSeconds * 1000 : 0
-  return end == null ? null : end - duration
-}
-
 export function buildAttentionField(sessions, { range = 'day', now = Date.now(), bins = 96 } = {}) {
   const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'day'
   const start = startOfRange(safeRange, now)
@@ -31,7 +25,7 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
   const end = nominalEnd
   const width = Math.max(1, nominalEnd - start)
   const safeBins = Math.max(12, Math.min(160, Math.trunc(bins) || 96))
-  const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false }))
+  const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false, paused: false }))
   const scoreableSessions = (Array.isArray(sessions) ? sessions : []).filter(session =>
     SCOREABLE_SCORING_VERSIONS.includes(session?.attentionScoringVersion))
   const activeGeneration = activeFocusGeneration(scoreableSessions)
@@ -41,19 +35,27 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
     // in current use, but never average coordinates measured by two different
     // camera generations into one colour cell.
     if (focusGenerationOf(session) !== activeGeneration) continue
-    const sessionStartMs = sessionStart(session)
+    const sessionStartMs = sessionStartedAt(session)
     if (!Number.isFinite(sessionStartMs)) continue
-    const durationMs = Math.max(0, (session.actualSeconds || 0) * 1000)
-    const sessionEndMs = sessionStartMs + durationMs
+    const sessionEndMs = sessionEndedAt(session)
+    if (!Number.isFinite(sessionEndMs) || sessionEndMs < sessionStartMs) continue
     if (sessionEndMs < start || sessionStartMs > Math.min(now, end)) continue
 
     const firstBin = Math.max(0, Math.floor(((sessionStartMs - start) / width) * safeBins))
     const lastBin = Math.min(safeBins - 1, Math.floor(((sessionEndMs - start) / width) * safeBins))
     for (let i = firstBin; i <= lastBin; i++) buckets[i].active = true
 
+    for (const pause of sessionPauseIntervals(session)) {
+      for (let i = firstBin; i <= lastBin; i++) {
+        const binStart = start + (i / safeBins) * width
+        const binEnd = start + ((i + 1) / safeBins) * width
+        if (pause.startedAt < binEnd && pause.endedAt > binStart) buckets[i].paused = true
+      }
+    }
+
     for (const point of session.timeline || []) {
       if (!Number.isFinite(point?.second) || !Number.isFinite(point?.score)) continue
-      const pointTime = sessionStartMs + point.second * 1000
+      const pointTime = sessionStartMs + timelineWallSecond(point) * 1000
       if (pointTime < start || pointTime > Math.min(now, end)) continue
       const index = Math.min(safeBins - 1, Math.max(0, Math.floor(((pointTime - start) / width) * safeBins)))
       buckets[index].scores.push(point.score)
@@ -64,7 +66,7 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
     const bucketStart = start + (index / safeBins) * width
     if (bucketStart >= now) return { index, timestamp: bucketStart, state: 'future', score: null }
     if (bucket.scores.length === 0) {
-      return { index, timestamp: bucketStart, state: bucket.active ? 'no-signal' : 'inactive', score: null }
+      return { index, timestamp: bucketStart, state: bucket.paused ? 'paused' : bucket.active ? 'no-signal' : 'inactive', score: null }
     }
     const score = Math.round(bucket.scores.reduce((sum, value) => sum + value, 0) / bucket.scores.length)
     const state = score >= FLOW_SCORE ? 'strong' : score >= FOCUSED_SCORE ? 'focused' : 'drift'

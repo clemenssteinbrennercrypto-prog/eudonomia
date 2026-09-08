@@ -1,6 +1,11 @@
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import { describeFocusMetricRejection } from '../../lib/focusMetric'
 import TimelineBar from './TimelineBar'
+import { sessionEndedAt, sessionPausedSeconds, sessionStartedAt } from '../../lib/sessionTiming'
+
+function fmtTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
 
 function activityOutputLine(facts) {
   const bits = []
@@ -22,6 +27,9 @@ export default function MeasuredFacts({ session, analysis }) {
   const belowThresholdSeconds = measurement.scored
     ? Math.max(0, (measurement.measuredSeconds || 0) - (measurement.focusedSeconds || 0))
     : null
+  const startedAt = sessionStartedAt(session)
+  const endedAt = sessionEndedAt(session)
+  const pausedSeconds = sessionPausedSeconds(session)
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -29,12 +37,9 @@ export default function MeasuredFacts({ session, analysis }) {
         <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', margin: '0 0 6px' }}>
           {session.completed ? 'Session complete' : 'Session ended'}
         </p>
-        {measurement.actualSeconds > 0 && (
+        {startedAt != null && endedAt != null && (
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-            {/* Uses the session's own saved timestamp, not the current wall
-                clock — this same component renders a session reopened from
-                history, potentially long after it happened. */}
-            Started at {new Date((session.timestamp || Date.now()) - measurement.actualSeconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            {fmtTime(startedAt)}–{fmtTime(endedAt)}
             {facts.workspace?.name ? ` · ${facts.workspace.name}` : ''}
           </p>
         )}
@@ -46,8 +51,17 @@ export default function MeasuredFacts({ session, analysis }) {
       <div className="stats-row" style={{ flexWrap: 'wrap', justifyContent: 'center', rowGap: 32 }}>
         <div className="stat">
           <span className="stat-value">{fmtDuration(measurement.actualSeconds)}</span>
-          <span className="stat-label">total duration</span>
+          <span className="stat-label">active time</span>
         </div>
+        {pausedSeconds != null && (
+          <>
+            <div className="stat-divider" />
+            <div className="stat">
+              <span className="stat-value">{fmtDuration(pausedSeconds)}</span>
+              <span className="stat-label">pause time</span>
+            </div>
+          </>
+        )}
         <div className="stat-divider" />
         <div className="stat">
           <span
@@ -97,7 +111,7 @@ export default function MeasuredFacts({ session, analysis }) {
         )
       })()}
 
-      <TimelineBar timeline={session.timeline} />
+      <TimelineBar timeline={session.timeline} session={session} />
 
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
         {activityOutputLine(facts)}

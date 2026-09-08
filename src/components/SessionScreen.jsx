@@ -862,9 +862,11 @@ export default function SessionScreen({
   const sessionEndedRef = useRef(false)
   const endConfirmRef = useRef(false)
   const startTimeRef    = useRef(Date.now())
+  const firstActiveAtRef = useRef(null) // excludes native-camera startup from the saved session span
   const isPausedRef     = useRef(true)
   const pausedAtRef     = useRef(Date.now()) // timestamp when paused
   const pausedTotalRef  = useRef(0)    // total ms spent paused
+  const pauseIntervalsRef = useRef([]) // explicit user/companion pauses after the session first became active
   const timeLeftRef     = useRef(totalSeconds ?? 0)
   const companionSessionHadActiveRef = useRef(false)
   const explicitResumeRequiredRef = useRef(true)
@@ -1044,6 +1046,21 @@ export default function SessionScreen({
     timeLeftRef.current = timeLeft
   }, [timeLeft])
 
+  const closePauseAt = useCallback((resumedAt) => {
+    const pausedAt = pausedAtRef.current
+    if (pausedAt) {
+      pausedTotalRef.current += Math.max(0, resumedAt - pausedAt)
+      // The initial camera-readiness overlay precedes the session rather than
+      // interrupting it. Only later pauses belong on the saved wall timeline.
+      if (firstActiveAtRef.current != null && resumedAt > pausedAt) {
+        pauseIntervalsRef.current.push({ startedAt: pausedAt, endedAt: resumedAt })
+      }
+    }
+    if (firstActiveAtRef.current == null) firstActiveAtRef.current = resumedAt
+    pausedAtRef.current = null
+    statsSampleAtRef.current = resumedAt
+  }, [])
+
   const applyCompanionSession = useCallback((session) => {
     if (!session || session === true) return false
     if (session.sessionState === 'active' || session.sessionState === 'paused') {
@@ -1063,17 +1080,15 @@ export default function SessionScreen({
     if (session.sessionState === 'paused' && !isPausedRef.current) {
       isPausedRef.current = true
       pausedAtRef.current = pausedAtRef.current || Date.now()
+      statsSampleAtRef.current = pausedAtRef.current
       setIsPaused(true)
     } else if (session.sessionState === 'active' && isPausedRef.current) {
       isPausedRef.current = false
-      if (pausedAtRef.current) {
-        pausedTotalRef.current += Date.now() - pausedAtRef.current
-        pausedAtRef.current = null
-      }
+      closePauseAt(Date.now())
       setIsPaused(false)
     }
     return true
-  }, [])
+  }, [closePauseAt])
 
   const resetCameraEvidence = useCallback(() => {
     // Preserve only recovery time that was actually measured. Wall-clock time
@@ -1185,14 +1200,10 @@ export default function SessionScreen({
     }
     explicitResumeRequiredRef.current = false
     isPausedRef.current = false
-    if (pausedAtRef.current) {
-      pausedTotalRef.current += Date.now() - pausedAtRef.current
-      pausedAtRef.current = null
-    }
-    statsSampleAtRef.current = Date.now()
+    closePauseAt(Date.now())
     setIsPaused(false)
     await pushBlockingState(true, 'active')
-  }, [pushBlockingState, restartCamera])
+  }, [closePauseAt, pushBlockingState, restartCamera])
 
   const interruptCamera = useCallback((fault = null) => {
     if (sessionEndedRef.current) return
@@ -1367,7 +1378,12 @@ export default function SessionScreen({
       focusPhaseRef.current = result.currentPhase
       setFocusPhase(result.currentPhase)
     }
-    if (result.timelineSample) timelineSnapshotsRef.current.push(result.timelineSample)
+    if (result.timelineSample) {
+      const wallSecond = firstActiveAtRef.current == null
+        ? result.timelineSample.second
+        : Math.max(0, (now - firstActiveAtRef.current) / 1000)
+      timelineSnapshotsRef.current.push({ ...result.timelineSample, wallSecond })
+    }
 
     activityAlignmentRef.current = recordActivityAlignment(
       activityAlignmentRef.current,
@@ -1391,6 +1407,16 @@ export default function SessionScreen({
     const ongoingPause = pausedAtRef.current ? (Date.now() - pausedAtRef.current) : 0
     const endedAt = Date.now()
     const actualSeconds = Math.round((endedAt - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000)
+    const startedAt = firstActiveAtRef.current ?? startTimeRef.current
+    const pauseIntervals = [...pauseIntervalsRef.current]
+    if (firstActiveAtRef.current != null && pausedAtRef.current && endedAt > pausedAtRef.current) {
+      pauseIntervals.push({ startedAt: pausedAtRef.current, endedAt })
+    }
+    const pausedSeconds = pauseIntervals.reduce(
+      (total, interval) => total + (interval.endedAt - interval.startedAt) / 1000,
+      0
+    )
+    const wallSeconds = Math.max(0, (endedAt - startedAt) / 1000)
     if (backgroundedAtSecondRef.current != null) {
       const startSecond = backgroundedAtSecondRef.current
       if (actualSeconds > startSecond) {
@@ -1432,8 +1458,11 @@ export default function SessionScreen({
     const dominantFocusPhase = Object.entries(focusPhaseSeconds)
       .sort((a, b) => b[1] - a[1])[0]?.[0] || focusPhaseRef.current
     onEnd({
-      startedAt:            startTimeRef.current,
+      startedAt,
       endedAt,
+      wallSeconds,
+      pausedSeconds,
+      pauseIntervals,
       attentionScoringVersion: cameraMeasurement.attentionScoringVersion,
       attentionMeasurementSource: cameraMeasurement.id,
       attentionModel: {

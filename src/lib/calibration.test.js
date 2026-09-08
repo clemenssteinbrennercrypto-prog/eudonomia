@@ -11,6 +11,7 @@ import {
   outputEvidenceFit,
   planningFit,
   suggestNextSession,
+  startHour,
   timeOfDayFit,
   weekdayFit,
   workspaceFit,
@@ -203,6 +204,19 @@ describe('duration fit', () => {
       ...many(4, { planned: 90, mins: 90, pct: 72 }),
     ]
     expect(durationFit(s).shorterIsBetter).toBeNull()
+  })
+})
+
+describe('wall-clock session placement', () => {
+  it('uses the recorded start instead of moving a paused session later', () => {
+    const startedAt = new Date(2026, 7, 25, 14, 0, 0).getTime()
+    expect(startHour({
+      startedAt,
+      endedAt: new Date(2026, 7, 25, 18, 0, 0).getTime(),
+      timestamp: new Date(2026, 7, 25, 18, 0, 0).getTime(),
+      actualSeconds: 3600,
+      pausedSeconds: 3 * 3600,
+    })).toBe(14)
   })
 })
 

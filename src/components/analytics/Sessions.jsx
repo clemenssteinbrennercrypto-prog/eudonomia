@@ -3,6 +3,7 @@ import { sessionAverageFocus, sessionFocusPct, hasMeasuredFocus } from '../../li
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import ConfirmDialog from '../ConfirmDialog'
 import SessionDetailView from './sessions/SessionDetailView'
+import { sessionEndedAt, sessionPausedSeconds, sessionStartedAt, sessionWallSeconds } from '../../lib/sessionTiming'
 
 const PAGE_SIZE = 10
 const DATE_FILTERS = [['all', 'All time'], ['week', 'This week'], ['month', 'This month']]
@@ -33,11 +34,19 @@ function focusColor(pct) {
 // exported everything regardless of what was on screen, which read as a bug
 // once Sessions became a filterable view.
 export function buildSessionsCSV(sessions) {
-  const header = ['timestamp', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'durationSeconds', 'measuredSeconds', 'averageFocus', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
+  const header = ['timestamp', 'startedAt', 'endedAt', 'wallDurationSeconds', 'activeDurationSeconds', 'pausedSeconds', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'measuredSeconds', 'averageFocus', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
   const rows = sessions.map(s => {
     const pct = sessionAverageFocus(s)
+    const startedAt = sessionStartedAt(s)
+    const endedAt = sessionEndedAt(s)
+    const pausedSeconds = sessionPausedSeconds(s)
     return [
       new Date(s.timestamp).toISOString(),
+      startedAt == null ? '' : new Date(startedAt).toISOString(),
+      endedAt == null ? '' : new Date(endedAt).toISOString(),
+      sessionWallSeconds(s),
+      s.actualSeconds ?? 0,
+      pausedSeconds ?? '',
       `"${(s.task || '').replace(/"/g, '""')}"`,
       `"${(s.workspace?.name || '').replace(/"/g, '""')}"`,
       s.workspace?.revision ?? '',
@@ -46,7 +55,6 @@ export function buildSessionsCSV(sessions) {
       s.goalOutcome || '',
       `"${(s.completedText || '').replace(/"/g, '""')}"`,
       `"${(s.blockerText || '').replace(/"/g, '""')}"`,
-      s.actualSeconds ?? 0,
       s.measuredSeconds ?? '',
       pct ?? '',
       sessionFocusPct(s) ?? '',
@@ -106,6 +114,10 @@ function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
   const color = focusColor(pct)
   const outcome = normalizedOutcome(session)
   const outcomeLabel = outcome === 'yes' ? 'Goal reached' : outcome === 'partly' ? 'Partly reached' : outcome === 'no' ? 'Goal missed' : null
+  const startedAt = sessionStartedAt(session)
+  const endedAt = sessionEndedAt(session)
+  const pausedSeconds = sessionPausedSeconds(session)
+  const displayTimestamp = startedAt ?? session.timestamp
 
   return (
     <div
@@ -121,9 +133,10 @@ function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
           {session.task || 'Untitled session'}
         </p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-          {fmtDate(session.timestamp)} · {fmtTime(session.timestamp)}
+          {fmtDate(displayTimestamp)} · {startedAt == null ? fmtTime(session.timestamp) : `${fmtTime(startedAt)}–${fmtTime(endedAt)}`}
           {session.workspace?.name ? ` · ${session.workspace.name}` : ''}
-          {' · '}{fmtDuration(session.actualSeconds)}
+          {' · '}{fmtDuration(session.actualSeconds)} active
+          {pausedSeconds != null ? ` · ${fmtDuration(pausedSeconds)} paused` : ''}
         </p>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>

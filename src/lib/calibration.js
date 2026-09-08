@@ -12,6 +12,7 @@
 
 import { comparableSessions, sessionAverageFocus, sessionFocusMeasurement } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
+import { sessionStartedAt } from './sessionTiming'
 
 /** Nothing at all is claimed under this many usable sessions. */
 export const MIN_SESSIONS = 8
@@ -54,9 +55,9 @@ export function focusPct(session) {
   return sessionAverageFocus(session)
 }
 
-/** Sessions are stamped when they end, so the start is where the work happened. */
+/** Bucket by the recorded wall-clock start, including sessions that contained pauses. */
 export function startHour(session) {
-  const startMs = session.timestamp - (session.actualSeconds || 0) * 1000
+  const startMs = sessionStartedAt(session)
   return new Date(startMs).getHours()
 }
 
@@ -175,10 +176,9 @@ function rankBuckets(buckets) {
   return { ranked, best: meaningful ? best : null, worst: meaningful ? worst : null }
 }
 
-/** Sessions are stamped at end; the start moment is where the work happened —
- *  same reasoning as startHour, one level up to the calendar day. */
+/** Use the recorded wall-clock start rather than compressing pauses out. */
 function startDate(session) {
-  return new Date(session.timestamp - (session.actualSeconds || 0) * 1000)
+  return new Date(sessionStartedAt(session))
 }
 
 /** Does the day of the week predict your focus? */

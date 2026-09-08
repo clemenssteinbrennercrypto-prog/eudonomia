@@ -84,6 +84,34 @@ describe('EndScreen post-session flow', () => {
     const html = render({ actualSeconds: 1800, measuredSeconds: 1800, focusedSeconds: 1500, avgFocusScore: 83 })
     expect(html).toContain('Continue to Analytics')
   })
+
+  it('separates active and paused wall-clock time without scoring the pause', () => {
+    const startedAt = new Date(2026, 7, 25, 14, 0, 0).getTime()
+    const endedAt = new Date(2026, 7, 25, 18, 0, 0).getTime()
+    const html = render({
+      timestamp: endedAt,
+      startedAt,
+      endedAt,
+      wallSeconds: 4 * 3600,
+      actualSeconds: 3600,
+      pausedSeconds: 3 * 3600,
+      pauseIntervals: [{
+        startedAt: new Date(2026, 7, 25, 14, 30, 0).getTime(),
+        endedAt: new Date(2026, 7, 25, 17, 30, 0).getTime(),
+      }],
+      measuredSeconds: 3600,
+      focusedSeconds: 3000,
+      avgFocusScore: 83,
+      timeline: [{ second: 300, wallSecond: 300, score: 83 }],
+    })
+
+    expect(html).toContain('active time')
+    expect(html).toContain('pause time')
+    expect(html).toContain('60m')
+    expect(html).toContain('180m')
+    expect(html).toContain('Pause')
+    expect(html).toContain('83%')
+  })
 })
 
 // The AI verdict must stay disconnected from the post-session flow — this is a

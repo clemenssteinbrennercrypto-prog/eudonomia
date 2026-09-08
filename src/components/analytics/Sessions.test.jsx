@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from '
 import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
-import Sessions from './Sessions'
+import Sessions, { buildSessionsCSV } from './Sessions'
 import { emptyFocusLedger } from '../../lib/focusMetric'
 
 afterEach(cleanup)
@@ -82,6 +82,39 @@ describe('Sessions — legacy records missing newer fields', () => {
     expect(() => render([legacy])).not.toThrow()
     const html = render([legacy])
     expect(html).toContain('Old session')
+  })
+})
+
+describe('Sessions — wall-clock timing', () => {
+  it('shows active time and an explicit pause separately', () => {
+    const startedAt = new Date(2026, 7, 25, 14, 0, 0).getTime()
+    const endedAt = new Date(2026, 7, 25, 18, 0, 0).getTime()
+    const s = session({ id: 'paused', extra: {
+      startedAt,
+      endedAt,
+      timestamp: endedAt,
+      actualSeconds: 3600,
+      wallSeconds: 4 * 3600,
+      pausedSeconds: 3 * 3600,
+    } })
+    const html = render([s])
+
+    expect(html).toContain('60m active')
+    expect(html).toContain('180m paused')
+  })
+
+  it('exports wall, active, and pause durations as separate columns', () => {
+    const csv = buildSessionsCSV([session({ id: 'paused', extra: {
+      startedAt: 1_000,
+      endedAt: 15_401_000,
+      timestamp: 15_401_000,
+      wallSeconds: 14_400,
+      actualSeconds: 3_600,
+      pausedSeconds: 10_800,
+    } })])
+
+    expect(csv.split('\n')[0]).toContain('wallDurationSeconds,activeDurationSeconds,pausedSeconds')
+    expect(csv.split('\n')[1]).toContain(',14400,3600,10800,')
   })
 })
 
