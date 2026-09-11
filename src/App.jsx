@@ -89,7 +89,7 @@ function AppRefreshControl({ updateStatus }) {
         type="button"
         onClick={primaryAction}
         disabled={installing}
-        aria-label={isNative ? 'Reload Eudonomia and install any available update' : 'Reload current Eudonomia app'}
+        aria-label={isNative ? 'Reload Eudonomia and install any available update' : 'Reload current Eudaimonia app'}
       >
         <span className="app-refresh-icon" aria-hidden="true">↻</span>
         <span>{primaryLabel}</span>
