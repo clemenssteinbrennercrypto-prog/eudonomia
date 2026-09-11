@@ -1246,7 +1246,7 @@ export default function HistoryDashboard({ onClose }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `eudonomia-focus-diagnostics-${new Date().toISOString().slice(0,10)}.json`
+    a.download = `eudaimonia-focus-diagnostics-${new Date().toISOString().slice(0,10)}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
