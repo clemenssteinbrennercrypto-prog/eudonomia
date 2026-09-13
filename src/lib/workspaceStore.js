@@ -1,4 +1,5 @@
 import { defaultRoleForType, normalizeWorkspaceObjects } from './workspaceObjects'
+import { normalizeWorkspaceSize } from './workspaceSizePresets'
 
 export const WORKSPACE_STORAGE_KEY = 'eudaimonia_workspaces_v1'
 export const LEGACY_WORKSPACE_KEY = 'eudaimonia_devices'
@@ -16,10 +17,6 @@ function finite(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback
 }
 
-function dimension(value) {
-  return Math.max(0.4, Math.min(2.8, finite(value, 1)))
-}
-
 export function sceneFromLegacy(object = {}) {
   return {
     x: Math.max(-1, Math.min(1, finite(object.col, 0.5) * 2 - 1)),
@@ -33,6 +30,7 @@ export function sceneFromLegacy(object = {}) {
 export function normalizeWorkspaceItem(object, index = 0) {
   const [legacy] = normalizeWorkspaceObjects([object])
   if (!legacy) return null
+  const size = normalizeWorkspaceSize({ ...object, type: legacy.type })
   const scene = object.scene && typeof object.scene === 'object'
     ? {
         x: Math.max(-1, Math.min(1, finite(object.scene.x, 0))),
@@ -46,12 +44,10 @@ export function normalizeWorkspaceItem(object, index = 0) {
     ...legacy,
     id: String(object.id || `${legacy.type}_${index}`),
     role: object.role || defaultRoleForType(legacy.type),
-    scene,
-    dimensions: {
-      width: dimension(object.dimensions?.width),
-      height: dimension(object.dimensions?.height),
-      depth: dimension(object.dimensions?.depth),
-    },
+    scene: { ...scene, scale: size.sizePreset ? 1 : scene.scale },
+    sizePreset: size.sizePreset,
+    dimensions: size.dimensions,
+    attentionBounds: size.attentionBounds,
     calibrationTarget: object.calibrationTarget !== false,
   }
 }

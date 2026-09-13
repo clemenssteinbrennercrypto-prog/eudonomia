@@ -22,6 +22,7 @@ describe('workspace storage', () => {
     const active = getActiveWorkspace(state)
     expect(active.name).toBe('Imported workspace')
     expect(active.objects[0]).toMatchObject({ col: 0.2, row: 0.5 })
+    expect(active.objects[0]).toMatchObject({ sizePreset: 'monitor_27', attentionBounds: { width: 1, height: 1 } })
     expect(active.objects[0].dimensions).toEqual({ width: 1, height: 1, depth: 1 })
     expect(active.calibration.status).toBe('uncalibrated')
   })
@@ -32,6 +33,7 @@ describe('workspace storage', () => {
       devices[1],
     ])
     expect(getActiveWorkspace(state).objects[0].dimensions).toEqual({ width: 2.4, height: 0.7, depth: 2.8 })
+    expect(getActiveWorkspace(state).objects[0]).toMatchObject({ sizePreset: null, attentionBounds: { width: 2.4, height: 0.7 } })
   })
 
   it('repairs an unknown active id to the first valid workspace', () => {

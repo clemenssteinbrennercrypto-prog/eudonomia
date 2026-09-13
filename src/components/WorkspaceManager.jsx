@@ -3,6 +3,7 @@ import WorkspaceSetup from './WorkspaceSetup'
 import WorkspaceCalibration from './WorkspaceCalibration'
 import WorkspaceAttentionMap from './WorkspaceAttentionMap'
 import { WORKSPACE_OBJECT_TYPES, WORKSPACE_ROLE_LABELS, WORKSPACE_ROLES, defaultRoleForType } from '../lib/workspaceObjects'
+import { defaultWorkspaceSize, sizePresetsForType, workspaceSizeFromPreset } from '../lib/workspaceSizePresets'
 import {
   createWorkspace,
   deleteWorkspace,
@@ -15,6 +16,8 @@ import {
 
 const Workspace3DScene = lazy(() => import('./Workspace3DScene'))
 const PALETTE_OBJECT_TYPES = [...WORKSPACE_OBJECT_TYPES].sort((a, b) => Number(b.id === 'camera') - Number(a.id === 'camera'))
+const HEIGHT_ADJUSTABLE_TYPES = new Set(['monitor', 'laptop', 'camera'])
+const ROTATABLE_TYPES = new Set(['monitor', 'laptop', 'ipad', 'phone', 'keyboard', 'paper', 'notebook', 'book'])
 
 const TEMPLATE_OBJECTS = {
   laptop: [
@@ -70,6 +73,8 @@ function Editor({ initial, onSave, onCancel }) {
   const hasPrimary = draft.objects.some(object => object.role === 'primary_screen')
   const hasCamera = draft.objects.some(object => object.type === 'camera')
   const calibrated = Object.keys(draft.calibration?.targets || {}).length
+  const selectedType = WORKSPACE_OBJECT_TYPES.find(type => type.id === selected?.type)
+  const selectedSizePresets = selected ? sizePresetsForType(selected.type) : []
 
   const addObject = type => {
     if (type === 'camera') {
@@ -77,7 +82,7 @@ function Editor({ initial, onSave, onCancel }) {
       if (existing) return setSelectedId(existing.id)
     }
     const id = `${type}_${Date.now()}`
-    const legacy = { id, type, role: defaultRoleForType(type), col: .5, row: .5, scale: 1 }
+    const legacy = { id, type, role: defaultRoleForType(type), col: .5, row: .5, scale: 1, ...defaultWorkspaceSize(type) }
     setDraft(current => ({ ...current, objects: [...current.objects, { ...legacy, scene: sceneFromLegacy(legacy), calibrationTarget: true }] }))
     setSelectedId(id)
   }
@@ -89,12 +94,16 @@ function Editor({ initial, onSave, onCancel }) {
     }) }
     return invalidateObjectCalibration(next, selectedId, selected?.type === 'camera' || selected?.role === 'primary_screen')
   })
-  const updateDimension = (axis, value) => setDraft(current => ({
-    ...current,
-    objects: current.objects.map(object => object.id === selectedId
-      ? { ...object, dimensions: { width: 1, height: 1, depth: 1, ...object.dimensions, [axis]: Number(value) } }
-      : object),
-  }))
+  const updateSizePreset = presetId => {
+    const size = workspaceSizeFromPreset(selected?.type, presetId)
+    if (!size) return
+    setDraft(current => ({
+      ...current,
+      objects: current.objects.map(object => object.id === selectedId
+        ? { ...object, ...size, scene: { ...object.scene, scale: 1 } }
+        : object),
+    }))
+  }
   const updateRole = role => {
     let next = {
       ...draft,
@@ -147,14 +156,15 @@ function Editor({ initial, onSave, onCancel }) {
         <div className="workspace-quality"><strong>{calibrated}/{draft.objects.length} calibrated</strong><span>{hasPrimary ? 'Primary screen set' : 'Primary screen missing'} · {hasCamera ? 'Camera set' : 'Camera missing'}</span>{error && <em>{error}</em>}<button disabled={!hasPrimary || !hasCamera} onClick={() => setCalibrating(true)}>Calibrate every object</button></div>
       </section>
       <aside className="workspace-properties"><h3>Properties</h3>{selected ? <>
+        <div className="workspace-object-kind"><span>{deviceGlyph(selected.type)}</span><div><strong>{selectedType?.label || selected.type}</strong><small>{selected.sizePreset ? 'Standard proportions' : 'Existing custom proportions'}</small></div></div>
         <label>Role<select value={selected.role} onChange={event => updateRole(event.target.value)}>{WORKSPACE_ROLES.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label>
+        <div className="workspace-property-section">Size</div>
+        {selectedSizePresets.length > 1 ? <label>Device size<select aria-label="Device size" value={selected.sizePreset || 'custom'} onChange={event => updateSizePreset(event.target.value)}>{!selected.sizePreset && <option value="custom" disabled>Custom (existing)</option>}{selectedSizePresets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>Uses fixed proportions and sets the calibrated gaze area.</small></label> : <div className="workspace-fixed-size"><span>Device size</span><strong>{selected.sizePreset ? selectedSizePresets[0]?.label || 'Standard' : 'Custom (existing)'}</strong>{!selected.sizePreset && selectedSizePresets[0] && <button type="button" onClick={() => updateSizePreset(selectedSizePresets[0].id)}>Use standard</button>}</div>}
+        <div className="workspace-property-section">Placement</div>
         <label>Left / right<input type="range" min="-1" max="1" step="0.05" value={selected.scene.x} onChange={event => updateScene({ x: Number(event.target.value) })}/></label>
-        <label>Height<input type="range" min="-1" max="1" step="0.05" value={selected.scene.y} onChange={event => updateScene({ y: Number(event.target.value) })}/></label>
-        <label>Depth<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
-        <div className="workspace-dimensions-heading"><span>Object dimensions</span><button type="button" onClick={() => setDraft(current => ({ ...current, objects: current.objects.map(object => object.id === selectedId ? { ...object, dimensions: { width: 1, height: 1, depth: 1 } } : object) }))}>Reset</button></div>
-        {['width', 'height', 'depth'].map(axis => <label key={axis} className="workspace-dimension-control"><span>{axis}<output>{(selected.dimensions?.[axis] || 1).toFixed(2)}×</output></span><input type="range" min="0.4" max="2.8" step="0.05" value={selected.dimensions?.[axis] || 1} onChange={event => updateDimension(axis, event.target.value)}/></label>)}
-        <label>Overall scale<input type="range" min="0.6" max="1.8" step="0.1" value={selected.scene.scale} onChange={event => updateScene({ scale: Number(event.target.value) })}/></label>
-        <label>Rotation<input type="range" min="-45" max="45" step="5" value={selected.scene.rotation} onChange={event => updateScene({ rotation: Number(event.target.value) })}/></label>
+        <label>Far / near<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
+        {HEIGHT_ADJUSTABLE_TYPES.has(selected.type) && <label>Vertical position<input type="range" min="-1" max="1" step="0.05" value={selected.scene.y} onChange={event => updateScene({ y: Number(event.target.value) })}/></label>}
+        {ROTATABLE_TYPES.has(selected.type) && <label>Rotation<input type="range" min="-45" max="45" step="5" value={selected.scene.rotation} onChange={event => updateScene({ rotation: Number(event.target.value) })}/></label>}
         <small>{WORKSPACE_ROLE_LABELS[selected.role]}</small><button className="danger" onClick={removeSelected}>Remove object</button>
       </> : <p>Select an object to place it precisely.</p>}</aside>
     </div>

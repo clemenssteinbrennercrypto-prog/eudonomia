@@ -1946,12 +1946,16 @@ html {
 
 .workspace-palette>button.is-camera{margin-bottom:12px;border:1px solid #405bc7;background:linear-gradient(135deg,#172768,#0d1538);color:#e8edff;box-shadow:0 0 22px rgba(44,70,255,.18)}
 .workspace-palette>button.is-camera span{color:#9bb0ff;filter:drop-shadow(0 0 6px rgba(122,152,255,.65))}
-.workspace-dimensions-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:24px 0 12px;padding-top:18px;border-top:1px solid #17214d;color:#8fa0d5;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.workspace-dimensions-heading button{padding:4px 7px;border:1px solid #27366f;background:transparent;color:#7181b5;font-size:9px}
-.workspace-properties label.workspace-dimension-control{margin-bottom:12px}
-.workspace-dimension-control>span{display:flex;justify-content:space-between;gap:8px}
-.workspace-dimension-control output{color:#b8c5f2;font-variant-numeric:tabular-nums;text-transform:none}
+.workspace-editor-body{grid-template-columns:170px minmax(400px,1fr) 230px}
+.workspace-object-kind{display:flex;align-items:center;gap:10px;margin:0 0 20px;padding:10px;border:1px solid #27366f;border-radius:10px;background:#111944}
+.workspace-object-kind>span{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:8px;background:#172768;color:#9bb0ff;font-size:22px}
+.workspace-object-kind>div{display:grid;gap:2px;min-width:0}.workspace-object-kind strong{overflow:hidden;color:#e8edff;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.workspace-object-kind small{margin:0;color:#7181b5;font-size:9px}
+.workspace-property-section{margin:22px 0 13px;padding-top:17px;border-top:1px solid #17214d;color:#8fa0d5;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.workspace-properties label>small{margin:0;color:#7181b5;font-size:9px;line-height:1.45;text-transform:none;letter-spacing:0}
+.workspace-fixed-size{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;margin-bottom:18px;color:#6f7dae;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.workspace-fixed-size strong{color:#d8def7;font-size:11px;text-transform:none;letter-spacing:0}.workspace-fixed-size button{grid-column:1/-1;padding:7px 9px;border:1px solid #27366f;background:#151f4b;color:#d8def7;font-size:10px}
 .workspace-3d-error{position:absolute;inset:0;display:grid;place-items:center;padding:2rem;color:#b8c5f2;background:#070b1a;text-align:center;line-height:1.5}
+@media(max-width:850px){.workspace-editor-body{grid-template-columns:110px 1fr}}
 
 /* ── ANALYTICS / TERMINAL ──────────────────────────────────────────────────
    Overview reads as an instrument panel rather than a set of cards: hard

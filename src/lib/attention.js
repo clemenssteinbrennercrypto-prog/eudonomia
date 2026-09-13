@@ -220,10 +220,11 @@ export function classifyCalibratedWorkspace(workspace, signal, neutral = {}) {
   for (const object of workspace.objects) {
     const target = targets[object.id]
     if (!target || target.quality < 0.35 || target.sampleCount < 20) continue
-    // Calibration anchors the object's centre. Its configured face dimensions
-    // define the useful area around that centre; physical depth is visual only.
-    const widthFactor = Math.max(0.4, Math.min(2.8, Number(object.dimensions?.width) || 1))
-    const heightFactor = Math.max(0.4, Math.min(2.8, Number(object.dimensions?.height) || 1))
+    // Calibration anchors the object's centre. Preset attention bounds define
+    // the useful face around it; legacy dimensions remain the compatibility
+    // fallback. Physical model depth is visual only.
+    const widthFactor = Math.max(0.4, Math.min(2.8, Number(object.attentionBounds?.width ?? object.dimensions?.width) || 1))
+    const heightFactor = Math.max(0.4, Math.min(2.8, Number(object.attentionBounds?.height ?? object.dimensions?.height) || 1))
     const yawDistance = Math.abs(signal.yawSigned - (yawNeutral + target.deltaYaw)) / (12 * widthFactor)
     const pitchDistance = Math.abs(signal.pitchDeg - (pitchNeutral + target.deltaPitch)) / (10 * heightFactor)
     const irisDistance = Math.abs(signal.irisH - (irisNeutral + target.deltaIrisH)) / (0.12 * widthFactor)

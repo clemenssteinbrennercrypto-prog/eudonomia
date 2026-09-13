@@ -42,36 +42,6 @@ function screenPanel(width = 1.25, height = .72) {
   return group
 }
 
-function cameraLabel() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 384
-  canvas.height = 96
-  const context = canvas.getContext('2d')
-  context.fillStyle = 'rgba(7,11,26,.92)'
-  context.beginPath()
-  if (typeof context.roundRect === 'function') context.roundRect(4, 4, 376, 88, 34)
-  else context.rect(4, 4, 376, 88)
-  context.fill()
-  context.strokeStyle = '#7a98ff'
-  context.lineWidth = 4
-  context.stroke()
-  context.fillStyle = '#e8edff'
-  context.font = '700 27px -apple-system, BlinkMacSystemFont, sans-serif'
-  context.textAlign = 'center'
-  context.textBaseline = 'middle'
-  context.fillText('TRACKING CAMERA', 192, 49)
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
-  const sprite = new THREE.Sprite(spriteMaterial)
-  sprite.position.set(0, .78, 0)
-  sprite.scale.set(1.5, .375, 1)
-  sprite.renderOrder = 100
-  sprite.userData.labelTexture = texture
-  sprite.userData.dimensionInvariant = true
-  return sprite
-}
-
 function deviceModel(type) {
   const group = new THREE.Group()
   if (type === 'monitor') {
@@ -84,29 +54,17 @@ function deviceModel(type) {
     display.rotation.x = -.14
     group.add(display)
   } else if (type === 'camera') {
-    const body = box(.42, .22, .18, COLORS.panel, { y: .15 })
-    const lens = mesh(new THREE.CylinderGeometry(.075, .075, .035, 24), COLORS.bright, { y: .15, z: .105 })
+    const body = mesh(new THREE.CapsuleGeometry(.105, .28, 5, 18), COLORS.panel, { y: .18 })
+    body.rotation.z = Math.PI / 2
+    const lens = mesh(new THREE.CylinderGeometry(.06, .06, .035, 24), COLORS.bright, { y: .18, z: .12 })
     lens.rotation.x = Math.PI / 2
     lens.material.emissive = new THREE.Color(COLORS.ultra)
-    lens.material.emissiveIntensity = 1.6
-    lens.material.depthTest = false
-    lens.renderOrder = 90
-    const beaconMaterial = new THREE.MeshBasicMaterial({ color: COLORS.bright, transparent: true, opacity: .82, depthTest: false })
-    const beacon = new THREE.Mesh(new THREE.TorusGeometry(.25, .018, 10, 40), beaconMaterial)
-    beacon.position.set(0, .15, .13)
-    beacon.renderOrder = 90
-    beacon.userData.dimensionInvariant = true
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(.34, .009, 8, 40), beaconMaterial.clone())
-    halo.position.set(0, .15, .125)
-    halo.material.opacity = .38
-    halo.renderOrder = 89
-    halo.userData.dimensionInvariant = true
-    const label = cameraLabel()
-    group.add(body, lens, beacon, halo, label, box(.16, .05, .14, COLORS.edge, { y: .025 }))
-    for (const item of [beacon, halo, label]) {
-      item.userData.basePosition = item.position.clone()
-      item.userData.baseScale = item.scale.clone()
-    }
+    lens.material.emissiveIntensity = .8
+    const statusLight = mesh(new THREE.SphereGeometry(.018, 12, 8), 0x2fe3a8, { x: .14, y: .2, z: .115, cast: false })
+    statusLight.material.emissive = new THREE.Color(0x2fe3a8)
+    statusLight.material.emissiveIntensity = .7
+    const clip = box(.18, .05, .16, COLORS.edge, { y: .035 })
+    group.add(body, lens, statusLight, clip)
   } else if (type === 'phone' || type === 'ipad') {
     const w = type === 'ipad' ? .66 : .32, d = type === 'ipad' ? .86 : .62
     group.add(box(w, .055, d, COLORS.panel, { y: .04 }))
@@ -341,21 +299,6 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
         scale * (dimensions.height || 1),
         scale * (dimensions.depth || 1),
       )
-      group.traverse(child => {
-        if (!child.userData.dimensionInvariant) return
-        const basePosition = child.userData.basePosition
-        const baseScale = child.userData.baseScale
-        child.position.set(
-          basePosition.x / (dimensions.width || 1),
-          basePosition.y / (dimensions.height || 1),
-          basePosition.z / (dimensions.depth || 1),
-        )
-        child.scale.set(
-          baseScale.x / (dimensions.width || 1),
-          baseScale.y / (dimensions.height || 1),
-          baseScale.z / (dimensions.depth || 1),
-        )
-      })
       group.traverse(child => {
         if (!child.isMesh || !child.material?.emissive) return
         if (object.id === selectedId) {

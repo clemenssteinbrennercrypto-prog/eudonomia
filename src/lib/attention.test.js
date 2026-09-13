@@ -239,6 +239,14 @@ describe('calibrated workspace targets', () => {
     expect(classifyCalibratedWorkspace(wideWorkspace, wideSignal)?.object.id).toBe('main')
     expect(classifyCalibratedWorkspace(wideWorkspace, tallSignal)?.object.id).toBe('main')
   })
+
+  it('uses explicit attention bounds instead of a flat object\'s visual thickness', () => {
+    const focusedWorkspace = {
+      objects: [{ ...workspace.objects[0], dimensions: { width: 1, height: 0.4, depth: 2 }, attentionBounds: { width: 2, height: 2 } }],
+      calibration: { targets: { main: workspace.calibration.targets.main } },
+    }
+    expect(classifyCalibratedWorkspace(focusedWorkspace, { yawSigned: 19, pitchDeg: 16, irisH: 0 })?.object.id).toBe('main')
+  })
 })
 
 // ── Frame maths ──────────────────────────────────────────────────────────────

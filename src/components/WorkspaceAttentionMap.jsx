@@ -53,10 +53,11 @@ function DeviceIcon({ type, x, y }) {
     <path d="M2 24h36l-4-4H6Z" fill="#1b2450" stroke={navy} strokeWidth="2" strokeLinejoin="round" />
   </g>
 
-  if (type === 'camera') return <g {...shared} transform={`translate(${x} ${y})`}>
-    <circle r="12" fill="#141c42" stroke={navy} strokeWidth="2" />
-    <circle r="5" fill="none" stroke="#9bb0ff" strokeWidth="2" />
-    <circle cx="4" cy="-4" r="2" fill="#9bb0ff" />
+  if (type === 'camera') return <g {...shared} transform={`translate(${x - 15} ${y - 8})`}>
+    <rect width="30" height="16" rx="8" fill="#141c42" stroke={navy} strokeWidth="2" />
+    <circle cx="15" cy="8" r="5" fill="#080d20" stroke="#9bb0ff" strokeWidth="2" />
+    <circle cx="24" cy="5" r="1.5" fill="#2fe3a8" />
+    <path d="M11 17h8" stroke={navy} strokeWidth="2" strokeLinecap="round" />
   </g>
 
   if (type === 'phone') return <g {...shared} transform={`translate(${x - 8} ${y - 17})`}>
