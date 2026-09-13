@@ -86,9 +86,10 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
   })
   const blockedCount = focusConfig?.distractionApps?.length || 0
   const blockedDomainCount = focusConfig?.distractionDomains?.length || 0
+  const strictMode = focusConfig?.strictMode === true
   const protection = !focusModeEnabled
     ? { state: 'off', label: 'Off', detail: 'Focus mode disabled' }
-    : blockedCount + blockedDomainCount === 0
+    : blockedCount + blockedDomainCount === 0 && !strictMode
       ? { state: 'empty', label: 'Not configured', detail: 'Choose apps and websites' }
       : nativeStatus?.checked !== true
         ? { state: 'checking', label: 'Checking', detail: 'Verifying native protection' }
@@ -99,7 +100,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
             : {
           state: 'ready',
           label: 'Ready',
-          detail: `${blockedCount} ${blockedCount === 1 ? 'app' : 'apps'} · ${blockedDomainCount} ${blockedDomainCount === 1 ? 'website' : 'websites'}`,
+          detail: `${strictMode ? 'Strict · ' : ''}${blockedCount} ${blockedCount === 1 ? 'app' : 'apps'} · ${blockedDomainCount} ${blockedDomainCount === 1 ? 'website' : 'websites'}`,
               }
 
   const recentSessions = (sessions || []).slice(0, 3).map(session => ({

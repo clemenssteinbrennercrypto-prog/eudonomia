@@ -23,6 +23,11 @@ export default function SessionIntentScreen({
   workspaces = [],
   activeWorkspaceId = null,
   contractProvider = 'keywords',
+  protectionSetup = null,
+  protectionSetups = [],
+  protectionEnabled = false,
+  onProtectionSetupChange,
+  onEditProtection,
   onWorkspaceChange,
   onEditWorkspaces,
   onStart,
@@ -36,6 +41,9 @@ export default function SessionIntentScreen({
   const planWordCount = countWords(goal)
   const hasTimeLimit = isTimed(duration)
   const cloudPlanSharing = contractProvider === 'cloud'
+  const protectedDistractions = protectionSetup?.distractionApps?.length || 0
+  const strictProtection = protectionSetup?.strictMode === true
+  const protectionReady = protectionEnabled && (protectedDistractions > 0 || strictProtection)
 
   const toggleTag = (tag) => {
     setTags(previous => previous.includes(tag)
@@ -193,9 +201,38 @@ export default function SessionIntentScreen({
             </fieldset>
           </div>
 
+          <section className={`session-protection-summary${protectionReady ? ' is-ready' : ''}`} aria-label="Focus protection">
+            <span className="session-protection-icon" aria-hidden="true"><i /></span>
+            <div>
+              <small>Focus environment</small>
+              <strong>{protectionReady ? `${protectionSetup.name} · protected` : protectionEnabled ? 'Not configured' : 'Protection off'}</strong>
+              <p>
+                {protectionReady
+                  ? strictProtection
+                    ? `Strict protection · unlisted apps hidden · ${protectedDistractions} selected ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable`
+                    : `${protectedDistractions} ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable during this session`
+                  : protectionEnabled
+                    ? 'Choose what should step out of the way before you begin.'
+                    : 'This session will not enforce your protection rules.'}
+              </p>
+            </div>
+            <div className="session-protection-actions">
+              {protectionSetups.length > 1 && onProtectionSetupChange && (
+                <select
+                  aria-label="Protection setup"
+                  value={protectionSetup?.id || ''}
+                  onChange={event => onProtectionSetupChange(event.target.value)}
+                >
+                  {protectionSetups.map(setup => <option key={setup.id} value={setup.id}>{setup.name}</option>)}
+                </select>
+              )}
+              {onEditProtection && <button type="button" onClick={onEditProtection}>{protectionReady ? 'Edit' : 'Set up'}</button>}
+            </div>
+          </section>
+
           <button className="session-intent-start" type="button" disabled={!canStart} onClick={onStart}>
             <span className="session-start-icon" aria-hidden="true">▶</span>
-            <span>Start focus session</span>
+            <span>{protectionReady ? 'Start protected session' : 'Start focus session'}</span>
             <span className="session-start-duration">{hasTimeLimit ? `${duration} min` : 'No time limit'}</span>
           </button>
         </section>

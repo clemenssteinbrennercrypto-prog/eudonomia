@@ -11,7 +11,8 @@ import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
 import HistoryStorageAlerts from './components/HistoryStorageAlerts'
-import { loadContractSettings, loadFocusModeEnabled, saveFocusModeEnabled, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
+import { loadContractSettings, loadFocusModeEnabled, loadProtectionSetups, saveFocusModeEnabled, saveProtectionSetups, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
+import { activateProtectionSetup, getActiveProtectionSetup } from './lib/protectionSetups'
 import { setCloudApiKey } from './lib/nativeCompanion'
 import LegalModal from './components/LegalModal'
 import { sessionRepository } from './lib/sessionRepository'
@@ -185,6 +186,7 @@ export default function App() {
   const [sessionRevision, setSessionRevision] = useState(0)
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
+  const [protectionState, setProtectionState] = useState(loadProtectionSetups)
   const updateStatus = useAppUpdateStatus()
 
   // Session history lives here rather than inside each screen: App already
@@ -376,6 +378,14 @@ export default function App() {
           workspaces={workspaceState.workspaces}
           activeWorkspaceId={workspaceState.activeWorkspaceId}
           contractProvider={loadContractSettings().provider}
+          protectionSetup={getActiveProtectionSetup(protectionState)}
+          protectionSetups={protectionState.setups}
+          protectionEnabled={focusModeEnabled}
+          onProtectionSetupChange={(setupId) => setProtectionState(current => {
+            const next = activateProtectionSetup(current, setupId)
+            return saveProtectionSetups(next)
+          })}
+          onEditProtection={() => setScreen('focus-apps')}
           onWorkspaceChange={(id) => setWorkspaceState({ ...workspaceState, activeWorkspaceId: id })}
           onEditWorkspaces={() => setScreen('setup')}
           onStart={handleStart}
@@ -383,6 +393,8 @@ export default function App() {
       )}
       {screen === 'focus-apps' && (
         <FocusAppsScreen
+          protectionState={protectionState}
+          onProtectionStateChange={setProtectionState}
           focusModeEnabled={focusModeEnabled}
           setFocusModeEnabled={setFocusModeEnabled}
           onBack={() => setScreen('lab')}

@@ -4,6 +4,11 @@
 
 import { getDomainFromAppPreset, getDomainsFromAppPreset } from './focusAppsConfig'
 import {
+  getActiveProtectionSetup,
+  normalizeProtectionState,
+  updateActiveProtectionSetup,
+} from './protectionSetups'
+import {
   addSessionToFocusLedger,
   backfillFocusLedger,
   emptyFocusLedger,
@@ -15,63 +20,11 @@ const STORAGE_KEY = 'eudaimonia_sessions'
 const MAX_SESSIONS = 100
 export const FOCUS_LEDGER_KEY = 'eudaimonia_focus_daily_v1'
 export const FOCUS_APPS_KEY = 'eudaimonia_focus_apps'
+export const PROTECTION_SETUPS_KEY = 'eudaimonia_protection_setups_v1'
 export const FOCUS_MODE_KEY = 'eudaimonia_focus_mode_enabled'
 export const HISTORY_DELETION_PENDING_KEY = 'eudaimonia_history_deletion_pending'
 
-function normalizeAppList(apps) {
-  if (!Array.isArray(apps)) return []
-  const seen = new Set()
-  return apps
-    .map(app => String(app || '').trim())
-    .filter(Boolean)
-    .filter(app => {
-      const key = app.toLowerCase()
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-}
-
-function normalizeDomain(value) {
-  const raw = String(value || '').trim().toLowerCase()
-  if (!raw) return ''
-  try {
-    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
-    const host = new URL(withProtocol).hostname
-    return host.replace(/^www\./, '')
-  } catch {
-    return raw
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .split('/')[0]
-      .split('?')[0]
-      .trim()
-  }
-}
-
-function normalizeDomainList(domains) {
-  if (!Array.isArray(domains)) return []
-  const seen = new Set()
-  return domains
-    .map(normalizeDomain)
-    .filter(Boolean)
-    .filter(domain => {
-      if (seen.has(domain)) return false
-      seen.add(domain)
-      return true
-    })
-}
-
 export { getDomainFromAppPreset, getDomainsFromAppPreset }
-
-function deriveDomainsFromApps(apps) {
-  return apps.flatMap(app => {
-    const presetDomains = getDomainsFromAppPreset(app)
-    if (presetDomains.length) return presetDomains
-    const normalized = normalizeDomain(app)
-    return normalized.includes('.') ? [normalized] : []
-  })
-}
 
 export function saveSession(sessionData) {
   const sessions = loadSessions()
@@ -183,44 +136,46 @@ export function backfillFocusLedgerFromSessions() {
 }
 
 export function loadFocusAppsConfig() {
+  return getActiveProtectionSetup(loadProtectionSetups())
+}
+
+function loadLegacyFocusAppsConfig() {
   try {
     const raw = JSON.parse(localStorage.getItem(FOCUS_APPS_KEY) || '{}')
-    const focusApps = normalizeAppList(raw.focusApps)
-    const distractionApps = normalizeAppList(raw.distractionApps)
-    return {
-      focusApps,
-      distractionApps,
-      focusDomains: normalizeDomainList([
-        ...deriveDomainsFromApps(focusApps),
-        ...(raw.focusDomains || []),
-      ]),
-      distractionDomains: normalizeDomainList([
-        ...deriveDomainsFromApps(distractionApps),
-        ...(raw.distractionDomains || []),
-      ]),
-    }
+    return { ...raw, strictMode: localStorage.getItem(STRICT_MODE_KEY) === 'true' }
   } catch {
-    return { focusApps: [], distractionApps: [], focusDomains: [], distractionDomains: [] }
+    return { focusApps: [], distractionApps: [], focusDomains: [], distractionDomains: [], strictMode: false }
   }
 }
 
 export function saveFocusAppsConfig(config) {
-  const focusApps = normalizeAppList(config?.focusApps)
-  const distractionApps = normalizeAppList(config?.distractionApps)
-  const normalized = {
-    focusApps,
-    distractionApps,
-    focusDomains: normalizeDomainList([
-      ...deriveDomainsFromApps(focusApps),
-      ...(config?.focusDomains || []),
-    ]),
-    distractionDomains: normalizeDomainList([
-      ...deriveDomainsFromApps(distractionApps),
-      ...(config?.distractionDomains || []),
-    ]),
-  }
+  const state = updateActiveProtectionSetup(loadProtectionSetups(), config)
+  return getActiveProtectionSetup(saveProtectionSetups(state))
+}
+
+export function loadProtectionSetups() {
   try {
-    localStorage.setItem(FOCUS_APPS_KEY, JSON.stringify(normalized))
+    const raw = JSON.parse(localStorage.getItem(PROTECTION_SETUPS_KEY) || 'null')
+    return normalizeProtectionState(raw, loadLegacyFocusAppsConfig())
+  } catch {
+    return normalizeProtectionState(null, loadLegacyFocusAppsConfig())
+  }
+}
+
+export function saveProtectionSetups(state) {
+  const normalized = normalizeProtectionState(state)
+  const active = getActiveProtectionSetup(normalized)
+  try {
+    localStorage.setItem(PROTECTION_SETUPS_KEY, JSON.stringify(normalized))
+    // Keep the pre-setup keys as a compatibility mirror for older builds. They
+    // always contain one complete ruler: the active setup, never merged rules.
+    localStorage.setItem(FOCUS_APPS_KEY, JSON.stringify({
+      focusApps: active.focusApps,
+      distractionApps: active.distractionApps,
+      focusDomains: active.focusDomains,
+      distractionDomains: active.distractionDomains,
+    }))
+    localStorage.setItem(STRICT_MODE_KEY, String(active.strictMode))
   } catch {}
   return normalized
 }
@@ -249,7 +204,7 @@ const STRICT_MODE_KEY = 'eudaimonia_strict_mode'
 // it's the aggressive "full focus" option, opt-in.
 export function loadStrictMode() {
   try {
-    return localStorage.getItem(STRICT_MODE_KEY) === 'true'
+    return getActiveProtectionSetup(loadProtectionSetups()).strictMode
   } catch {
     return false
   }
@@ -257,9 +212,7 @@ export function loadStrictMode() {
 
 export function saveStrictMode(enabled) {
   const next = Boolean(enabled)
-  try {
-    localStorage.setItem(STRICT_MODE_KEY, String(next))
-  } catch {}
+  saveProtectionSetups(updateActiveProtectionSetup(loadProtectionSetups(), { strictMode: next }))
   return next
 }
 

@@ -20,7 +20,20 @@ import {
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
-import { loadContractSettings, saveContractSettings, loadFocusAppsConfig, loadFocusModeEnabled, loadStrictMode, saveFocusAppsConfig, saveFocusModeEnabled, saveStrictMode } from '../lib/storage'
+import {
+  activateProtectionSetup,
+  createProtectionSetup,
+  removeProtectionSetup,
+} from '../lib/protectionSetups'
+import {
+  loadContractSettings,
+  saveContractSettings,
+  loadFocusModeEnabled,
+  loadProtectionSetups,
+  saveFocusModeEnabled,
+  saveProtectionSetups,
+} from '../lib/storage'
+import ConfirmDialog from './ConfirmDialog'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
@@ -812,20 +825,21 @@ function NativeCameraDiagnostics() {
   )
 }
 
-export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusModeEnabled }) {
-  const initial = useMemo(() => loadFocusAppsConfig(), [])
-  const [focusApps, setFocusApps] = useState(initial.focusApps)
-  const [distractionApps, setDistractionApps] = useState(initial.distractionApps)
+export default function FocusAppsScreen({
+  onBack,
+  focusModeEnabled,
+  setFocusModeEnabled,
+  protectionState: suppliedProtectionState,
+  onProtectionStateChange,
+}) {
+  const initialState = useMemo(() => suppliedProtectionState || loadProtectionSetups(), [suppliedProtectionState])
+  const [protectionState, setProtectionState] = useState(initialState)
+  const [savedProtectionState, setSavedProtectionState] = useState(initialState)
   const [focusInput, setFocusInput] = useState('')
   const [distractionInput, setDistractionInput] = useState('')
   const [saved, setSaved] = useState(false)
-  // Mirrors what is actually persisted, so we can tell edited from saved.
-  const [savedConfig, setSavedConfig] = useState({
-    focusApps: initial.focusApps,
-    distractionApps: initial.distractionApps,
-  })
   const [confirmingBack, setConfirmingBack] = useState(false)
-  const [strictMode, setStrictMode] = useState(() => loadStrictMode())
+  const [setupPendingDeletion, setSetupPendingDeletion] = useState(null)
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
   const [activity, setActivity] = useState(() => getLastActivity())
   const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
@@ -838,12 +852,55 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
 
+  const activeSetup = useMemo(
+    () => protectionState.setups.find(setup => setup.id === protectionState.activeSetupId) || protectionState.setups[0],
+    [protectionState],
+  )
+  const focusApps = activeSetup.focusApps
+  const distractionApps = activeSetup.distractionApps
+  const strictMode = activeSetup.strictMode
   const configuredCount = focusApps.length + distractionApps.length
+  const protectionConfigured = strictMode || distractionApps.length > 0
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
   const activityPreview = useMemo(
     () => classifyCurrentActivity(activity, focusApps, distractionApps, activityConnected),
     [activity, focusApps, distractionApps, activityConnected]
   )
+
+  const updateActiveSetup = useCallback((patch) => {
+    setProtectionState(current => ({
+      ...current,
+      setups: current.setups.map(setup => setup.id === current.activeSetupId
+        ? { ...setup, ...patch }
+        : setup),
+    }))
+  }, [])
+
+  const setFocusApps = useCallback((update) => {
+    setProtectionState(current => {
+      const currentSetup = current.setups.find(setup => setup.id === current.activeSetupId) || current.setups[0]
+      const focusApps = typeof update === 'function' ? update(currentSetup.focusApps) : update
+      return {
+        ...current,
+        setups: current.setups.map(setup => setup.id === current.activeSetupId
+          ? { ...setup, focusApps, focusDomains: [] }
+          : setup),
+      }
+    })
+  }, [])
+
+  const setDistractionApps = useCallback((update) => {
+    setProtectionState(current => {
+      const currentSetup = current.setups.find(setup => setup.id === current.activeSetupId) || current.setups[0]
+      const distractionApps = typeof update === 'function' ? update(currentSetup.distractionApps) : update
+      return {
+        ...current,
+        setups: current.setups.map(setup => setup.id === current.activeSetupId
+          ? { ...setup, distractionApps, distractionDomains: [] }
+          : setup),
+      }
+    })
+  }, [])
 
   useEffect(() => {
     startActivityUpdates((nextActivity) => {
@@ -900,9 +957,7 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     setLocalFocusModeEnabled(saveFocusModeEnabled(next))
   }
 
-  const toggleStrictMode = () => {
-    setStrictMode(saveStrictMode(!strictMode))
-  }
+  const toggleStrictMode = () => updateActiveSetup({ strictMode: !strictMode })
 
   const handleSaveCloudKey = async () => {
     const key = cloudKey.trim()
@@ -927,17 +982,9 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   const saveKeyDisabled = !cloudKey.trim() || cloudKeyBusy
   const removeKeyDisabled = cloudKeyBusy || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'
 
-  // Leaving this screen used to discard unsaved edits without a word, while the
-  // header meanwhile counted them as if they were live ("1 focus apps · 1
-  // blocked"). Track what's actually on disk so Back can say something.
-  const savedSnapshot = JSON.stringify({
-    focusApps: [...savedConfig.focusApps].sort(),
-    distractionApps: [...savedConfig.distractionApps].sort(),
-  })
-  const hasUnsavedChanges = savedSnapshot !== JSON.stringify({
-    focusApps: [...focusApps].sort(),
-    distractionApps: [...distractionApps].sort(),
-  })
+  // The entire library is one draft. Switching setups never leaks or silently
+  // saves one setup's rules into another.
+  const hasUnsavedChanges = JSON.stringify(savedProtectionState) !== JSON.stringify(protectionState)
 
   const handleBack = () => {
     if (hasUnsavedChanges && !confirmingBack) {
@@ -953,10 +1000,10 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
   }
 
   const handleSave = () => {
-    const next = saveFocusAppsConfig({ focusApps, distractionApps })
-    setFocusApps(next.focusApps)
-    setDistractionApps(next.distractionApps)
-    setSavedConfig({ focusApps: next.focusApps, distractionApps: next.distractionApps })
+    const next = saveProtectionSetups(protectionState)
+    setProtectionState(next)
+    setSavedProtectionState(next)
+    onProtectionStateChange?.(next)
     setConfirmingBack(false)
     setSaved(true)
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
@@ -976,6 +1023,8 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
       endTs: Date.now() + 60_000,
       blockedApps,
       blockedDomains,
+      strictMode,
+      allowedApps: focusApps,
     })
     if (!ok) {
       testBlockingActiveRef.current = false
@@ -995,420 +1044,283 @@ export default function FocusAppsScreen({ onBack, focusModeEnabled, setFocusMode
     ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity')
     : 'Waiting for Companion activity'
 
+  const selectSetup = (setupId) => {
+    setProtectionState(current => activateProtectionSetup(current, setupId))
+    setFocusInput('')
+    setDistractionInput('')
+    setSaved(false)
+  }
+
+  const addSetup = () => {
+    setProtectionState(current => createProtectionSetup(current))
+    setFocusInput('')
+    setDistractionInput('')
+    setSaved(false)
+  }
+
+  const duplicateSetup = () => {
+    setProtectionState(current => createProtectionSetup(current, { copyActive: true }))
+    setFocusInput('')
+    setDistractionInput('')
+    setSaved(false)
+  }
+
+  const confirmDeleteSetup = () => {
+    if (!setupPendingDeletion) return
+    setProtectionState(current => removeProtectionSetup(current, setupPendingDeletion.id))
+    setSetupPendingDeletion(null)
+    setFocusInput('')
+    setDistractionInput('')
+    setSaved(false)
+  }
+
   return (
-    <div className="screen-center" style={{ background: 'var(--bg)' }}>
-      <div className="home-content" style={{ maxWidth: 720, gap: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div>
-            <h1 className="app-title" style={{ marginBottom: 4, color: 'var(--ultra-bright)' }}>Focus Apps</h1>
-            <p className="app-tagline" style={{ margin: 0 }}>
-              Configure the native Companion's app and website rules for focus sessions.
-            </p>
-          </div>
-          {confirmingBack ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warn)' }}>
-                Unsaved changes
-              </span>
-              <button
-                type="button"
-                onClick={handleSaveAndBack}
-                style={{
-                  background: 'var(--good)', border: '1px solid var(--good)', borderRadius: 100,
-                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: 'var(--text)',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                Save &amp; leave
-              </button>
-              <button
-                type="button"
-                onClick={onBack}
-                style={{
-                  background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 100,
-                  padding: '8px 15px', fontSize: 12, fontWeight: 700, color: 'var(--bad)',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                Discard
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleBack}
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--line)',
-                borderRadius: 100,
-                padding: '8px 15px',
-                fontSize: 12,
-                fontWeight: 700,
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              Back
-            </button>
-          )}
+    <main className="protection-page">
+      <header className="protection-heading">
+        <div>
+          <span>Digital environment</span>
+          <h1>Protection</h1>
+          <p>Decide what stays available when your focus session begins.</p>
         </div>
-
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 14,
-          flexWrap: 'wrap',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          borderRadius: 16,
-          padding: '12px 16px',
-          boxShadow: '0 2px 20px rgba(122,152,255,0.06)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--ultra-bright)', fontWeight: 800 }}>
-              {focusApps.length} focus apps · {distractionApps.length} blocked
-            </span>
+        {confirmingBack ? (
+          <div className="protection-leave-actions">
+            <span>Unsaved changes</span>
+            <button type="button" className="is-primary" onClick={handleSaveAndBack}>Save &amp; leave</button>
+            <button type="button" onClick={onBack}>Discard</button>
           </div>
-          <label style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 9,
-            color: 'var(--ultra-bright)',
-            fontSize: 12,
-            fontWeight: 800,
-            cursor: 'pointer',
-          }}>
-            Focus Mode
-            <button
-              type="button"
-              role="switch"
-              aria-checked={modeEnabled}
-              onClick={toggleFocusMode}
-              style={{
-                width: 42,
-                height: 24,
-                borderRadius: 100,
-                border: `1px solid ${modeEnabled ? 'var(--good)' : 'var(--line-strong)'}`,
-                background: modeEnabled ? 'var(--good)' : 'var(--line)',
-                padding: 2,
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{
-                display: 'block',
-                width: 18,
-                height: 18,
-                borderRadius: '50%',
-                background: 'var(--surface)',
-                transform: modeEnabled ? 'translateX(18px)' : 'translateX(0)',
-                transition: 'transform 0.18s ease',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-              }} />
-            </button>
-          </label>
-        </div>
+        ) : (
+          <button type="button" className="protection-back" onClick={handleBack}>Back</button>
+        )}
+      </header>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 14,
-          flexWrap: 'wrap',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          borderRadius: 16,
-          padding: '12px 16px',
-          boxShadow: '0 2px 20px rgba(122,152,255,0.05)',
-        }}>
-          <CompanionStatus />
-
-          <div style={{
-            marginTop: 12,
-            border: `1.5px solid ${strictMode ? 'var(--ultra)' : 'var(--line)'}`,
-            background: strictMode ? 'rgba(122,152,255,0.06)' : 'var(--surface)',
-            borderRadius: 12,
-            padding: '13px 15px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 14,
-          }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ultra-bright)' }}>
-                Strict Mode {strictMode ? '· on' : '· off'}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 3 }}>
-                The Companion hides every non-browser app except your focus apps and base system apps. Browsers stay open; blocked sites are handled by the native website block list.
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={toggleStrictMode}
-              aria-pressed={strictMode}
-              style={{
-                flexShrink: 0,
-                width: 46,
-                height: 27,
-                borderRadius: 999,
-                border: 'none',
-                cursor: 'pointer',
-                background: strictMode ? 'var(--ultra)' : 'var(--line)',
-                position: 'relative',
-                transition: 'background 0.15s',
-              }}
-            >
-              <span style={{
-                position: 'absolute',
-                top: 3,
-                left: strictMode ? 22 : 3,
-                width: 21,
-                height: 21,
-                borderRadius: '50%',
-                background: 'var(--surface)',
-                transition: 'left 0.15s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-              }} />
-            </button>
+      <div className="protection-layout">
+        <aside className="protection-library" aria-label="Protection setups">
+          <div className="protection-library-heading">
+            <span>Setups</span>
+            <small>{protectionState.setups.length}</small>
           </div>
-
-          <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
-            <button
-              type="button"
-              onClick={handleTestBlocking}
-              disabled={testBlockingActive}
-              style={{
-                background: 'var(--ultra)',
-                border: 'none',
-                borderRadius: 12,
-                padding: '9px 13px',
-                color: 'var(--text)',
-                fontSize: 12,
-                fontWeight: 900,
-                cursor: testBlockingActive ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                whiteSpace: 'nowrap',
-                opacity: testBlockingActive ? 0.72 : 1,
-              }}
-            >
-              Test Blocking (60s)
-            </button>
-            {testFeedback && (
-              <span style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
-                {testFeedback}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {SHOW_NATIVE_CAMERA_DIAGNOSTICS && <NativeCameraDiagnostics />}
-
-        {/* Which engine reads your goal. Switchable at any time — the app works
-            the same whichever is chosen, only better or worse informed, and any
-            failure falls back to the built-in profiles. */}
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--line)',
-          borderRadius: 14, padding: '16px 18px', marginBottom: 16,
-        }}>
-          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
-            Goal understanding
-          </p>
-          <CloudPrivacyNotice />
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            {[
-              { id: 'keywords', label: 'Built-in', hint: 'offline · instant' },
-              { id: 'local',    label: 'Local model', hint: 'private · needs Ollama' },
-              { id: 'cloud',    label: 'Claude API', hint: 'best · needs key' },
-            ].map(opt => {
-              const active = contract.provider === opt.id
+          <div className="protection-setup-list">
+            {protectionState.setups.map(setup => {
+              const active = setup.id === protectionState.activeSetupId
               return (
                 <button
-                  key={opt.id}
+                  key={setup.id}
                   type="button"
-                  onClick={() => setContract(saveContractSettings({ provider: opt.id }))}
-                  style={{
-                    flex: '1 1 140px',
-                    padding: '9px 12px',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    textAlign: 'left',
-                    background: active ? 'var(--ultra-wash)' : 'transparent',
-                    border: `1px solid ${active ? 'var(--ultra-bright)' : 'var(--line)'}`,
-                    color: active ? 'var(--text)' : 'var(--text-secondary)',
-                  }}
+                  className={active ? 'is-active' : ''}
+                  aria-pressed={active}
+                  onClick={() => selectSetup(setup.id)}
                 >
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700 }}>{opt.label}</span>
-                  <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {opt.hint}
-                  </span>
+                  <span className="protection-setup-mark" />
+                  <strong>{setup.name}</strong>
+                  <small>{setup.focusApps.length} allowed · {setup.distractionApps.length} unavailable</small>
                 </button>
               )
             })}
           </div>
+          <button type="button" className="protection-add-setup" onClick={addSetup}>+ New setup</button>
+        </aside>
 
-          {contract.provider === 'local' && (
-            <input
-              type="text"
-              className="text-input"
-              value={contract.localModel}
-              onChange={e => setContract(saveContractSettings({ localModel: e.target.value }))}
-              placeholder="ollama model, e.g. qwen2.5:3b"
-              style={{ fontSize: 13 }}
-            />
-          )}
-
-          {contract.provider === 'cloud' && (
-            <>
+        <section className="protection-editor" aria-label={`Edit ${activeSetup.name}`}>
+          <header className="protection-editor-heading">
+            <label>
+              <span>Setup name</span>
               <input
-                type="password"
-                className="text-input"
-                value={cloudKey}
-                onChange={e => {
-                  setCloudKey(e.target.value)
-                  setCloudKeyStatus('not-saved')
-                }}
-                placeholder="Anthropic API key"
-                style={{ fontSize: 13 }}
+                value={activeSetup.name}
+                maxLength={48}
+                onChange={event => updateActiveSetup({ name: event.target.value.slice(0, 48) })}
+                aria-label="Setup name"
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={handleSaveCloudKey}
-                  disabled={saveKeyDisabled}
-                  style={{
-                    border: 'none', borderRadius: 10, padding: '8px 13px', fontFamily: 'inherit',
-                    background: saveKeyDisabled ? 'var(--line)' : 'var(--ultra)', color: 'var(--text)',
-                    cursor: saveKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 900,
-                  }}
-                >
-                  Save key
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRemoveCloudKey}
-                  disabled={removeKeyDisabled}
-                  style={{
-                    border: '1px solid var(--line)', borderRadius: 10, padding: '8px 13px',
-                    fontFamily: 'inherit', background: 'var(--surface)', color: 'var(--text-secondary)',
-                    cursor: removeKeyDisabled ? 'default' : 'pointer', fontSize: 12, fontWeight: 850,
-                  }}
-                >
-                  Remove key
-                </button>
-                <span role="status" aria-live="polite" style={{ fontSize: 11, color: cloudKeyStatus === 'error' ? 'var(--bad)' : 'var(--text-muted)' }}>
-                  {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Keychain unavailable' })[cloudKeyStatus]}
-                </span>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--warn)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                The key is kept in your macOS Keychain and is used only for goal understanding.
+            </label>
+            <div className="protection-editor-actions">
+              <button type="button" onClick={duplicateSetup}>Duplicate</button>
+              <button
+                type="button"
+                className="is-danger"
+                disabled={protectionState.setups.length === 1}
+                onClick={() => setSetupPendingDeletion(activeSetup)}
+              >
+                Delete
+              </button>
+            </div>
+          </header>
+
+          <section className={`protection-readiness${modeEnabled && protectionConfigured ? ' is-ready' : ''}`}>
+            <div className="protection-readiness-icon" aria-hidden="true"><i /></div>
+            <div>
+              <span>{modeEnabled && protectionConfigured ? 'Ready for focus' : modeEnabled ? 'Protection not configured' : 'Protection is off'}</span>
+              <p>
+                {modeEnabled && protectionConfigured
+                  ? strictMode
+                    ? `${activeSetup.name} will hide every non-browser app outside ${focusApps.length ? `${focusApps.length} allowed ${focusApps.length === 1 ? 'tool' : 'tools'} and core system apps` : 'core system apps'}.`
+                    : `${activeSetup.name} will keep ${focusApps.length} ${focusApps.length === 1 ? 'tool' : 'tools'} available and make ${distractionApps.length} ${distractionApps.length === 1 ? 'distraction' : 'distractions'} unavailable.`
+                  : modeEnabled
+                    ? 'Add at least one distraction below or choose Strict protection.'
+                    : 'Your rules are saved, but sessions will not enforce them.'}
               </p>
-            </>
+            </div>
+            <button
+              type="button"
+              className="protection-switch"
+              role="switch"
+              aria-label="Protection during focus sessions"
+              aria-checked={modeEnabled}
+              onClick={toggleFocusMode}
+            >
+              <span />
+            </button>
+          </section>
+
+          <fieldset className="protection-strength">
+            <legend>Protection level</legend>
+            <div>
+              <button type="button" className={!strictMode ? 'is-active' : ''} aria-pressed={!strictMode} onClick={() => strictMode && toggleStrictMode()}>
+                <strong>Selected</strong>
+                <span>Only the distractions below become unavailable.</span>
+              </button>
+              <button type="button" className={strictMode ? 'is-active' : ''} aria-pressed={strictMode} onClick={() => !strictMode && toggleStrictMode()}>
+                <strong>Strict</strong>
+                <span>Every non-browser app outside your allowed tools is hidden.</span>
+              </button>
+            </div>
+          </fieldset>
+
+          {configuredCount === 0 && !protectionConfigured && (
+            <div className="protection-empty-guide">
+              <span>Start simple</span>
+              <p>Add the tools this setup needs, then remove the places that usually pull you away.</p>
+            </div>
           )}
-        </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 14,
-          flexWrap: 'wrap',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          borderRadius: 16,
-          padding: '13px 16px',
-          boxShadow: '0 2px 20px rgba(122,152,255,0.05)',
-        }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800, marginBottom: 3 }}>
-              Current activity from {activityRuntimeLabel}
-            </div>
-            <div style={{
-              fontSize: 14,
-              color: 'var(--ultra-bright)',
-              fontWeight: 800,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: 420,
-            }}>
-              {currentActivityValue}
-            </div>
+          <div className="protection-rule-list">
+            <AppSection
+              title="Available during focus"
+              subtitle="The tools and sites that support this type of work."
+              apps={focusApps}
+              setApps={setFocusApps}
+              presets={FOCUS_PRESETS}
+              inputValue={focusInput}
+              setInputValue={setFocusInput}
+              tone="focus"
+            />
+            <div className="protection-rule-divider" />
+            <AppSection
+              title="Unavailable during focus"
+              subtitle="Apps and sites that should step out of the way."
+              apps={distractionApps}
+              setApps={setDistractionApps}
+              presets={DISTRACTION_PRESETS}
+              inputValue={distractionInput}
+              setInputValue={setDistractionInput}
+              tone="block"
+            />
           </div>
-          <span style={{
-            border: `1px solid ${activityPreview.kind === 'focus' ? 'rgba(47,227,168,0.20)' : activityPreview.kind === 'distraction' ? 'rgba(255,77,106,0.20)' : 'var(--line)'}`,
-            borderRadius: 100,
-            padding: '6px 11px',
-            color: activityPreview.kind === 'focus' ? 'var(--good)' : activityPreview.kind === 'distraction' ? 'var(--bad)' : 'var(--text-muted)',
-            background: activityPreview.kind === 'focus' ? 'rgba(47,227,168,0.10)' : activityPreview.kind === 'distraction' ? 'rgba(255,77,106,0.10)' : 'rgba(122,152,255,0.05)',
-            fontSize: 12,
-            fontWeight: 900,
-            whiteSpace: 'nowrap',
-            maxWidth: 'min(100%, 430px)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}>
-            {activityPreview.kind === 'focus'
-              ? `${activityPreview.label} is currently detected as: focus app ✓`
-              : activityPreview.kind === 'distraction'
-                ? `${activityPreview.label} is currently detected as: distraction`
-                : `${activityPreview.label} is currently detected as: unknown`}
-          </span>
-        </div>
 
-        {configuredCount === 0 && (
-          <div style={{
-            background: 'var(--ultra)',
-            borderRadius: 18,
-            padding: '18px 20px',
-            color: 'rgba(122,152,255,0.08)',
-            boxShadow: '0 14px 36px rgba(122,152,255,0.18)',
-          }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Start with a few presets.</p>
-            <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              Add the tools you use for deep work, then add the sites that usually interrupt it.
-            </p>
-          </div>
-        )}
-
-        <div style={{
-          display: 'grid',
-          gap: 28,
-          background: 'var(--bg)',
-          border: '1px solid var(--line)',
-          borderRadius: 20,
-          padding: 26,
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
-        }}>
-          <AppSection
-            title="Focus Apps ✓"
-            subtitle="Apps and sites that support the current session."
-            apps={focusApps}
-            setApps={setFocusApps}
-            presets={FOCUS_PRESETS}
-            inputValue={focusInput}
-            setInputValue={setFocusInput}
-            tone="focus"
-          />
-          <div style={{ height: 1, background: 'rgba(122,152,255,0.08)' }} />
-          <AppSection
-            title="Block List ✗"
-            subtitle="Apps and sites that should count as distractions."
-            apps={distractionApps}
-            setApps={setDistractionApps}
-            presets={DISTRACTION_PRESETS}
-            inputValue={distractionInput}
-            setInputValue={setDistractionInput}
-            tone="block"
-          />
-        </div>
-
-        <button type="button" className="start-btn" onClick={handleSave}>
-          {saved ? 'Saved ✓' : 'Save'}
-        </button>
+          <footer className="protection-save-row">
+            <span>{hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}</span>
+            <button type="button" disabled={!hasUnsavedChanges && !saved} onClick={handleSave}>
+              {saved ? 'Saved' : 'Save setup'}
+            </button>
+          </footer>
+        </section>
       </div>
-    </div>
+
+      <details className="protection-advanced">
+        <summary>
+          <span>Advanced</span>
+          <small>Companion status, blocking test and goal understanding</small>
+        </summary>
+        <div className="protection-advanced-content">
+          <CompanionStatus />
+
+          <section className="protection-advanced-section">
+            <div className="protection-advanced-row">
+              <div>
+                <strong>Blocking test</strong>
+                <p>Temporarily enforce the current draft for 60 seconds.</p>
+              </div>
+              <button type="button" onClick={handleTestBlocking} disabled={testBlockingActive}>
+                {testBlockingActive ? 'Test active' : 'Test for 60s'}
+              </button>
+            </div>
+            {testFeedback && <span className="protection-test-feedback">{testFeedback}</span>}
+          </section>
+
+          <section className="protection-advanced-section">
+            <div className="protection-activity-preview">
+              <div>
+                <span>Current activity from {activityRuntimeLabel}</span>
+                <strong>{currentActivityValue}</strong>
+              </div>
+              <em className={`is-${activityPreview.kind}`}>
+                {activityPreview.kind === 'focus'
+                  ? `${activityPreview.label} · allowed`
+                  : activityPreview.kind === 'distraction'
+                    ? `${activityPreview.label} · unavailable`
+                    : `${activityPreview.label} · not classified`}
+              </em>
+            </div>
+          </section>
+
+          <section className="protection-advanced-section">
+            <strong>Goal understanding</strong>
+            <CloudPrivacyNotice />
+            <div className="protection-provider-options">
+              {[
+                { id: 'keywords', label: 'Built-in', hint: 'offline · instant' },
+                { id: 'local', label: 'Local model', hint: 'private · needs Ollama' },
+                { id: 'cloud', label: 'Claude API', hint: 'best · needs key' },
+              ].map(opt => {
+                const active = contract.provider === opt.id
+                return (
+                  <button key={opt.id} type="button" className={active ? 'is-active' : ''} onClick={() => setContract(saveContractSettings({ provider: opt.id }))}>
+                    <strong>{opt.label}</strong>
+                    <span>{opt.hint}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {contract.provider === 'local' && (
+              <input type="text" className="text-input" value={contract.localModel} onChange={event => setContract(saveContractSettings({ localModel: event.target.value }))} placeholder="ollama model, e.g. qwen2.5:3b" />
+            )}
+
+            {contract.provider === 'cloud' && (
+              <>
+                <input
+                  type="password"
+                  className="text-input"
+                  value={cloudKey}
+                  onChange={event => {
+                    setCloudKey(event.target.value)
+                    setCloudKeyStatus('not-saved')
+                  }}
+                  placeholder="Anthropic API key"
+                />
+                <div className="protection-key-actions">
+                  <button type="button" onClick={handleSaveCloudKey} disabled={saveKeyDisabled}>Save key</button>
+                  <button type="button" onClick={handleRemoveCloudKey} disabled={removeKeyDisabled}>Remove key</button>
+                  <span role="status" aria-live="polite">
+                    {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Keychain unavailable' })[cloudKeyStatus]}
+                  </span>
+                </div>
+                <p className="protection-key-note">The key stays in your macOS Keychain and is used only for goal understanding.</p>
+              </>
+            )}
+          </section>
+
+          {SHOW_NATIVE_CAMERA_DIAGNOSTICS && <NativeCameraDiagnostics />}
+        </div>
+      </details>
+
+      {setupPendingDeletion && (
+        <ConfirmDialog
+          title={`Delete “${setupPendingDeletion.name}”?`}
+          description="Its allowed tools, unavailable distractions and protection level will be removed. Other setups stay unchanged."
+          confirmLabel="Delete setup"
+          onConfirm={confirmDeleteSetup}
+          onCancel={() => setSetupPendingDeletion(null)}
+        />
+      )}
+    </main>
   )
 }

@@ -253,6 +253,21 @@ describe('dashboard data', () => {
     expect(ready).toEqual({ state: 'ready', label: 'Ready', detail: '1 app · 1 website' })
   })
 
+  it('treats strict mode as configured protection even without an explicit blocklist', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [],
+      range: 'day',
+      now: NOW,
+      focusModeEnabled: true,
+      focusConfig: { strictMode: true, distractionApps: [], distractionDomains: [] },
+      nativeStatus: { checked: true, connected: true, helperInstalled: true },
+    }).protection
+
+    expect(result.state).toBe('ready')
+    expect(result.detail).toContain('Strict')
+  })
+
   it('renders unmeasured recent sessions without fabricating focus', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),

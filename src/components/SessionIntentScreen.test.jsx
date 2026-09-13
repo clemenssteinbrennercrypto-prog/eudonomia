@@ -45,6 +45,35 @@ describe('SessionIntentScreen', () => {
     expect(html).toContain('▶')
   })
 
+  it('names the active setup and starts a protected session only when rules can be enforced', () => {
+    const html = renderIntent({
+      task: 'Current task',
+      protectionEnabled: true,
+      protectionSetup: { name: 'Writing', distractionApps: ['Reddit'], strictMode: false },
+      onEditProtection: () => {},
+    })
+
+    expect(html).toContain('Writing · protected')
+    expect(html).toContain('1 distraction unavailable during this session')
+    expect(html).toContain('Start protected session')
+  })
+
+  it('offers direct setup selection when more than one protection setup exists', () => {
+    const html = renderIntent({
+      task: 'Current task',
+      protectionEnabled: true,
+      protectionSetup: { id: 'writing', name: 'Writing', distractionApps: ['Reddit'] },
+      protectionSetups: [
+        { id: 'writing', name: 'Writing' },
+        { id: 'study', name: 'Study' },
+      ],
+      onProtectionSetupChange: () => {},
+    })
+
+    expect(html).toContain('aria-label="Protection setup"')
+    expect(html).toContain('<option value="study">Study</option>')
+  })
+
   it('reuses honest fields from recent session history', () => {
     // History arrives as a prop — App owns loading it from the repository.
     const html = renderIntent({
