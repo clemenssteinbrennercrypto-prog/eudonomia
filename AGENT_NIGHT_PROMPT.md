@@ -2,7 +2,7 @@
 
 ## Your mission
 
-You are doing autonomous overnight work on **Eudaimonia**, a browser-based focus tracker.
+You are doing autonomous overnight work on **Eudaimonai**, a browser-based focus tracker.
 Your job: research the science of attention and eye tracking deeply, then iteratively improve
 `src/components/SessionScreen.jsx` based on what you find.
 

@@ -114,7 +114,7 @@ const CAMERA_RECOVER_MS      = 3_000  // frames stopped AFTER having flowed = tr
 const CAMERA_RECOVER_TRIES   = 3      // silent rebuild attempts before surfacing a fault
 const CAMERA_FAULT_COPY = {
   permission: {
-    title: 'Eudaimonia can’t see your camera',
+    title: 'Eudaimonai can’t see your camera',
     hint: 'Camera access was blocked. Allow Eudonomia in System Settings → Privacy & Security → Camera, then start a new session.',
   },
   busy: {
@@ -2870,7 +2870,7 @@ export default function SessionScreen({
           </p>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             Focus tracking requires a webcam and a fixed screen setup.
-            Please open Eudaimonia on your laptop or desktop.
+            Please open Eudaimonai on your laptop or desktop.
           </p>
         </div>
       )}

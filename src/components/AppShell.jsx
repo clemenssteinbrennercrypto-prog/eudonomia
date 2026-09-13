@@ -23,7 +23,7 @@ export default function AppShell({ active, onNavigate, onLegal, utility, childre
   return (
     <div className="app-shell">
       <header className="app-shell-header">
-        <button className="app-shell-brand" type="button" onClick={() => onNavigate('lab')}>Eudaimonia</button>
+        <button className="app-shell-brand" type="button" onClick={() => onNavigate('lab')}>Eudaimonai</button>
         <nav className="app-shell-nav" aria-label="Main navigation">
           {ITEMS.map(([id, label]) => {
             const disabled = id === 'ai-companion'

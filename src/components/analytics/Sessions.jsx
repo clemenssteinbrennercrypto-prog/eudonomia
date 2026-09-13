@@ -71,7 +71,7 @@ function exportCSV(sessions) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `eudaimonia-sessions-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `eudaimonai-sessions-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -88,7 +88,7 @@ function exportFullArchive(sessions, focusLedger) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `eudaimonia-full-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `eudaimonai-full-backup-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(url)
 }

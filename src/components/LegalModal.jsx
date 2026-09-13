@@ -39,7 +39,7 @@ export const DATENSCHUTZ = [
   },
   {
     heading: 'Grundsatz',
-    body: `Eudaimonia betreibt keinen Server und kein Nutzerkonto. Ihre Sitzungsdaten werden ausschließlich auf Ihrem Gerät verarbeitet und gespeichert. Zwei Ausnahmen gibt es — die Update-Prüfung und ein optionales Sprachmodell. Beide sind unten einzeln beschrieben.`,
+    body: `Eudaimonai betreibt keinen Server und kein Nutzerkonto. Ihre Sitzungsdaten werden ausschließlich auf Ihrem Gerät verarbeitet und gespeichert. Zwei Ausnahmen gibt es — die Update-Prüfung und ein optionales Sprachmodell. Beide sind unten einzeln beschrieben.`,
   },
   {
     heading: 'Kamera',

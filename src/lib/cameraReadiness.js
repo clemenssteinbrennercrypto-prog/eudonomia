@@ -183,7 +183,7 @@ export function cameraAccessFailureMessage(error) {
   switch (error?.name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return `Camera access was denied. macOS will not ask again until you allow Eudaimonia under System Settings › Privacy & Security › Camera. Change it there, then try again. ${measurementWarning}`
+      return `Camera access was denied. macOS will not ask again until you allow Eudaimonai under System Settings › Privacy & Security › Camera. Change it there, then try again. ${measurementWarning}`
     case 'NotReadableError':
     case 'AbortError':
       return `Another app may be using the camera. Quit Zoom, Teams, FaceTime, or Photo Booth and try again. ${measurementWarning}`

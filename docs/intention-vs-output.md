@@ -4,7 +4,7 @@
 
 ## The gap
 
-Eudaimonia measures **attention**. It does not measure **direction** or **result**.
+Eudaimonai measures **attention**. It does not measure **direction** or **result**.
 
 A session where you stared, rapt, at the wrong thing for 50 minutes scores the
 same as one where you finished the chapter. That is the honest limitation of

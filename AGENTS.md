@@ -1,4 +1,4 @@
-# Eudaimonia / Eudonomia — briefing for coding agents
+# Eudaimonai / Eudonomia — briefing for coding agents
 
 Read this fully before your first edit. It exists so you start where the last
 agent left off instead of relearning — including the things that were tried and

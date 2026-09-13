@@ -1,6 +1,6 @@
-# Eudaimonia — Companion-first Focus Tracker
+# Eudaimonai — Companion-first Focus Tracker
 
-Eudaimonia is a native macOS Companion app for focus sessions. The React UI is
+Eudaimonai is a native macOS Companion app for focus sessions. The React UI is
 bundled into the Companion, while the public website should explain the vision
 and route users to the app download.
 

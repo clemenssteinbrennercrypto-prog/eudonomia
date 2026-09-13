@@ -16,7 +16,7 @@ const font = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"
 
 const SLIDES = [
   {
-    kicker: 'Eudaimonia',
+    kicker: 'Eudaimonai',
     title: 'Meet your\nfocus guardian',
     body: 'It watches your attention through your webcam and pulls you back the moment you drift — quietly, on your side.',
     cta: 'Show me',
@@ -35,7 +35,7 @@ const SLIDES = [
   {
     kicker: 'One permission',
     title: 'Let it see\nyour focus',
-    body: 'Eudaimonia needs your camera to sense attention. Everything is processed locally, in real time, and instantly discarded.',
+    body: 'Eudaimonai needs your camera to sense attention. Everything is processed locally, in real time, and instantly discarded.',
     cta: 'Enable camera',
   },
 ]

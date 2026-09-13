@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Eudaimonia Focus Tracker",
+  "name": "Eudaimonai Focus Tracker",
   "version": "1.0.0",
-  "description": "Tracks active browser tab for Eudaimonia focus tracking",
+  "description": "Tracks active browser tab for Eudaimonai focus tracking",
   "permissions": ["tabs", "activeTab", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {

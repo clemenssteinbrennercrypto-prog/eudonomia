@@ -23,7 +23,7 @@ function syncSessionFlag() {
   try {
     const activeRaw = localStorage.getItem(SESSION_ACTIVE_KEY)
     // This content script runs on every tab (all_urls), but the session flag
-    // is per-origin localStorage. Only the Eudaimonia app tab sets it, and only
+    // is per-origin localStorage. Only the Eudaimonai app tab sets it, and only
     // when native Companion enforcement is unavailable. Other tabs must leave
     // the shared flag alone or they would clobber the fallback.
     if (activeRaw === null) return

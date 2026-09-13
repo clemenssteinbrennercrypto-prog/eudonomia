@@ -315,7 +315,7 @@ export default function WorkspacePreview({ devices, onConfirm, onEditSetup, onFi
             color: 'var(--text)',
             margin: 0,
           }}>
-            How Eudaimonia reads your desk
+            How Eudaimonai reads your desk
           </h2>
         </div>
 

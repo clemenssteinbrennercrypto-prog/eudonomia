@@ -15,7 +15,7 @@ const STEPS = [
   {
     num: '03',
     title: 'Stay inside your work',
-    body: 'When your focus slips, Eudaimonia can call you back and enforce native app and website guardrails.',
+    body: 'When your focus slips, Eudaimonai can call you back and enforce native app and website guardrails.',
   },
 ]
 
@@ -136,7 +136,7 @@ export default function LandingPage() {
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>
-            Eudaimonia<br />Companion
+            Eudaimonai<br />Companion
           </h1>
 
           {/* Subtitle */}
@@ -145,7 +145,7 @@ export default function LandingPage() {
             maxWidth: 440, margin: '0 auto 44px',
             letterSpacing: '0.01em',
           }}>
-            Eudaimonia is a native Mac app for focus sessions. It tracks
+            Eudaimonai is a native Mac app for focus sessions. It tracks
             attention locally, helps you notice drift, and keeps the core
             experience in the Companion app instead of the browser.
           </p>
@@ -347,7 +347,7 @@ export default function LandingPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
               { q: 'Is my camera footage stored?', a: 'Never. Attention processing happens locally on your device using MediaPipe. No frames leave your device.' },
-              { q: 'Can I use Eudaimonia in the browser?', a: 'The public website is only a landing and download surface. The main experience runs in the native macOS Companion app.' },
+              { q: 'Can I use Eudaimonai in the browser?', a: 'The public website is only a landing and download surface. The main experience runs in the native macOS Companion app.' },
               { q: 'Which Macs are supported?', a: 'Apple Silicon Macs with an M1 chip or newer, running macOS 11 or later. Intel Macs are not supported.' },
               { q: 'Does it work without a webcam?', a: 'No. A camera is required for attention tracking; a built-in laptop camera works.' },
               { q: 'Is it free?', a: 'Yes. No account, subscription, or credit card is required.' },
@@ -377,7 +377,7 @@ export default function LandingPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>
-            Eudaimonia
+            Eudaimonai
           </span>
           <div style={{ display: 'flex', gap: 20 }}>
             {[

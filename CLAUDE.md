@@ -1,4 +1,4 @@
-# Eudaimonia — Focus Tracker
+# Eudaimonai — Focus Tracker
 
 A minimal focus-session tracker that uses webcam-based attention detection (MediaPipe FaceMesh) to measure how focused you are during a work session.
 

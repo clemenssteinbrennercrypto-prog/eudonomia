@@ -7,7 +7,7 @@ import { emptyWorkspaceState, migrateLegacyDevices } from '../lib/workspaceStore
 describe('WorkspaceManager', () => {
   it('requires a visual template when no workspace exists', () => {
     const html = renderToStaticMarkup(<WorkspaceManager state={emptyWorkspaceState()} onChange={() => ({ ok: true })} onContinue={() => {}} />)
-    expect(html).toContain('Build the desk Eudaimonia will understand.')
+    expect(html).toContain('Build the desk Eudaimonai will understand.')
     expect(html).toContain('Use quick question setup instead')
   })
 
