@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   activateProtectionSetup,
   createProtectionSetup,
+  firstProtectionSetupWithNameIssue,
   getActiveProtectionSetup,
   normalizeProtectionState,
+  protectionSetupNameIssue,
   removeProtectionSetup,
   updateActiveProtectionSetup,
+  updateProtectionSetup,
 } from './protectionSetups'
 
 describe('protection setups', () => {
@@ -73,5 +76,87 @@ describe('protection setups', () => {
 
     expect(state.activeSetupId).toBe('writing')
     expect(getActiveProtectionSetup(state).focusApps).toEqual(['Pages'])
+  })
+
+  it('never renames a blank setup to the shared default name', () => {
+    const state = normalizeProtectionState({
+      activeSetupId: 'default',
+      setups: [
+        { id: 'default', name: 'Deep Work' },
+        { id: 'writing', name: '   ' },
+        { id: 'study', name: '' },
+      ],
+    })
+
+    expect(state.setups.map(setup => setup.name)).toEqual(['Deep Work', 'Focus setup 1', 'Focus setup 2'])
+  })
+
+  it('does not generate a name that a later setup already uses', () => {
+    const state = normalizeProtectionState({
+      setups: [{ id: 'a', name: '' }, { id: 'b', name: 'Focus setup 1' }],
+    })
+
+    expect(state.setups.map(setup => setup.name)).toEqual(['Focus setup 2', 'Focus setup 1'])
+  })
+
+  it('keeps stored names distinguishable, case-insensitively and within the length limit', () => {
+    const long = 'x'.repeat(48)
+    const state = normalizeProtectionState({
+      setups: [
+        { id: 'a', name: 'Writing' },
+        { id: 'b', name: ' writing ' },
+        { id: 'c', name: long },
+        { id: 'd', name: long },
+      ],
+    })
+
+    expect(state.setups.map(setup => setup.name)).toEqual(['Writing', 'writing 2', long, `${'x'.repeat(46)} 2`])
+    expect(state.setups.every(setup => setup.name.length <= 48)).toBe(true)
+  })
+
+  it('reports blank and duplicate names so the editor can block saving', () => {
+    const setups = [
+      { id: 'a', name: 'Writing' },
+      { id: 'b', name: 'WRITING ' },
+      { id: 'c', name: ' ' },
+      { id: 'd', name: 'Study' },
+    ]
+
+    expect(protectionSetupNameIssue(setups, 'a')).toBe('duplicate')
+    expect(protectionSetupNameIssue(setups, 'b')).toBe('duplicate')
+    expect(protectionSetupNameIssue(setups, 'c')).toBe('blank')
+    expect(protectionSetupNameIssue(setups, 'd')).toBeNull()
+    expect(protectionSetupNameIssue(setups, 'missing')).toBeNull()
+    expect(firstProtectionSetupWithNameIssue(setups)?.id).toBe('a')
+    expect(firstProtectionSetupWithNameIssue([{ id: 'd', name: 'Study' }])).toBeNull()
+  })
+
+  it('can create or duplicate a setup without changing the session setup', () => {
+    let state = normalizeProtectionState({
+      activeSetupId: 'default',
+      setups: [
+        { id: 'default', name: 'Deep Work', distractionApps: ['YouTube'] },
+        { id: 'writing', name: 'Writing', focusApps: ['Pages'], strictMode: true },
+      ],
+    })
+    state = createProtectionSetup(state, { copyFromId: 'writing', activate: false, idSeed: 30 })
+
+    expect(state.activeSetupId).toBe('default')
+    expect(state.setups[2]).toMatchObject({ name: 'Writing copy', focusApps: ['Pages'], strictMode: true })
+
+    state = createProtectionSetup(state, { copyFromId: 'writing', activate: false, idSeed: 31 })
+    expect(state.setups[3].name).toBe('Writing copy 2')
+  })
+
+  it('updates a non-active setup by id without touching the session setup', () => {
+    let state = normalizeProtectionState({
+      activeSetupId: 'default',
+      setups: [{ id: 'default', name: 'Deep Work' }, { id: 'writing', name: 'Writing' }],
+    })
+    state = updateProtectionSetup(state, 'writing', { distractionApps: ['Reddit'] })
+
+    expect(state.activeSetupId).toBe('default')
+    expect(getActiveProtectionSetup(state).distractionApps).toEqual([])
+    expect(state.setups[1]).toMatchObject({ distractionApps: ['Reddit'], distractionDomains: ['reddit.com'] })
   })
 })

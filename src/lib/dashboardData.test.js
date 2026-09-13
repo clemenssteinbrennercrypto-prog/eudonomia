@@ -253,6 +253,29 @@ describe('dashboard data', () => {
     expect(ready).toEqual({ state: 'ready', label: 'Ready', detail: '1 app · 1 website' })
   })
 
+  it('counts a migrated domain-only rule once instead of as an app and a website', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [],
+      range: 'day',
+      now: NOW,
+      focusModeEnabled: true,
+      focusConfig: { distractionApps: ['reddit.com', 'Slack'], distractionDomains: ['reddit.com'] },
+      nativeStatus: { checked: true, connected: true, helperInstalled: true },
+    }).protection
+
+    expect(result).toEqual({ state: 'ready', label: 'Ready', detail: '1 app · 1 website' })
+  })
+
+  it('keeps a domain-only setup configured and asks for the website helper', () => {
+    const base = { ledger: emptyFocusLedger(), sessions: [], range: 'day', now: NOW, focusModeEnabled: true }
+    const focusConfig = { distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] }
+
+    expect(buildDashboardData({ ...base, focusConfig }).protection.state).toBe('checking')
+    expect(buildDashboardData({ ...base, focusConfig, nativeStatus: { checked: true, connected: false } }).protection.state).toBe('disconnected')
+    expect(buildDashboardData({ ...base, focusConfig, nativeStatus: { checked: true, connected: true, helperInstalled: false } }).protection.state).toBe('helper')
+  })
+
   it('treats strict mode as configured protection even without an explicit blocklist', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),

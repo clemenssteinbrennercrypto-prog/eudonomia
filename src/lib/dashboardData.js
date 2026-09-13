@@ -2,6 +2,7 @@ import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
 import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod, getFocusPeriodWindow } from './focusMetric'
 import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
 import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
+import { getProtectionReadiness } from './protectionReadiness'
 
 export function buildAttentionField(sessions, { range = 'day', offset = 0, periodStart = null, now = Date.now(), bins = 96 } = {}) {
   const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'day'
@@ -84,24 +85,20 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     now,
     sessions,
   })
-  const blockedCount = focusConfig?.distractionApps?.length || 0
-  const blockedDomainCount = focusConfig?.distractionDomains?.length || 0
-  const strictMode = focusConfig?.strictMode === true
-  const protection = !focusModeEnabled
-    ? { state: 'off', label: 'Off', detail: 'Focus mode disabled' }
-    : blockedCount + blockedDomainCount === 0 && !strictMode
-      ? { state: 'empty', label: 'Not configured', detail: 'Choose apps and websites' }
-      : nativeStatus?.checked !== true
-        ? { state: 'checking', label: 'Checking', detail: 'Verifying native protection' }
-        : nativeStatus.connected !== true
-          ? { state: 'disconnected', label: 'Not connected', detail: 'Native protection is unavailable' }
-          : blockedDomainCount > 0 && nativeStatus.helperInstalled !== true
-            ? { state: 'helper', label: 'Setup required', detail: 'Install the website blocking helper' }
-            : {
-          state: 'ready',
-          label: 'Ready',
-          detail: `${strictMode ? 'Strict · ' : ''}${blockedCount} ${blockedCount === 1 ? 'app' : 'apps'} · ${blockedDomainCount} ${blockedDomainCount === 1 ? 'website' : 'websites'}`,
-              }
+  const readiness = getProtectionReadiness({ enabled: focusModeEnabled, setup: focusConfig, nativeStatus })
+  const { appCount, websiteCount } = readiness
+  const protection = ({
+    off: { state: 'off', label: 'Off', detail: 'Focus mode disabled' },
+    empty: { state: 'empty', label: 'Not configured', detail: 'Choose apps and websites' },
+    checking: { state: 'checking', label: 'Checking', detail: 'Verifying native protection' },
+    disconnected: { state: 'disconnected', label: 'Not connected', detail: 'Native protection is unavailable' },
+    helper: { state: 'helper', label: 'Setup required', detail: 'Install the website blocking helper' },
+    ready: {
+      state: 'ready',
+      label: 'Ready',
+      detail: `${readiness.strictMode ? 'Strict · ' : ''}${appCount} ${appCount === 1 ? 'app' : 'apps'} · ${websiteCount} ${websiteCount === 1 ? 'website' : 'websites'}`,
+    },
+  })[readiness.state]
 
   const recentSessions = (sessions || []).slice(0, 3).map(session => ({
     id: session.id,

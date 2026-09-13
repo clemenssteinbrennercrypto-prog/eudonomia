@@ -21,10 +21,15 @@ import {
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
 import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 import {
-  activateProtectionSetup,
   createProtectionSetup,
+  firstProtectionSetupWithNameIssue,
+  normalizeProtectionSetup,
+  normalizeProtectionState,
+  protectionSetupNameIssue,
   removeProtectionSetup,
 } from '../lib/protectionSetups'
+import { getProtectionReadiness } from '../lib/protectionReadiness'
+import { useCompanionStatus } from '../lib/useCompanionStatus'
 import {
   loadContractSettings,
   saveContractSettings,
@@ -835,6 +840,11 @@ export default function FocusAppsScreen({
   const initialState = useMemo(() => suppliedProtectionState || loadProtectionSetups(), [suppliedProtectionState])
   const [protectionState, setProtectionState] = useState(initialState)
   const [savedProtectionState, setSavedProtectionState] = useState(initialState)
+  // Which setup the editor shows is view state. It is deliberately separate
+  // from activeSetupId (the setup sessions use), so browsing the library never
+  // counts as an unsaved change or silently switches the session setup.
+  const [editingSetupId, setEditingSetupId] = useState(initialState.activeSetupId)
+  const [nameErrorVisible, setNameErrorVisible] = useState(false)
   const [focusInput, setFocusInput] = useState('')
   const [distractionInput, setDistractionInput] = useState('')
   const [saved, setSaved] = useState(false)
@@ -853,15 +863,27 @@ export default function FocusAppsScreen({
   const savedTimerRef = useRef(null)
 
   const activeSetup = useMemo(
-    () => protectionState.setups.find(setup => setup.id === protectionState.activeSetupId) || protectionState.setups[0],
-    [protectionState],
+    () => protectionState.setups.find(setup => setup.id === editingSetupId)
+      || protectionState.setups.find(setup => setup.id === protectionState.activeSetupId)
+      || protectionState.setups[0],
+    [protectionState, editingSetupId],
   )
+  const activeSetupEditingId = activeSetup.id
+  const isSessionSetup = activeSetup.id === protectionState.activeSetupId
   const focusApps = activeSetup.focusApps
   const distractionApps = activeSetup.distractionApps
   const strictMode = activeSetup.strictMode
   const configuredCount = focusApps.length + distractionApps.length
-  const protectionConfigured = strictMode || distractionApps.length > 0
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
+  const companionStatus = useCompanionStatus({ enabled: modeEnabled, intervalMs: 5000 })
+  const readiness = useMemo(
+    () => getProtectionReadiness({ enabled: modeEnabled, setup: normalizeProtectionSetup(activeSetup, activeSetup.id), nativeStatus: companionStatus }),
+    [modeEnabled, activeSetup, companionStatus],
+  )
+  const rulesConfigured = strictMode || distractionApps.length > 0
+  const protectionReady = readiness.state === 'ready'
+  const nameIssue = protectionSetupNameIssue(protectionState.setups, activeSetup.id)
+  const invalidNameSetup = firstProtectionSetupWithNameIssue(protectionState.setups)
   const activityPreview = useMemo(
     () => classifyCurrentActivity(activity, focusApps, distractionApps, activityConnected),
     [activity, focusApps, distractionApps, activityConnected]
@@ -870,37 +892,25 @@ export default function FocusAppsScreen({
   const updateActiveSetup = useCallback((patch) => {
     setProtectionState(current => ({
       ...current,
-      setups: current.setups.map(setup => setup.id === current.activeSetupId
-        ? { ...setup, ...patch }
+      setups: current.setups.map(setup => setup.id === activeSetupEditingId
+        ? { ...setup, ...(typeof patch === 'function' ? patch(setup) : patch) }
         : setup),
     }))
-  }, [])
+  }, [activeSetupEditingId])
 
   const setFocusApps = useCallback((update) => {
-    setProtectionState(current => {
-      const currentSetup = current.setups.find(setup => setup.id === current.activeSetupId) || current.setups[0]
-      const focusApps = typeof update === 'function' ? update(currentSetup.focusApps) : update
-      return {
-        ...current,
-        setups: current.setups.map(setup => setup.id === current.activeSetupId
-          ? { ...setup, focusApps, focusDomains: [] }
-          : setup),
-      }
-    })
-  }, [])
+    updateActiveSetup(setup => ({
+      focusApps: typeof update === 'function' ? update(setup.focusApps) : update,
+      focusDomains: [],
+    }))
+  }, [updateActiveSetup])
 
   const setDistractionApps = useCallback((update) => {
-    setProtectionState(current => {
-      const currentSetup = current.setups.find(setup => setup.id === current.activeSetupId) || current.setups[0]
-      const distractionApps = typeof update === 'function' ? update(currentSetup.distractionApps) : update
-      return {
-        ...current,
-        setups: current.setups.map(setup => setup.id === current.activeSetupId
-          ? { ...setup, distractionApps, distractionDomains: [] }
-          : setup),
-      }
-    })
-  }, [])
+    updateActiveSetup(setup => ({
+      distractionApps: typeof update === 'function' ? update(setup.distractionApps) : update,
+      distractionDomains: [],
+    }))
+  }, [updateActiveSetup])
 
   useEffect(() => {
     startActivityUpdates((nextActivity) => {
@@ -983,8 +993,13 @@ export default function FocusAppsScreen({
   const removeKeyDisabled = cloudKeyBusy || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'
 
   // The entire library is one draft. Switching setups never leaks or silently
-  // saves one setup's rules into another.
-  const hasUnsavedChanges = JSON.stringify(savedProtectionState) !== JSON.stringify(protectionState)
+  // saves one setup's rules into another. Both sides are compared in their
+  // normalized (saved) shape: raw edits clear derived domains, so a raw
+  // comparison would stay dirty after adding and removing the same app.
+  const hasUnsavedChanges = useMemo(
+    () => JSON.stringify(normalizeProtectionState(savedProtectionState)) !== JSON.stringify(normalizeProtectionState(protectionState)),
+    [savedProtectionState, protectionState],
+  )
 
   const handleBack = () => {
     if (hasUnsavedChanges && !confirmingBack) {
@@ -995,11 +1010,16 @@ export default function FocusAppsScreen({
   }
 
   const handleSaveAndBack = () => {
-    handleSave()
-    onBack()
+    if (handleSave()) onBack()
   }
 
   const handleSave = () => {
+    if (invalidNameSetup) {
+      setEditingSetupId(invalidNameSetup.id)
+      setNameErrorVisible(true)
+      setConfirmingBack(false)
+      return false
+    }
     const next = saveProtectionSetups(protectionState)
     setProtectionState(next)
     setSavedProtectionState(next)
@@ -1011,6 +1031,7 @@ export default function FocusAppsScreen({
       setSaved(false)
       savedTimerRef.current = null
     }, 1800)
+    return true
   }
 
   const handleTestBlocking = async () => {
@@ -1044,34 +1065,50 @@ export default function FocusAppsScreen({
     ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity')
     : 'Waiting for Companion activity'
 
-  const selectSetup = (setupId) => {
-    setProtectionState(current => activateProtectionSetup(current, setupId))
+  const resetEditorInputs = () => {
     setFocusInput('')
     setDistractionInput('')
     setSaved(false)
+  }
+
+  const selectSetup = (setupId) => {
+    setEditingSetupId(setupId)
+    resetEditorInputs()
+  }
+
+  const chooseSetupForSessions = () => {
+    setProtectionState(current => ({ ...current, activeSetupId: activeSetup.id }))
+    setSaved(false)
+  }
+
+  // New and duplicated setups open in the editor without becoming the session
+  // setup; that stays an explicit choice.
+  const openCreatedSetup = (next, previous) => {
+    const previousIds = new Set(previous.setups.map(setup => setup.id))
+    const created = next.setups.find(setup => !previousIds.has(setup.id))
+    setProtectionState(next)
+    if (created) setEditingSetupId(created.id)
+    resetEditorInputs()
   }
 
   const addSetup = () => {
-    setProtectionState(current => createProtectionSetup(current))
-    setFocusInput('')
-    setDistractionInput('')
-    setSaved(false)
+    openCreatedSetup(createProtectionSetup(protectionState, { activate: false }), protectionState)
   }
 
   const duplicateSetup = () => {
-    setProtectionState(current => createProtectionSetup(current, { copyActive: true }))
-    setFocusInput('')
-    setDistractionInput('')
-    setSaved(false)
+    openCreatedSetup(createProtectionSetup(protectionState, { copyFromId: activeSetup.id, activate: false }), protectionState)
   }
 
   const confirmDeleteSetup = () => {
     if (!setupPendingDeletion) return
-    setProtectionState(current => removeProtectionSetup(current, setupPendingDeletion.id))
+    const removedIndex = protectionState.setups.findIndex(setup => setup.id === setupPendingDeletion.id)
+    const next = removeProtectionSetup(protectionState, setupPendingDeletion.id)
+    setProtectionState(next)
+    if (setupPendingDeletion.id === activeSetup.id && next.setups.length) {
+      setEditingSetupId(next.setups[Math.min(Math.max(removedIndex, 0), next.setups.length - 1)].id)
+    }
     setSetupPendingDeletion(null)
-    setFocusInput('')
-    setDistractionInput('')
-    setSaved(false)
+    resetEditorInputs()
   }
 
   return (
@@ -1101,18 +1138,19 @@ export default function FocusAppsScreen({
           </div>
           <div className="protection-setup-list">
             {protectionState.setups.map(setup => {
-              const active = setup.id === protectionState.activeSetupId
+              const active = setup.id === activeSetup.id
+              const usedForSessions = setup.id === protectionState.activeSetupId
               return (
                 <button
                   key={setup.id}
                   type="button"
-                  className={active ? 'is-active' : ''}
+                  className={`${active ? 'is-active' : ''}${usedForSessions ? ' is-session-setup' : ''}`}
                   aria-pressed={active}
                   onClick={() => selectSetup(setup.id)}
                 >
                   <span className="protection-setup-mark" />
-                  <strong>{setup.name}</strong>
-                  <small>{setup.focusApps.length} allowed · {setup.distractionApps.length} unavailable</small>
+                  <strong>{setup.name.trim() || 'Untitled setup'}</strong>
+                  <small>{usedForSessions ? 'Used for sessions · ' : ''}{setup.focusApps.length} allowed · {setup.distractionApps.length} unavailable</small>
                 </button>
               )
             })}
@@ -1127,11 +1165,24 @@ export default function FocusAppsScreen({
               <input
                 value={activeSetup.name}
                 maxLength={48}
-                onChange={event => updateActiveSetup({ name: event.target.value.slice(0, 48) })}
+                onChange={event => {
+                  updateActiveSetup({ name: event.target.value.slice(0, 48) })
+                  setNameErrorVisible(true)
+                }}
                 aria-label="Setup name"
+                aria-invalid={nameIssue ? 'true' : 'false'}
+                aria-describedby={nameIssue && nameErrorVisible ? 'protection-setup-name-error' : undefined}
               />
+              {nameIssue && nameErrorVisible && (
+                <em id="protection-setup-name-error" className="protection-name-error" role="alert">
+                  {nameIssue === 'blank' ? 'Give this setup a name.' : 'Another setup already uses this name.'}
+                </em>
+              )}
             </label>
             <div className="protection-editor-actions">
+              {isSessionSetup
+                ? <span className="protection-session-badge">Used for sessions</span>
+                : <button type="button" onClick={chooseSetupForSessions}>Use for sessions</button>}
               <button type="button" onClick={duplicateSetup}>Duplicate</button>
               <button
                 type="button"
@@ -1144,18 +1195,29 @@ export default function FocusAppsScreen({
             </div>
           </header>
 
-          <section className={`protection-readiness${modeEnabled && protectionConfigured ? ' is-ready' : ''}`}>
+          <section className={`protection-readiness is-${readiness.state}${protectionReady ? ' is-ready' : ''}`}>
             <div className="protection-readiness-icon" aria-hidden="true"><i /></div>
             <div>
-              <span>{modeEnabled && protectionConfigured ? 'Ready for focus' : modeEnabled ? 'Protection not configured' : 'Protection is off'}</span>
+              <span>{{
+                off: 'Protection is off',
+                empty: 'Protection not configured',
+                checking: 'Checking the Companion',
+                disconnected: 'Companion not connected',
+                helper: 'Website helper required',
+                ready: 'Ready for focus',
+              }[readiness.state]}</span>
               <p>
-                {modeEnabled && protectionConfigured
+                {protectionReady
                   ? strictMode
                     ? `${activeSetup.name} will hide every non-browser app outside ${focusApps.length ? `${focusApps.length} allowed ${focusApps.length === 1 ? 'tool' : 'tools'} and core system apps` : 'core system apps'}.`
                     : `${activeSetup.name} will keep ${focusApps.length} ${focusApps.length === 1 ? 'tool' : 'tools'} available and make ${distractionApps.length} ${distractionApps.length === 1 ? 'distraction' : 'distractions'} unavailable.`
-                  : modeEnabled
-                    ? 'Add at least one distraction below or choose Strict protection.'
-                    : 'Your rules are saved, but sessions will not enforce them.'}
+                  : {
+                    off: 'Your rules are saved, but sessions will not enforce them.',
+                    empty: 'Add at least one distraction below or choose Strict protection.',
+                    checking: 'Rules are set. Verifying that the Companion can enforce them.',
+                    disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
+                    helper: 'Install the website blocking helper under Advanced so websites can be blocked.',
+                  }[readiness.state]}
               </p>
             </div>
             <button
@@ -1184,7 +1246,7 @@ export default function FocusAppsScreen({
             </div>
           </fieldset>
 
-          {configuredCount === 0 && !protectionConfigured && (
+          {configuredCount === 0 && !rulesConfigured && (
             <div className="protection-empty-guide">
               <span>Start simple</span>
               <p>Add the tools this setup needs, then remove the places that usually pull you away.</p>
@@ -1216,8 +1278,8 @@ export default function FocusAppsScreen({
           </div>
 
           <footer className="protection-save-row">
-            <span>{hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}</span>
-            <button type="button" disabled={!hasUnsavedChanges && !saved} onClick={handleSave}>
+            <span>{invalidNameSetup && hasUnsavedChanges ? 'Name every setup before saving' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}</span>
+            <button type="button" disabled={(!hasUnsavedChanges && !saved) || Boolean(invalidNameSetup)} onClick={handleSave}>
               {saved ? 'Saved' : 'Save setup'}
             </button>
           </footer>
@@ -1314,7 +1376,7 @@ export default function FocusAppsScreen({
 
       {setupPendingDeletion && (
         <ConfirmDialog
-          title={`Delete “${setupPendingDeletion.name}”?`}
+          title={`Delete “${setupPendingDeletion.name.trim() || 'Untitled setup'}”?`}
           description="Its allowed tools, unavailable distractions and protection level will be removed. Other setups stay unchanged."
           confirmLabel="Delete setup"
           onConfirm={confirmDeleteSetup}

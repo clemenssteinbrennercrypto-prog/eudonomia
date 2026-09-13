@@ -9,7 +9,7 @@ import {
   saveProtectionSetups,
   saveStrictMode,
 } from './storage'
-import { createProtectionSetup, getActiveProtectionSetup } from './protectionSetups'
+import { activateProtectionSetup, createProtectionSetup, getActiveProtectionSetup } from './protectionSetups'
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -77,5 +77,33 @@ describe('protection setup storage', () => {
       strictMode: true,
     })
     expect(state.setups[0].focusApps).toEqual([])
+  })
+
+  it('switching the session setup, as the start screen does, changes what sessions enforce', () => {
+    let state = createProtectionSetup(loadProtectionSetups(), { name: 'Strict study', idSeed: 22 })
+    state = {
+      ...state,
+      setups: state.setups.map(setup => setup.id === state.activeSetupId
+        ? { ...setup, focusApps: ['Preview'], strictMode: true }
+        : { ...setup, distractionApps: ['YouTube'] }),
+    }
+    const studyId = state.activeSetupId
+    saveProtectionSetups(activateProtectionSetup(state, 'default'))
+
+    expect(loadFocusAppsConfig()).toMatchObject({ id: 'default', distractionApps: ['YouTube'], strictMode: false })
+    expect(loadStrictMode()).toBe(false)
+    expect(localStorage.getItem('eudaimonia_strict_mode')).toBe('false')
+
+    saveProtectionSetups(activateProtectionSetup(loadProtectionSetups(), studyId))
+    expect(loadFocusAppsConfig()).toMatchObject({ id: studyId, focusApps: ['Preview'], distractionApps: [], strictMode: true })
+    expect(loadStrictMode()).toBe(true)
+    expect(JSON.parse(localStorage.getItem(FOCUS_APPS_KEY))).toMatchObject({ focusApps: ['Preview'], distractionApps: [] })
+  })
+
+  it('ignores an unknown setup id instead of clearing the enforced rules', () => {
+    saveFocusAppsConfig({ distractionApps: ['Reddit'] })
+    saveProtectionSetups(activateProtectionSetup(loadProtectionSetups(), 'missing'))
+
+    expect(loadFocusAppsConfig()).toMatchObject({ id: 'default', distractionApps: ['Reddit'] })
   })
 })

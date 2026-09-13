@@ -3,6 +3,8 @@ import { buildRecentSessionSetups, normalizeSessionTags, QUICK_SESSION_TAGS } fr
 import { countWords, limitWords, SESSION_PLAN_WORD_LIMIT } from '../lib/sessionPlan'
 import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuration'
 import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
+import { getProtectionReadiness } from '../lib/protectionReadiness'
+import { useCompanionStatus } from '../lib/useCompanionStatus'
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -26,6 +28,9 @@ export default function SessionIntentScreen({
   protectionSetup = null,
   protectionSetups = [],
   protectionEnabled = false,
+  // Optional override for the Companion check (tests, previews). Without it the
+  // screen polls the Companion itself while protection is switched on.
+  nativeStatus = null,
   onProtectionSetupChange,
   onEditProtection,
   onWorkspaceChange,
@@ -41,9 +46,36 @@ export default function SessionIntentScreen({
   const planWordCount = countWords(goal)
   const hasTimeLimit = isTimed(duration)
   const cloudPlanSharing = contractProvider === 'cloud'
-  const protectedDistractions = protectionSetup?.distractionApps?.length || 0
-  const strictProtection = protectionSetup?.strictMode === true
-  const protectionReady = protectionEnabled && (protectedDistractions > 0 || strictProtection)
+  const polledCompanionStatus = useCompanionStatus({ enabled: protectionEnabled && nativeStatus == null, intervalMs: 5000 })
+  const protection = getProtectionReadiness({
+    enabled: protectionEnabled,
+    setup: protectionSetup,
+    nativeStatus: nativeStatus ?? polledCompanionStatus,
+  })
+  const protectedDistractions = protection.distractionCount
+  const strictProtection = protection.strictMode
+  const protectionReady = protection.state === 'ready'
+  const protectionConfigured = protection.state !== 'off' && protection.state !== 'empty'
+  const distractionLabel = `${protectedDistractions} ${protectedDistractions === 1 ? 'distraction' : 'distractions'}`
+  const setupName = protectionSetup?.name || 'Protection'
+  const protectionHeadline = {
+    off: 'Protection off',
+    empty: 'Not configured',
+    checking: `${setupName} · checking Companion`,
+    disconnected: `${setupName} · Companion not connected`,
+    helper: `${setupName} · website helper required`,
+    ready: `${setupName} · protected`,
+  }[protection.state]
+  const protectionDetail = {
+    off: 'This session will not enforce your protection rules.',
+    empty: 'Choose what should step out of the way before you begin.',
+    checking: 'Verifying that the Companion can enforce these rules.',
+    disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
+    helper: 'Install the website blocking helper in Protection so websites can be blocked.',
+    ready: strictProtection
+      ? `Strict protection · unlisted apps hidden · ${protectedDistractions} selected ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable`
+      : `${distractionLabel} unavailable during this session`,
+  }[protection.state]
 
   const toggleTag = (tag) => {
     setTags(previous => previous.includes(tag)
@@ -201,20 +233,12 @@ export default function SessionIntentScreen({
             </fieldset>
           </div>
 
-          <section className={`session-protection-summary${protectionReady ? ' is-ready' : ''}`} aria-label="Focus protection">
+          <section className={`session-protection-summary is-${protection.state}${protectionReady ? ' is-ready' : ''}`} aria-label="Focus protection">
             <span className="session-protection-icon" aria-hidden="true"><i /></span>
             <div>
               <small>Focus environment</small>
-              <strong>{protectionReady ? `${protectionSetup.name} · protected` : protectionEnabled ? 'Not configured' : 'Protection off'}</strong>
-              <p>
-                {protectionReady
-                  ? strictProtection
-                    ? `Strict protection · unlisted apps hidden · ${protectedDistractions} selected ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable`
-                    : `${protectedDistractions} ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable during this session`
-                  : protectionEnabled
-                    ? 'Choose what should step out of the way before you begin.'
-                    : 'This session will not enforce your protection rules.'}
-              </p>
+              <strong>{protectionHeadline}</strong>
+              <p>{protectionDetail}</p>
             </div>
             <div className="session-protection-actions">
               {protectionSetups.length > 1 && onProtectionSetupChange && (
@@ -226,7 +250,7 @@ export default function SessionIntentScreen({
                   {protectionSetups.map(setup => <option key={setup.id} value={setup.id}>{setup.name}</option>)}
                 </select>
               )}
-              {onEditProtection && <button type="button" onClick={onEditProtection}>{protectionReady ? 'Edit' : 'Set up'}</button>}
+              {onEditProtection && <button type="button" onClick={onEditProtection}>{protectionConfigured ? 'Edit' : 'Set up'}</button>}
             </div>
           </section>
 

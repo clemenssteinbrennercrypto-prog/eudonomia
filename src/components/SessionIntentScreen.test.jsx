@@ -22,6 +22,8 @@ function renderIntent(overrides = {}) {
   })).replaceAll('<!-- -->', '')
 }
 
+const CONNECTED = { checked: true, connected: true, helperInstalled: true }
+
 beforeEach(() => {
   globalThis.localStorage = new MemoryStorage()
 })
@@ -49,13 +51,63 @@ describe('SessionIntentScreen', () => {
     const html = renderIntent({
       task: 'Current task',
       protectionEnabled: true,
-      protectionSetup: { name: 'Writing', distractionApps: ['Reddit'], strictMode: false },
+      protectionSetup: { name: 'Writing', distractionApps: ['Slack'], distractionDomains: [], strictMode: false },
+      nativeStatus: CONNECTED,
       onEditProtection: () => {},
     })
 
     expect(html).toContain('Writing · protected')
     expect(html).toContain('1 distraction unavailable during this session')
     expect(html).toContain('Start protected session')
+  })
+
+  describe('protection claims follow the Companion', () => {
+    const writing = { name: 'Writing', distractionApps: ['Slack'], distractionDomains: [], strictMode: false }
+    const render = overrides => renderIntent({ task: 'Current task', protectionEnabled: true, protectionSetup: writing, onEditProtection: () => {}, ...overrides })
+
+    it('never claims protection before the Companion has been checked', () => {
+      const html = render({ nativeStatus: { checked: false, connected: false, helperInstalled: false } })
+      expect(html).toContain('Writing · checking Companion')
+      expect(html).not.toContain('protected')
+      expect(html).toContain('Start focus session')
+    })
+
+    it('reports a missing Companion instead of a protected session', () => {
+      const html = render({ nativeStatus: { checked: true, connected: false, helperInstalled: false } })
+      expect(html).toContain('Writing · Companion not connected')
+      expect(html).toContain('nothing is enforced until the Companion app is running')
+      expect(html).not.toContain('Start protected session')
+      expect(html).toContain('>Edit<')
+    })
+
+    it('requires the website helper only when websites are blocked', () => {
+      const websites = { ...writing, distractionApps: ['YouTube'], distractionDomains: ['youtube.com'] }
+      const withoutHelper = render({ protectionSetup: websites, nativeStatus: { checked: true, connected: true, helperInstalled: false } })
+      expect(withoutHelper).toContain('Writing · website helper required')
+      expect(withoutHelper).not.toContain('Start protected session')
+
+      const appsOnly = render({ nativeStatus: { checked: true, connected: true, helperInstalled: false } })
+      expect(appsOnly).toContain('Start protected session')
+    })
+
+    it('treats strict mode without a blocklist as protection once the Companion is connected', () => {
+      const html = render({ protectionSetup: { name: 'Deep', distractionApps: [], distractionDomains: [], strictMode: true }, nativeStatus: CONNECTED })
+      expect(html).toContain('Deep · protected')
+      expect(html).toContain('Strict protection · unlisted apps hidden · 0 selected distractions unavailable')
+    })
+
+    it('does not call an allowed-only setup protected, even with the Companion connected', () => {
+      const html = render({ protectionSetup: { name: 'Tools', focusApps: ['VS Code'], distractionApps: [], distractionDomains: [], strictMode: false }, nativeStatus: CONNECTED })
+      expect(html).toContain('Not configured')
+      expect(html).toContain('>Set up<')
+      expect(html).toContain('Start focus session')
+    })
+
+    it('says protection is off whatever the Companion reports', () => {
+      const html = render({ protectionEnabled: false, nativeStatus: CONNECTED })
+      expect(html).toContain('Protection off')
+      expect(html).toContain('Start focus session')
+    })
   })
 
   it('offers direct setup selection when more than one protection setup exists', () => {

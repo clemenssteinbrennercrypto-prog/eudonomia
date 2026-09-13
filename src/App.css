@@ -1623,9 +1623,16 @@ body {
 .protection-editor-actions button { padding: 8px 11px; }
 .protection-editor-actions button.is-danger { color: var(--bad); }
 .protection-editor-actions button:disabled { opacity: .3; cursor: default; }
+.protection-editor-heading .protection-name-error { display: block; margin-top: 7px; color: var(--bad); font-size: 11px; font-style: normal; font-weight: 650; }
+.protection-editor-heading input[aria-invalid="true"] { border-color: var(--bad); }
+.protection-session-badge { align-self: center; padding: 8px 11px; border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); border-radius: 8px; color: var(--accent); font-size: 11px; font-weight: 650; white-space: nowrap; }
 
 .protection-readiness { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-top: 22px; padding: 17px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); }
 .protection-readiness.is-ready { border-color: color-mix(in srgb, var(--good) 26%, var(--line)); background: color-mix(in srgb, var(--good) 5%, transparent); }
+.protection-readiness.is-disconnected,
+.protection-readiness.is-helper { border-color: color-mix(in srgb, var(--warn) 32%, var(--line)); }
+.protection-readiness.is-disconnected .protection-readiness-icon,
+.protection-readiness.is-helper .protection-readiness-icon { border-color: color-mix(in srgb, var(--warn) 44%, transparent); color: var(--warn); }
 .protection-readiness-icon { position: relative; width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--text-muted); }
 .protection-readiness.is-ready .protection-readiness-icon { border-color: color-mix(in srgb, var(--good) 42%, transparent); color: var(--good); }
 .protection-readiness-icon::before { content: ''; position: absolute; left: 11px; top: 7px; width: 14px; height: 12px; border: 1px solid currentColor; border-bottom: 0; border-radius: 8px 8px 0 0; }
@@ -1911,6 +1918,10 @@ body {
   background: color-mix(in srgb, var(--bg) 42%, transparent);
 }
 .session-protection-summary.is-ready { border-color: color-mix(in srgb, var(--good) 25%, var(--line)); }
+.session-protection-summary.is-disconnected,
+.session-protection-summary.is-helper { border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.session-protection-summary.is-disconnected .session-protection-icon,
+.session-protection-summary.is-helper .session-protection-icon { border-color: color-mix(in srgb, var(--warn) 44%, transparent); color: var(--warn); }
 .session-protection-icon { position: relative; width: 34px; height: 34px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--text-muted); }
 .session-protection-summary.is-ready .session-protection-icon { border-color: color-mix(in srgb, var(--good) 44%, transparent); color: var(--good); }
 .session-protection-icon::before { content: ''; position: absolute; left: 10px; top: 6px; width: 12px; height: 11px; border: 1px solid currentColor; border-bottom: 0; border-radius: 8px 8px 0 0; }

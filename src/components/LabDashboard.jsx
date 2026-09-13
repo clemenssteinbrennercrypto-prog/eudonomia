@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { loadFocusAppsConfig } from '../lib/storage'
 import { emptyFocusLedger, getFocusPeriodWindow } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
-import { fetchCompanionDebug } from '../lib/nativeCompanion'
+import { useCompanionStatus } from '../lib/useCompanionStatus'
 
 const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
@@ -80,7 +80,7 @@ function AttentionField({ bins, range, title }) {
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
   const [periodSelection, setPeriodSelection] = useState({ range: 'day', periodStart: null })
-  const [nativeStatus, setNativeStatus] = useState({ checked: false, connected: false, helperInstalled: false })
+  const nativeStatus = useCompanionStatus()
   // Sessions and the ledger arrive as props — App owns loading them and
   // re-reads after every completed session, so this stays a pure render of
   // whatever it is handed. focusConfig is a local settings key, not session
@@ -122,21 +122,6 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     }
     return { ...current, periodStart: nextStart }
   })
-
-  useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      const debug = await fetchCompanionDebug()
-      if (!cancelled) setNativeStatus({
-        checked: true,
-        connected: Boolean(debug),
-        helperInstalled: debug?.helperInstalled === true,
-      })
-    }
-    check()
-    const interval = window.setInterval(check, 10000)
-    return () => { cancelled = true; window.clearInterval(interval) }
-  }, [])
 
   return (
     <main className="lab-dashboard">

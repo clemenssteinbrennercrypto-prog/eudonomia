@@ -66,11 +66,43 @@ function normalizeSetupId(value, fallback) {
   return normalized || fallback
 }
 
-function normalizeSetupName(value, fallback = 'Focus setup') {
-  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 48) || fallback
+const SETUP_NAME_MAX_LENGTH = 48
+
+export function cleanProtectionSetupName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, SETUP_NAME_MAX_LENGTH)
 }
 
-export function normalizeProtectionSetup(setup, fallbackId = DEFAULT_PROTECTION_SETUP_ID) {
+function setupNameKey(value) {
+  return cleanProtectionSetupName(value).toLowerCase()
+}
+
+function normalizeSetupName(value, fallback = 'Focus setup') {
+  return cleanProtectionSetupName(value) || fallback
+}
+
+// Setup names are the only thing that tells setups apart in the library and in
+// the session picker, so a blank or repeated name is a user-facing error, not
+// something to paper over with a shared default.
+export function protectionSetupNameIssue(setups, setupId) {
+  const setup = (setups || []).find(item => item.id === setupId)
+  if (!setup) return null
+  const key = setupNameKey(setup.name)
+  if (!key) return 'blank'
+  return (setups || []).some(item => item.id !== setupId && setupNameKey(item.name) === key)
+    ? 'duplicate'
+    : null
+}
+
+export function firstProtectionSetupWithNameIssue(setups) {
+  return (setups || []).find(setup => protectionSetupNameIssue(setups, setup.id)) || null
+}
+
+function suffixedSetupName(name, suffix) {
+  const tail = ` ${suffix}`
+  return `${name.slice(0, SETUP_NAME_MAX_LENGTH - tail.length).trimEnd()}${tail}`
+}
+
+export function normalizeProtectionSetup(setup, fallbackId = DEFAULT_PROTECTION_SETUP_ID, fallbackName = DEFAULT_PROTECTION_SETUP_NAME) {
   const baseFocusApps = normalizeProtectionAppList(setup?.focusApps)
   const baseDistractionApps = normalizeProtectionAppList(setup?.distractionApps)
   const derivedFocusDomains = normalizeProtectionDomainList(deriveDomainsFromApps(baseFocusApps))
@@ -87,7 +119,7 @@ export function normalizeProtectionSetup(setup, fallbackId = DEFAULT_PROTECTION_
   ])
   return {
     id: normalizeSetupId(setup?.id, fallbackId),
-    name: normalizeSetupName(setup?.name, DEFAULT_PROTECTION_SETUP_NAME),
+    name: normalizeSetupName(setup?.name, fallbackName),
     focusApps,
     distractionApps,
     focusDomains: normalizeProtectionDomainList(deriveDomainsFromApps(focusApps)),
@@ -113,6 +145,10 @@ export function normalizeProtectionState(value, legacy = {}) {
     ? value.setups
     : [createDefaultProtectionSetup(legacy)]
   const ids = new Set()
+  // Explicit names are reserved up front so a generated name for a blank setup
+  // or a suffixed duplicate never collides with a name that appears later.
+  const reservedNames = new Set(rawSetups.map(setup => setupNameKey(setup?.name)).filter(Boolean))
+  const usedNames = new Set()
   const setups = rawSetups.map((setup, index) => {
     const base = normalizeProtectionSetup(setup, index === 0 ? DEFAULT_PROTECTION_SETUP_ID : `setup-${index + 1}`)
     let id = base.id
@@ -122,7 +158,25 @@ export function normalizeProtectionState(value, legacy = {}) {
       suffix += 1
     }
     ids.add(id)
-    return { ...base, id }
+
+    const requestedName = cleanProtectionSetupName(setup?.name)
+    let name
+    if (!requestedName) {
+      let counter = 1
+      do {
+        name = `Focus setup ${counter}`
+        counter += 1
+      } while (reservedNames.has(name.toLowerCase()) || usedNames.has(name.toLowerCase()))
+    } else {
+      name = requestedName
+      let counter = 2
+      while (usedNames.has(name.toLowerCase())) {
+        name = suffixedSetupName(requestedName, counter)
+        counter += 1
+      }
+    }
+    usedNames.add(name.toLowerCase())
+    return { ...base, id, name }
   })
   const requestedActiveId = String(value?.activeSetupId || '')
   const activeSetupId = ids.has(requestedActiveId) ? requestedActiveId : setups[0].id
@@ -134,7 +188,7 @@ export function getActiveProtectionSetup(state) {
   return normalized.setups.find(setup => setup.id === normalized.activeSetupId) || normalized.setups[0]
 }
 
-export function updateActiveProtectionSetup(state, patch) {
+export function updateProtectionSetup(state, setupId, patch) {
   const normalized = normalizeProtectionState(state)
   const nextPatch = { ...patch }
   if (Object.prototype.hasOwnProperty.call(nextPatch, 'focusApps') && !Object.prototype.hasOwnProperty.call(nextPatch, 'focusDomains')) {
@@ -145,10 +199,15 @@ export function updateActiveProtectionSetup(state, patch) {
   }
   return normalizeProtectionState({
     ...normalized,
-    setups: normalized.setups.map(setup => setup.id === normalized.activeSetupId
+    setups: normalized.setups.map(setup => setup.id === setupId
       ? { ...setup, ...nextPatch, id: setup.id }
       : setup),
   })
+}
+
+export function updateActiveProtectionSetup(state, patch) {
+  const normalized = normalizeProtectionState(state)
+  return updateProtectionSetup(normalized, normalized.activeSetupId, patch)
 }
 
 export function activateProtectionSetup(state, setupId) {
@@ -165,10 +224,12 @@ export function nextProtectionSetupName(setups) {
   return `Focus setup ${index}`
 }
 
-export function createProtectionSetup(state, { name, copyActive = false, idSeed = Date.now() } = {}) {
+export function createProtectionSetup(state, { name, copyActive = false, copyFromId = null, activate = true, idSeed = Date.now() } = {}) {
   const normalized = normalizeProtectionState(state)
-  const active = getActiveProtectionSetup(normalized)
-  const baseName = normalizeSetupName(name, copyActive ? `${active.name} copy` : nextProtectionSetupName(normalized.setups))
+  const source = copyFromId
+    ? normalized.setups.find(setup => setup.id === copyFromId) || null
+    : copyActive ? getActiveProtectionSetup(normalized) : null
+  const baseName = normalizeSetupName(name, source ? `${source.name} copy` : nextProtectionSetupName(normalized.setups))
   const requestedId = normalizeSetupId(`${baseName}-${idSeed}`, `setup-${idSeed}`)
   const existingIds = new Set(normalized.setups.map(setup => setup.id))
   let id = requestedId
@@ -180,13 +241,16 @@ export function createProtectionSetup(state, { name, copyActive = false, idSeed 
   const setup = normalizeProtectionSetup({
     id,
     name: baseName,
-    focusApps: copyActive ? active.focusApps : [],
-    distractionApps: copyActive ? active.distractionApps : [],
-    focusDomains: copyActive ? active.focusDomains : [],
-    distractionDomains: copyActive ? active.distractionDomains : [],
-    strictMode: copyActive ? active.strictMode : false,
+    focusApps: source ? source.focusApps : [],
+    distractionApps: source ? source.distractionApps : [],
+    focusDomains: source ? source.focusDomains : [],
+    distractionDomains: source ? source.distractionDomains : [],
+    strictMode: source ? source.strictMode : false,
   }, id)
-  return { schemaVersion: PROTECTION_SETUP_SCHEMA_VERSION, activeSetupId: id, setups: [...normalized.setups, setup] }
+  return normalizeProtectionState({
+    activeSetupId: activate ? id : normalized.activeSetupId,
+    setups: [...normalized.setups, setup],
+  })
 }
 
 export function removeProtectionSetup(state, setupId) {
