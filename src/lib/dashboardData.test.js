@@ -276,6 +276,16 @@ describe('dashboard data', () => {
     expect(buildDashboardData({ ...base, focusConfig, nativeStatus: { checked: true, connected: true, helperInstalled: false } }).protection.state).toBe('helper')
   })
 
+  it('reports missing Automation permission instead of ready when apps are hidden', () => {
+    const base = { ledger: emptyFocusLedger(), sessions: [], range: 'day', now: NOW, focusModeEnabled: true }
+    const nativeStatus = { checked: true, connected: true, helperInstalled: true, permissionMissing: 'System Events' }
+
+    expect(buildDashboardData({ ...base, nativeStatus, focusConfig: { distractionApps: ['Slack'], distractionDomains: [] } }).protection)
+      .toEqual({ state: 'permission', label: 'Permission required', detail: 'Allow Automation access for System Events' })
+    expect(buildDashboardData({ ...base, nativeStatus, focusConfig: { distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] } }).protection.state)
+      .toBe('ready')
+  })
+
   it('treats strict mode as configured protection even without an explicit blocklist', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),

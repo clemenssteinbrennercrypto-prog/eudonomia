@@ -5,6 +5,7 @@ import {
   firstProtectionSetupWithNameIssue,
   getActiveProtectionSetup,
   normalizeProtectionState,
+  protectionDraftKey,
   protectionSetupNameIssue,
   removeProtectionSetup,
   updateActiveProtectionSetup,
@@ -158,5 +159,33 @@ describe('protection setups', () => {
     expect(state.activeSetupId).toBe('default')
     expect(getActiveProtectionSetup(state).distractionApps).toEqual([])
     expect(state.setups[1]).toMatchObject({ distractionApps: ['Reddit'], distractionDomains: ['reddit.com'] })
+  })
+
+  describe('draft comparison key', () => {
+    const saved = normalizeProtectionState({
+      activeSetupId: 'default',
+      setups: [{ id: 'default', name: 'Deep Work', distractionApps: ['YouTube'] }, { id: 'new', name: 'Focus setup 1' }],
+    })
+    const withName = (id, name) => ({ ...saved, setups: saved.setups.map(setup => setup.id === id ? { ...setup, name } : setup) })
+
+    it('treats clearing a generated name as a change', () => {
+      expect(normalizeProtectionState(withName('new', '')).setups[1].name).toBe('Focus setup 1')
+      expect(protectionDraftKey(withName('new', ''))).not.toBe(protectionDraftKey(saved))
+      expect(protectionDraftKey(withName('new', '   '))).not.toBe(protectionDraftKey(saved))
+    })
+
+    it('treats a duplicate that normalization would suffix as a change', () => {
+      expect(protectionDraftKey(withName('new', 'deep work'))).not.toBe(protectionDraftKey(saved))
+    })
+
+    it('ignores whitespace-only name edits and cleared derived domains', () => {
+      expect(protectionDraftKey(withName('new', '  Focus   setup 1 '))).toBe(protectionDraftKey(saved))
+      const cleared = { ...saved, setups: saved.setups.map(setup => ({ ...setup, distractionDomains: [] })) }
+      expect(protectionDraftKey(cleared)).toBe(protectionDraftKey(saved))
+    })
+
+    it('handles a state without setups', () => {
+      expect(protectionDraftKey(null)).toBe(protectionDraftKey(normalizeProtectionState(null)))
+    })
   })
 })

@@ -90,6 +90,17 @@ describe('SessionIntentScreen', () => {
       expect(appsOnly).toContain('Start protected session')
     })
 
+    it('does not claim protection when the Companion lacks Automation access for hiding apps', () => {
+      const denied = { ...CONNECTED, permissionMissing: 'System Events' }
+      const html = render({ nativeStatus: denied })
+      expect(html).toContain('Writing · permission required')
+      expect(html).toContain('Automation access for System Events')
+      expect(html).not.toContain('Start protected session')
+
+      const websiteOnly = render({ protectionSetup: { ...writing, distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] }, nativeStatus: denied })
+      expect(websiteOnly).toContain('Start protected session')
+    })
+
     it('treats strict mode without a blocklist as protection once the Companion is connected', () => {
       const html = render({ protectionSetup: { name: 'Deep', distractionApps: [], distractionDomains: [], strictMode: true }, nativeStatus: CONNECTED })
       expect(html).toContain('Deep · protected')

@@ -183,6 +183,22 @@ export function normalizeProtectionState(value, legacy = {}) {
   return { schemaVersion: PROTECTION_SETUP_SCHEMA_VERSION, activeSetupId, setups }
 }
 
+// Comparison key for an editor draft. It uses the normalized (saved) shape so
+// derived fields can't create phantom changes, but keeps each setup's name as
+// typed: normalization replaces a blank name with a generated one, which would
+// otherwise make a cleared name look identical to the saved "Focus setup N".
+export function protectionDraftKey(state) {
+  const normalized = normalizeProtectionState(state)
+  const rawSetups = Array.isArray(state?.setups) && state.setups.length ? state.setups : null
+  return JSON.stringify({
+    ...normalized,
+    setups: normalized.setups.map((setup, index) => ({
+      ...setup,
+      name: rawSetups ? cleanProtectionSetupName(rawSetups[index]?.name) : setup.name,
+    })),
+  })
+}
+
 export function getActiveProtectionSetup(state) {
   const normalized = normalizeProtectionState(state)
   return normalized.setups.find(setup => setup.id === normalized.activeSetupId) || normalized.setups[0]

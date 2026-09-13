@@ -1520,6 +1520,7 @@ body {
 .lab-lock-empty .lab-lock-icon { color: var(--warn); }
 .lab-lock-checking .lab-lock-icon,
 .lab-lock-disconnected .lab-lock-icon,
+.lab-lock-permission .lab-lock-icon,
 .lab-lock-helper .lab-lock-icon { color: var(--warn); }
 .lab-lock-off .lab-lock-icon { color: var(--text-muted); }
 .lab-lock small { display: block; color: var(--text-muted); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -1630,8 +1631,10 @@ body {
 .protection-readiness { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-top: 22px; padding: 17px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); }
 .protection-readiness.is-ready { border-color: color-mix(in srgb, var(--good) 26%, var(--line)); background: color-mix(in srgb, var(--good) 5%, transparent); }
 .protection-readiness.is-disconnected,
+.protection-readiness.is-permission,
 .protection-readiness.is-helper { border-color: color-mix(in srgb, var(--warn) 32%, var(--line)); }
 .protection-readiness.is-disconnected .protection-readiness-icon,
+.protection-readiness.is-permission .protection-readiness-icon,
 .protection-readiness.is-helper .protection-readiness-icon { border-color: color-mix(in srgb, var(--warn) 44%, transparent); color: var(--warn); }
 .protection-readiness-icon { position: relative; width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--text-muted); }
 .protection-readiness.is-ready .protection-readiness-icon { border-color: color-mix(in srgb, var(--good) 42%, transparent); color: var(--good); }
@@ -1919,8 +1922,10 @@ body {
 }
 .session-protection-summary.is-ready { border-color: color-mix(in srgb, var(--good) 25%, var(--line)); }
 .session-protection-summary.is-disconnected,
+.session-protection-summary.is-permission,
 .session-protection-summary.is-helper { border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
 .session-protection-summary.is-disconnected .session-protection-icon,
+.session-protection-summary.is-permission .session-protection-icon,
 .session-protection-summary.is-helper .session-protection-icon { border-color: color-mix(in srgb, var(--warn) 44%, transparent); color: var(--warn); }
 .session-protection-icon { position: relative; width: 34px; height: 34px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--text-muted); }
 .session-protection-summary.is-ready .session-protection-icon { border-color: color-mix(in srgb, var(--good) 44%, transparent); color: var(--good); }

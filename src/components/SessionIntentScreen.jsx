@@ -63,6 +63,7 @@ export default function SessionIntentScreen({
     empty: 'Not configured',
     checking: `${setupName} · checking Companion`,
     disconnected: `${setupName} · Companion not connected`,
+    permission: `${setupName} · permission required`,
     helper: `${setupName} · website helper required`,
     ready: `${setupName} · protected`,
   }[protection.state]
@@ -71,6 +72,7 @@ export default function SessionIntentScreen({
     empty: 'Choose what should step out of the way before you begin.',
     checking: 'Verifying that the Companion can enforce these rules.',
     disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
+    permission: `Apps can't be hidden until the Companion has Automation access for ${protection.permissionMissing}.`,
     helper: 'Install the website blocking helper in Protection so websites can be blocked.',
     ready: strictProtection
       ? `Strict protection · unlisted apps hidden · ${protectedDistractions} selected ${protectedDistractions === 1 ? 'distraction' : 'distractions'} unavailable`

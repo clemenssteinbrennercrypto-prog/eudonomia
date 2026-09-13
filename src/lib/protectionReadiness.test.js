@@ -36,9 +36,38 @@ describe('protection readiness', () => {
   })
 
   it('reads the Companion debug payload conservatively', () => {
-    expect(companionStatusFromDebug(null)).toEqual({ checked: true, connected: false, helperInstalled: false })
-    expect(companionStatusFromDebug({ helperInstalled: 'yes' })).toEqual({ checked: true, connected: true, helperInstalled: false })
-    expect(companionStatusFromDebug({ helperInstalled: true })).toEqual({ checked: true, connected: true, helperInstalled: true })
+    expect(companionStatusFromDebug(null)).toEqual({ checked: true, connected: false, helperInstalled: false, permissionMissing: null })
+    expect(companionStatusFromDebug({ helperInstalled: 'yes' })).toEqual({ checked: true, connected: true, helperInstalled: false, permissionMissing: null })
+    expect(companionStatusFromDebug({ helperInstalled: true })).toEqual({ checked: true, connected: true, helperInstalled: true, permissionMissing: null })
+    expect(companionStatusFromDebug({ permissionMissing: '  Safari ' }).permissionMissing).toBe('Safari')
+    expect(companionStatusFromDebug({ permissionMissing: '   ' }).permissionMissing).toBeNull()
+    expect(companionStatusFromDebug({ permissionMissing: true }).permissionMissing).toBeNull()
+  })
+})
+
+describe('Automation permission', () => {
+  const denied = { ...CONNECTED, permissionMissing: 'System Events' }
+
+  it('blocks a protection claim when apps must be hidden', () => {
+    expect(getProtectionReadiness({ enabled: true, setup: blocklist, nativeStatus: denied })).toMatchObject({ state: 'permission', permissionMissing: 'System Events' })
+    expect(getProtectionReadiness({ enabled: true, setup: strictOnly, nativeStatus: denied }).state).toBe('permission')
+  })
+
+  it('does not block website-only protection, which the hosts helper enforces', () => {
+    const websiteOnly = normalizeProtectionSetup({ distractionDomains: ['reddit.com'] })
+    expect(getProtectionReadiness({ enabled: true, setup: websiteOnly, nativeStatus: denied })).toMatchObject({ state: 'ready', permissionMissing: null })
+    expect(getProtectionReadiness({ enabled: true, setup: websiteOnly, nativeStatus: { ...denied, helperInstalled: false } }).state).toBe('helper')
+  })
+
+  it('sits between the connection check and the helper check', () => {
+    expect(getProtectionReadiness({ enabled: true, setup: websites, nativeStatus: { checked: true, connected: false, helperInstalled: false, permissionMissing: 'Safari' } }).state).toBe('disconnected')
+    expect(getProtectionReadiness({ enabled: true, setup: websites, nativeStatus: { ...denied, helperInstalled: false } }).state).toBe('permission')
+    expect(getProtectionReadiness({ enabled: false, setup: blocklist, nativeStatus: denied }).state).toBe('off')
+  })
+
+  it('ignores an empty or non-string permission report', () => {
+    expect(getProtectionReadiness({ enabled: true, setup: blocklist, nativeStatus: { ...CONNECTED, permissionMissing: '' } }).state).toBe('ready')
+    expect(getProtectionReadiness({ enabled: true, setup: blocklist, nativeStatus: { ...CONNECTED, permissionMissing: {} } }).state).toBe('ready')
   })
 })
 
@@ -61,5 +90,19 @@ describe('protection rule counts', () => {
     expect(isWebsiteOnlyEntry('Twitter/X')).toBe(false)
     expect(isWebsiteOnlyEntry('Things 3.1')).toBe(false)
     expect(isWebsiteOnlyEntry('')).toBe(false)
+  })
+
+  it('keeps dotted app display names as apps unless they are written as a URL or bare hostname', () => {
+    expect(isWebsiteOnlyEntry('Draw.io')).toBe(false)
+    expect(isWebsiteOnlyEntry('Notion.app')).toBe(false)
+    expect(isWebsiteOnlyEntry('REDDIT.COM')).toBe(false)
+    expect(isWebsiteOnlyEntry('draw.io')).toBe(true)
+    expect(isWebsiteOnlyEntry('www.Reddit.com')).toBe(true)
+    expect(isWebsiteOnlyEntry('Reddit.com/r/all')).toBe(true)
+    expect(isWebsiteOnlyEntry('example.com:8080')).toBe(true)
+    expect(isWebsiteOnlyEntry('localhost:3000')).toBe(false)
+
+    const setup = normalizeProtectionSetup({ distractionApps: ['Draw.io', 'Notion.app', 'reddit.com'] })
+    expect(protectionRuleCounts(setup)).toMatchObject({ distractionCount: 3, appCount: 2 })
   })
 })

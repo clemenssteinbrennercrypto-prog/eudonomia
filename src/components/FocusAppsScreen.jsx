@@ -24,7 +24,7 @@ import {
   createProtectionSetup,
   firstProtectionSetupWithNameIssue,
   normalizeProtectionSetup,
-  normalizeProtectionState,
+  protectionDraftKey,
   protectionSetupNameIssue,
   removeProtectionSetup,
 } from '../lib/protectionSetups'
@@ -996,8 +996,9 @@ export default function FocusAppsScreen({
   // saves one setup's rules into another. Both sides are compared in their
   // normalized (saved) shape: raw edits clear derived domains, so a raw
   // comparison would stay dirty after adding and removing the same app.
+  // Names are compared as typed, so clearing a name is always a change.
   const hasUnsavedChanges = useMemo(
-    () => JSON.stringify(normalizeProtectionState(savedProtectionState)) !== JSON.stringify(normalizeProtectionState(protectionState)),
+    () => protectionDraftKey(savedProtectionState) !== protectionDraftKey(protectionState),
     [savedProtectionState, protectionState],
   )
 
@@ -1203,6 +1204,7 @@ export default function FocusAppsScreen({
                 empty: 'Protection not configured',
                 checking: 'Checking the Companion',
                 disconnected: 'Companion not connected',
+                permission: 'Automation permission required',
                 helper: 'Website helper required',
                 ready: 'Ready for focus',
               }[readiness.state]}</span>
@@ -1216,6 +1218,7 @@ export default function FocusAppsScreen({
                     empty: 'Add at least one distraction below or choose Strict protection.',
                     checking: 'Rules are set. Verifying that the Companion can enforce them.',
                     disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
+                    permission: `Enable Eudaimonai Companion Automation access for ${readiness.permissionMissing} in System Settings so apps can be hidden.`,
                     helper: 'Install the website blocking helper under Advanced so websites can be blocked.',
                   }[readiness.state]}
               </p>

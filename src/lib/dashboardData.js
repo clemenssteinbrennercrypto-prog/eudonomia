@@ -92,6 +92,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     empty: { state: 'empty', label: 'Not configured', detail: 'Choose apps and websites' },
     checking: { state: 'checking', label: 'Checking', detail: 'Verifying native protection' },
     disconnected: { state: 'disconnected', label: 'Not connected', detail: 'Native protection is unavailable' },
+    permission: { state: 'permission', label: 'Permission required', detail: `Allow Automation access for ${readiness.permissionMissing}` },
     helper: { state: 'helper', label: 'Setup required', detail: 'Install the website blocking helper' },
     ready: {
       state: 'ready',

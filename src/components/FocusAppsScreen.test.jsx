@@ -140,6 +140,23 @@ describe('FocusAppsScreen setup library', () => {
     expect(localStorage.getItem(PROTECTION_SETUPS_KEY)).toBeNull()
   })
 
+  it('keeps clearing a generated name an unsaved change', async () => {
+    const saved = normalizeProtectionState({
+      activeSetupId: 'default',
+      setups: [{ id: 'default', name: 'Deep Work', distractionApps: ['YouTube'] }, { id: 'new', name: 'Focus setup 1' }],
+    })
+    const { onBack } = await renderScreen({ protectionState: saved })
+
+    fireEvent.click(setupButton('Focus setup 1'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Setup name' }), { target: { value: '' } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Give this setup a name.')
+    expect(saveStatus()).toHaveTextContent('Name every setup before saving')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(onBack).not.toHaveBeenCalled()
+    expect(screen.getByText('Unsaved changes', { selector: '.protection-leave-actions span' })).toBeInTheDocument()
+  })
+
   it('blocks saving a duplicate name and points back to the offending setup', async () => {
     const { onBack } = await renderScreen()
 
@@ -173,6 +190,17 @@ describe('FocusAppsScreen readiness', () => {
     await renderScreen()
 
     expect(screen.getByText('Companion not connected')).toBeInTheDocument()
+    expect(screen.queryByText('Ready for focus')).toBeNull()
+  })
+
+  it('asks for Automation access before claiming app protection', async () => {
+    companion.debug = { helperInstalled: true, permissionMissing: 'System Events' }
+    await renderScreen()
+
+    fireEvent.click(setupButton('Writing'))
+    const banner = within(document.querySelector('.protection-readiness'))
+    expect(banner.getByText('Automation permission required')).toBeInTheDocument()
+    expect(banner.getByText(/Automation access for System Events in System Settings/)).toBeInTheDocument()
     expect(screen.queryByText('Ready for focus')).toBeNull()
   })
 
