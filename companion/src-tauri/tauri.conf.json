@@ -37,7 +37,9 @@
   "bundle": {
     "active": true,
     "resources": {
-      "resources/libmediapipe.dylib": "libmediapipe.dylib"
+      "resources/libmediapipe.dylib": "libmediapipe.dylib",
+      "resources/infoplist/de.lproj/InfoPlist.strings": "de.lproj/InfoPlist.strings",
+      "resources/infoplist/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings"
     },
     "targets": [
       "dmg",

@@ -2,9 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Existing installs keep the historical Eudonomia.app directory so Dock pins
+         and updater paths remain valid. Finder only uses a localized display name
+         when this base value matches that directory name. -->
+    <key>CFBundleDisplayName</key>
+    <string>Eudonomia</string>
+    <key>LSHasLocalizedDisplayName</key>
+    <true/>
     <!-- Webcam access for the focus/eye-tracking session (MediaPipe FaceMesh).
          Video is processed locally and never recorded or transmitted. -->
     <key>NSCameraUsageDescription</key>
-    <string>Eudonomia uses your camera locally to measure how focused you are during a session. No video is recorded, stored, or sent anywhere — everything stays on your Mac.</string>
+    <string>Eudaimonai uses your camera locally to measure how focused you are during a session. No video is recorded, stored, or sent anywhere — everything stays on your Mac.</string>
 </dict>
 </plist>
