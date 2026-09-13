@@ -46,6 +46,7 @@ export function normalizeWorkspaceItem(object, index = 0) {
     role: object.role || defaultRoleForType(legacy.type),
     scene: { ...scene, scale: size.sizePreset ? 1 : scene.scale },
     sizePreset: size.sizePreset,
+    physicalSize: size.physicalSize || null,
     dimensions: size.dimensions,
     attentionBounds: size.attentionBounds,
     calibrationTarget: object.calibrationTarget !== false,

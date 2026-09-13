@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultWorkspaceSize, normalizeWorkspaceSize, sizePresetsForType, workspaceSizeFromPreset } from './workspaceSizePresets'
+import { customScreenConfig, defaultWorkspaceSize, normalizeWorkspaceSize, sizePresetsForType, workspaceSizeFromPhysicalScreen, workspaceSizeFromPreset } from './workspaceSizePresets'
 
 describe('workspace size presets', () => {
   it('gives new devices a stable type-specific default', () => {
@@ -43,5 +43,32 @@ describe('workspace size presets', () => {
   it('offers no freeform preset for fixed-size devices', () => {
     expect(sizePresetsForType('mouse').map(item => item.id)).toEqual(['mouse_standard'])
     expect(sizePresetsForType('camera').map(item => item.id)).toEqual(['camera_standard'])
+  })
+
+  it('derives accurate custom monitor proportions from inches and aspect ratio', () => {
+    const custom = workspaceSizeFromPhysicalScreen('monitor', 34, '21:9')
+    expect(custom).toMatchObject({
+      sizePreset: null,
+      physicalSize: { unit: 'in', diagonalInches: 34, aspectRatio: '21:9' },
+    })
+    expect(custom.dimensions.width).toBeCloseTo(1.33, 2)
+    expect(custom.dimensions.height).toBeCloseTo(1.01, 2)
+    expect(custom.attentionBounds).toEqual({ width: custom.dimensions.width, height: custom.dimensions.height })
+  })
+
+  it('limits custom physical input to meaningful device-specific ranges', () => {
+    expect(customScreenConfig('monitor').ratios).toContain('32:9')
+    expect(workspaceSizeFromPhysicalScreen('laptop', 99, '16:10').physicalSize.diagonalInches).toBe(20)
+    expect(workspaceSizeFromPhysicalScreen('mouse', 14, '16:9')).toBeNull()
+  })
+
+  it('rebuilds custom dimensions from stored physical measurements', () => {
+    const normalized = normalizeWorkspaceSize({
+      type: 'monitor',
+      physicalSize: { unit: 'in', diagonalInches: 30, aspectRatio: '16:10' },
+      dimensions: { width: 2.8, height: 0.4, depth: 2.8 },
+    })
+    expect(normalized.physicalSize).toEqual({ unit: 'in', diagonalInches: 30, aspectRatio: '16:10' })
+    expect(normalized.dimensions).not.toEqual({ width: 2.8, height: 0.4, depth: 2.8 })
   })
 })

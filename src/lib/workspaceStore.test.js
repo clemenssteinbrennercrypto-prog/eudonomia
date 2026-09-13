@@ -36,6 +36,18 @@ describe('workspace storage', () => {
     expect(getActiveWorkspace(state).objects[0]).toMatchObject({ sizePreset: null, attentionBounds: { width: 2.4, height: 0.7 } })
   })
 
+  it('persists custom screen measurements and derives geometry from them', () => {
+    const state = migrateLegacyDevices([
+      { ...devices[0], sizePreset: null, physicalSize: { unit: 'in', diagonalInches: 30.5, aspectRatio: '16:10' } },
+      devices[1],
+    ])
+    const monitor = getActiveWorkspace(state).objects[0]
+    expect(monitor.physicalSize).toEqual({ unit: 'in', diagonalInches: 30.5, aspectRatio: '16:10' })
+    expect(monitor.sizePreset).toBeNull()
+    expect(monitor.dimensions.width).toBeGreaterThan(1)
+    expect(monitor.attentionBounds.height).toBe(monitor.dimensions.height)
+  })
+
   it('repairs an unknown active id to the first valid workspace', () => {
     const migrated = migrateLegacyDevices(devices)
     const state = normalizeWorkspaceState({ ...migrated, activeWorkspaceId: 'missing' })

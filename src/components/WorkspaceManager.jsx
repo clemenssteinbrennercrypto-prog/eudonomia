@@ -1,9 +1,16 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import WorkspaceSetup from './WorkspaceSetup'
 import WorkspaceCalibration from './WorkspaceCalibration'
 import WorkspaceAttentionMap from './WorkspaceAttentionMap'
 import { WORKSPACE_OBJECT_TYPES, WORKSPACE_ROLE_LABELS, WORKSPACE_ROLES, defaultRoleForType } from '../lib/workspaceObjects'
-import { defaultWorkspaceSize, sizePresetsForType, workspaceSizeFromPreset } from '../lib/workspaceSizePresets'
+import {
+  customScreenConfig,
+  defaultWorkspaceSize,
+  sizePresetsForType,
+  suggestedCustomScreenSize,
+  workspaceSizeFromPhysicalScreen,
+  workspaceSizeFromPreset,
+} from '../lib/workspaceSizePresets'
 import {
   createWorkspace,
   deleteWorkspace,
@@ -63,6 +70,22 @@ function WorkspaceMiniature({ workspace }) {
   />
 }
 
+function CustomScreenSizeEditor({ config, physicalSize, onChange }) {
+  const [diagonal, setDiagonal] = useState(String(physicalSize.diagonalInches))
+
+  useEffect(() => setDiagonal(String(physicalSize.diagonalInches)), [physicalSize.diagonalInches])
+
+  const commitDiagonal = () => {
+    onChange(diagonal, physicalSize.aspectRatio)
+  }
+
+  return <div className="workspace-custom-screen-size">
+    <label>Diagonal (in)<div className="workspace-measure-input"><input aria-label="Screen diagonal in inches" type="number" min={config.min} max={config.max} step="0.1" value={diagonal} onChange={event => setDiagonal(event.target.value)} onBlur={commitDiagonal} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}/><span>in</span></div></label>
+    <label>Aspect ratio<select aria-label="Screen aspect ratio" value={physicalSize.aspectRatio} onChange={event => onChange(physicalSize.diagonalInches, event.target.value)}>{config.ratios.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}</select></label>
+    <small>{Math.round(physicalSize.diagonalInches * 2.54 * 10) / 10} cm diagonal · proportions and gaze area update together. Calibration remains the source of truth.</small>
+  </div>
+}
+
 function Editor({ initial, onSave, onCancel }) {
   const [draft, setDraft] = useState(() => structuredClone(initial))
   const [view, setView] = useState('iso')
@@ -75,6 +98,7 @@ function Editor({ initial, onSave, onCancel }) {
   const calibrated = Object.keys(draft.calibration?.targets || {}).length
   const selectedType = WORKSPACE_OBJECT_TYPES.find(type => type.id === selected?.type)
   const selectedSizePresets = selected ? sizePresetsForType(selected.type) : []
+  const selectedCustomConfig = selected ? customScreenConfig(selected.type) : null
 
   const addObject = type => {
     if (type === 'camera') {
@@ -95,7 +119,21 @@ function Editor({ initial, onSave, onCancel }) {
     return invalidateObjectCalibration(next, selectedId, selected?.type === 'camera' || selected?.role === 'primary_screen')
   })
   const updateSizePreset = presetId => {
+    if (presetId === 'custom' && selectedCustomConfig) {
+      const physical = suggestedCustomScreenSize(selected)
+      return updatePhysicalScreenSize(physical.diagonalInches, physical.aspectRatio)
+    }
     const size = workspaceSizeFromPreset(selected?.type, presetId)
+    if (!size) return
+    setDraft(current => ({
+      ...current,
+      objects: current.objects.map(object => object.id === selectedId
+        ? { ...object, ...size, scene: { ...object.scene, scale: 1 } }
+        : object),
+    }))
+  }
+  const updatePhysicalScreenSize = (diagonalInches, aspectRatio) => {
+    const size = workspaceSizeFromPhysicalScreen(selected?.type, diagonalInches, aspectRatio)
     if (!size) return
     setDraft(current => ({
       ...current,
@@ -156,10 +194,15 @@ function Editor({ initial, onSave, onCancel }) {
         <div className="workspace-quality"><strong>{calibrated}/{draft.objects.length} calibrated</strong><span>{hasPrimary ? 'Primary screen set' : 'Primary screen missing'} · {hasCamera ? 'Camera set' : 'Camera missing'}</span>{error && <em>{error}</em>}<button disabled={!hasPrimary || !hasCamera} onClick={() => setCalibrating(true)}>Calibrate every object</button></div>
       </section>
       <aside className="workspace-properties"><h3>Properties</h3>{selected ? <>
-        <div className="workspace-object-kind"><span>{deviceGlyph(selected.type)}</span><div><strong>{selectedType?.label || selected.type}</strong><small>{selected.sizePreset ? 'Standard proportions' : 'Existing custom proportions'}</small></div></div>
+        <div className="workspace-object-kind"><span>{deviceGlyph(selected.type)}</span><div><strong>{selectedType?.label || selected.type}</strong><small>{selected.sizePreset ? 'Standard proportions' : selected.physicalSize ? 'Custom physical size' : 'Existing custom proportions'}</small></div></div>
         <label>Role<select value={selected.role} onChange={event => updateRole(event.target.value)}>{WORKSPACE_ROLES.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label>
         <div className="workspace-property-section">Size</div>
-        {selectedSizePresets.length > 1 ? <label>Device size<select aria-label="Device size" value={selected.sizePreset || 'custom'} onChange={event => updateSizePreset(event.target.value)}>{!selected.sizePreset && <option value="custom" disabled>Custom (existing)</option>}{selectedSizePresets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>Uses fixed proportions and sets the calibrated gaze area.</small></label> : <div className="workspace-fixed-size"><span>Device size</span><strong>{selected.sizePreset ? selectedSizePresets[0]?.label || 'Standard' : 'Custom (existing)'}</strong>{!selected.sizePreset && selectedSizePresets[0] && <button type="button" onClick={() => updateSizePreset(selectedSizePresets[0].id)}>Use standard</button>}</div>}
+        {selectedSizePresets.length > 1 ? <>
+          <label>Device size<select aria-label="Device size" value={selected.sizePreset || 'custom'} onChange={event => updateSizePreset(event.target.value)}>{selectedCustomConfig && <option value="custom">Custom size</option>}{!selected.sizePreset && !selectedCustomConfig && <option value="custom" disabled>Custom (existing)</option>}{selectedSizePresets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>Preset diagonals show inches and approximate centimetres.</small></label>
+          {selectedCustomConfig && !selected.sizePreset && (selected.physicalSize
+            ? <CustomScreenSizeEditor config={selectedCustomConfig} physicalSize={selected.physicalSize} onChange={updatePhysicalScreenSize}/>
+            : <div className="workspace-custom-screen-size workspace-unmeasured-size"><small>This older custom shape has no physical measurement yet.</small><button type="button" onClick={() => { const physical = suggestedCustomScreenSize(selected); updatePhysicalScreenSize(physical.diagonalInches, physical.aspectRatio) }}>Enter measured size</button></div>)}
+        </> : <div className="workspace-fixed-size"><span>Device size</span><strong>{selected.sizePreset ? selectedSizePresets[0]?.label || 'Standard' : 'Custom (existing)'}</strong>{!selected.sizePreset && selectedSizePresets[0] && <button type="button" onClick={() => updateSizePreset(selectedSizePresets[0].id)}>Use standard</button>}</div>}
         <div className="workspace-property-section">Placement</div>
         <label>Left / right<input type="range" min="-1" max="1" step="0.05" value={selected.scene.x} onChange={event => updateScene({ x: Number(event.target.value) })}/></label>
         <label>Far / near<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
