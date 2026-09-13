@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import WorkspaceSetup from './WorkspaceSetup'
 import WorkspaceCalibration from './WorkspaceCalibration'
+import WorkspaceAttentionMap from './WorkspaceAttentionMap'
 import { WORKSPACE_OBJECT_TYPES, WORKSPACE_ROLE_LABELS, WORKSPACE_ROLES, defaultRoleForType } from '../lib/workspaceObjects'
 import {
   createWorkspace,
@@ -51,95 +52,12 @@ function deviceGlyph(type) {
   return ({ monitor: '▭', laptop: '▱', camera: '◉', phone: '▯', keyboard: '⌨', mouse: '●', ipad: '▯', paper: '▤', notebook: '▥', book: '▰' })[type] || '◆'
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value))
-}
-
-function miniaturePoint(object) {
-  const col = clamp(Number.isFinite(Number(object.col)) ? Number(object.col) : 0.5, 0.12, 0.88)
-  const row = clamp(Number.isFinite(Number(object.row)) ? Number(object.row) : 0.5, 0.08, 0.9)
-  return {
-    col,
-    row,
-    x: 60 + (col - row) * 52,
-    y: 18 + col * 24 + row * 25,
-    scale: clamp(Number(object.scene?.scale ?? object.scale ?? 1), 0.75, 1.2) * 0.8,
-  }
-}
-
-function MiniatureDevice({ object, point }) {
-  const transform = `translate(${point.x} ${point.y}) scale(${point.scale})`
-  const shared = { transform, 'data-device-type': object.type, 'data-layout-col': point.col, 'data-layout-row': point.row }
-
-  if (object.type === 'monitor') return <g {...shared}>
-    <ellipse cx="0" cy="4" rx="10" ry="3" fill="#02040d" opacity=".45" />
-    <path d="M0-1v7M-5 7h10" fill="none" stroke="#7389dc" strokeWidth="2" strokeLinecap="round" />
-    <path d="M-11-15 10-12V1L-11-2Z" fill="#080d21" stroke="#9bb0ff" strokeWidth="1.7" strokeLinejoin="round" />
-    <path d="m-8-11 15 2v6L-8-5Z" fill="#2c46ff" opacity=".42" />
-  </g>
-
-  if (object.type === 'laptop') return <g {...shared}>
-    <ellipse cx="0" cy="4" rx="12" ry="3" fill="#02040d" opacity=".42" />
-    <path d="M-9-12 8-10V0L-9-2Z" fill="#090e24" stroke="#9bb0ff" strokeWidth="1.5" strokeLinejoin="round" />
-    <path d="m-7-9 13 1.5v5L-7-4Z" fill="#2c46ff" opacity=".4" />
-    <path d="M-9-2 8 0 13 5-5 3Z" fill="#34457f" stroke="#8097ec" strokeWidth="1.2" strokeLinejoin="round" />
-  </g>
-
-  if (object.type === 'camera') return <g {...shared}>
-    <ellipse cx="0" cy="2" rx="6" ry="2.5" fill="#02040d" opacity=".42" />
-    <path d="M-6-5 4-4 6 1-4 2Z" fill="#34457f" stroke="#9bb0ff" strokeWidth="1.3" strokeLinejoin="round" />
-    <circle cx="0" cy="-1.5" r="2.3" fill="#070b1a" stroke="#b5c1ff" strokeWidth="1" />
-  </g>
-
-  if (object.type === 'keyboard') return <g {...shared}>
-    <ellipse cx="0" cy="3" rx="11" ry="3" fill="#02040d" opacity=".35" />
-    <path d="M-12-3 7-1 12 4-7 2Z" fill="#34457f" stroke="#8196e8" strokeWidth="1.2" strokeLinejoin="round" />
-    <path d="m-8-1 14 1.5M-4 1l14 1.5" fill="none" stroke="#aebaff" strokeWidth=".7" opacity=".6" />
-  </g>
-
-  if (object.type === 'mouse') return <g {...shared}>
-    <ellipse cx="0" cy="1" rx="5" ry="3.5" fill="#34457f" stroke="#9bb0ff" strokeWidth="1.2" transform="rotate(20)" />
-    <path d="M0-2v3" stroke="#b5c1ff" strokeWidth=".8" strokeLinecap="round" />
-  </g>
-
-  if (object.type === 'phone') return <g {...shared}>
-    <ellipse cx="0" cy="3" rx="5" ry="2" fill="#02040d" opacity=".4" />
-    <path d="M-4-9 4-7V4L-4 2Z" fill="#080d21" stroke="#8da2f3" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="m-2-6 4 1v6l-4-1Z" fill="#2c46ff" opacity=".38" />
-  </g>
-
-  if (object.type === 'ipad') return <g {...shared}>
-    <ellipse cx="0" cy="3" rx="7" ry="2.5" fill="#02040d" opacity=".38" />
-    <path d="M-7-9 6-7V4L-7 2Z" fill="#080d21" stroke="#8da2f3" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="m-4-6 7 1v6l-7-1Z" fill="#2c46ff" opacity=".34" />
-  </g>
-
-  if (object.type === 'paper' || object.type === 'notebook' || object.type === 'book') return <g {...shared}>
-    <ellipse cx="0" cy="3" rx="8" ry="2.5" fill="#02040d" opacity=".3" />
-    <path d="M-8-4 4-2 9 4-3 2Z" fill={object.type === 'book' ? '#34457f' : '#bbc6f4'} stroke="#8196e8" strokeWidth="1.1" strokeLinejoin="round" />
-    <path d="m-4-2 7 1M-2 0l7 1" stroke={object.type === 'book' ? '#9bb0ff' : '#5368bc'} strokeWidth=".7" opacity=".75" />
-  </g>
-
-  return <g {...shared}><path d="M-6-5 3-3 7 3-2 1Z" fill="#34457f" stroke="#9bb0ff" strokeWidth="1.2" /></g>
-}
-
 function WorkspaceMiniature({ workspace }) {
-  const objects = workspace.objects
-    .map(object => ({ object, point: miniaturePoint(object) }))
-    .sort((a, b) => a.point.y - b.point.y)
-  return <svg
+  return <WorkspaceAttentionMap
+    devices={workspace.objects}
     className="workspace-card-preview"
-    role="img"
-    aria-label={`Layout for ${workspace.name} with ${workspace.objects.length} objects`}
-    viewBox="0 0 120 96"
-  >
-    <path d="M60 18 112 42 60 68 8 43Z" fill="#121b42" stroke="#3e529d" strokeWidth="1.2" strokeLinejoin="round" />
-    <path d="m8 43 52 25v7L8 50Z" fill="#0a1028" stroke="#283875" strokeWidth="1" strokeLinejoin="round" />
-    <path d="m60 68 52-26v7L60 75Z" fill="#0d1638" stroke="#283875" strokeWidth="1" strokeLinejoin="round" />
-    <path d="M20 50v28M99 49v27" stroke="#26366e" strokeWidth="3" strokeLinecap="round" />
-    <path d="M60 18 112 42 60 68 8 43Z" fill="#506dff" opacity=".12" />
-    {objects.map(({ object, point }) => <MiniatureDevice key={object.id} object={object} point={point} />)}
-  </svg>
+    ariaLabel={`Attention field for ${workspace.name} with ${workspace.objects.length} objects`}
+  />
 }
 
 function Editor({ initial, onSave, onCancel }) {
