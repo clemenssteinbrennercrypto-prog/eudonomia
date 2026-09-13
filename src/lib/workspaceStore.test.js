@@ -48,6 +48,23 @@ describe('workspace storage', () => {
     expect(monitor.attentionBounds.height).toBe(monitor.dimensions.height)
   })
 
+  it('preserves a valid camera mount and detaches it when the target is missing', () => {
+    const mounted = migrateLegacyDevices([
+      devices[0],
+      { ...devices[1], cameraMount: { targetId: 'screen', style: 'top', offsetX: -.35 } },
+    ])
+    const camera = getActiveWorkspace(mounted).objects[1]
+    expect(camera.cameraMount).toEqual({ targetId: 'screen', style: 'top', offsetX: -.35 })
+    expect(camera.col).toBeCloseTo(.158)
+    expect(camera.row).toBeCloseTo(.26)
+
+    const detached = migrateLegacyDevices([
+      devices[0],
+      { ...devices[1], cameraMount: { targetId: 'missing', style: 'integrated', offsetX: 0 } },
+    ])
+    expect(getActiveWorkspace(detached).objects[1].cameraMount).toBeNull()
+  })
+
   it('repairs an unknown active id to the first valid workspace', () => {
     const migrated = migrateLegacyDevices(devices)
     const state = normalizeWorkspaceState({ ...migrated, activeWorkspaceId: 'missing' })

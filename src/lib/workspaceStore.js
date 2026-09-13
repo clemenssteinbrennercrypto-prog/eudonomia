@@ -1,5 +1,6 @@
 import { defaultRoleForType, normalizeWorkspaceObjects } from './workspaceObjects'
 import { normalizeWorkspaceSize } from './workspaceSizePresets'
+import { cameraPositionFromMount, normalizeCameraMount, resolveCameraMount } from './workspaceCameraMount'
 
 export const WORKSPACE_STORAGE_KEY = 'eudaimonia_workspaces_v1'
 export const LEGACY_WORKSPACE_KEY = 'eudaimonia_devices'
@@ -40,7 +41,7 @@ export function normalizeWorkspaceItem(object, index = 0) {
         rotation: Math.max(-180, Math.min(180, finite(object.scene.rotation, 0))),
       }
     : sceneFromLegacy(legacy)
-  return {
+  const normalized = {
     ...legacy,
     id: String(object.id || `${legacy.type}_${index}`),
     role: object.role || defaultRoleForType(legacy.type),
@@ -51,6 +52,8 @@ export function normalizeWorkspaceItem(object, index = 0) {
     attentionBounds: size.attentionBounds,
     calibrationTarget: object.calibrationTarget !== false,
   }
+  if (legacy.type === 'camera') normalized.cameraMount = normalizeCameraMount(object.cameraMount)
+  return normalized
 }
 
 function normalizeTarget(target) {
@@ -88,9 +91,15 @@ export function normalizeCalibration(calibration, objects = []) {
 
 export function normalizeWorkspace(workspace, index = 0) {
   if (!workspace || typeof workspace !== 'object') return null
-  const objects = (Array.isArray(workspace.objects) ? workspace.objects : [])
+  const normalizedObjects = (Array.isArray(workspace.objects) ? workspace.objects : [])
     .map(normalizeWorkspaceItem)
     .filter(Boolean)
+  const objects = normalizedObjects.map(object => {
+    if (object.type !== 'camera') return object
+    const cameraMount = resolveCameraMount(object.cameraMount, normalizedObjects)
+    const position = cameraPositionFromMount(cameraMount, normalizedObjects)
+    return { ...object, ...position, cameraMount }
+  })
   if (!objects.length) return null
   const now = Date.now()
   return {

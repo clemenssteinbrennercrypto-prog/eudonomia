@@ -59,4 +59,19 @@ describe('WorkspaceManager editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enter measured size' }))
     expect(screen.getByRole('spinbutton', { name: 'Screen diagonal in inches' })).toHaveValue(27)
   })
+
+  it('attaches the camera to a display instead of requiring free 3D placement', async () => {
+    render(<WorkspaceManager state={state} onChange={() => ({ ok: true })} onContinue={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tracking camera' }))
+
+    const target = await screen.findByRole('combobox', { name: 'Camera mount target' })
+    expect(target).toHaveValue('free')
+    fireEvent.change(target, { target: { value: 'screen' } })
+
+    expect(screen.getByRole('combobox', { name: 'Camera mount style' })).toHaveValue('integrated')
+    expect(screen.getByRole('slider', { name: 'Camera horizontal mount position' })).toHaveValue('0')
+    expect(screen.queryByText('Vertical position')).toBeNull()
+    expect(screen.getByText('The lens follows this display when it moves or rotates.')).toBeTruthy()
+  })
 })

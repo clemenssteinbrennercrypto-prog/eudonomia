@@ -45,7 +45,7 @@ export const WORKSPACE_SIZE_PRESETS = Object.freeze({
   ]),
   phone: Object.freeze([preset('phone_standard', 'Standard')]),
   mouse: Object.freeze([preset('mouse_standard', 'Standard')]),
-  camera: Object.freeze([preset('camera_standard', 'Standard webcam')]),
+  camera: Object.freeze([preset('camera_standard', 'Lens')]),
 })
 
 const PRESETS_BY_ID = new Map(Object.values(WORKSPACE_SIZE_PRESETS).flat().map(item => [item.id, item]))

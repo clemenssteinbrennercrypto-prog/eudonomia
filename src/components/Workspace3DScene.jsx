@@ -54,17 +54,15 @@ function deviceModel(type) {
     display.rotation.x = -.14
     group.add(display)
   } else if (type === 'camera') {
-    const body = mesh(new THREE.CapsuleGeometry(.105, .28, 5, 18), COLORS.panel, { y: .18 })
-    body.rotation.z = Math.PI / 2
-    const lens = mesh(new THREE.CylinderGeometry(.06, .06, .035, 24), COLORS.bright, { y: .18, z: .12 })
+    const rim = mesh(new THREE.CylinderGeometry(.105, .105, .045, 32), COLORS.panel)
+    rim.rotation.x = Math.PI / 2
+    const lens = mesh(new THREE.CylinderGeometry(.065, .065, .052, 32), COLORS.bright, { z: .012 })
     lens.rotation.x = Math.PI / 2
     lens.material.emissive = new THREE.Color(COLORS.ultra)
-    lens.material.emissiveIntensity = .8
-    const statusLight = mesh(new THREE.SphereGeometry(.018, 12, 8), 0x2fe3a8, { x: .14, y: .2, z: .115, cast: false })
-    statusLight.material.emissive = new THREE.Color(0x2fe3a8)
-    statusLight.material.emissiveIntensity = .7
-    const clip = box(.18, .05, .16, COLORS.edge, { y: .035 })
-    group.add(body, lens, statusLight, clip)
+    lens.material.emissiveIntensity = .85
+    const glass = mesh(new THREE.CylinderGeometry(.028, .028, .058, 24), COLORS.ink, { z: .02 })
+    glass.rotation.x = Math.PI / 2
+    group.add(rim, lens, glass)
   } else if (type === 'phone' || type === 'ipad') {
     const w = type === 'ipad' ? .66 : .32, d = type === 'ipad' ? .86 : .62
     group.add(box(w, .055, d, COLORS.panel, { y: .04 }))
@@ -101,6 +99,26 @@ function scenePosition(object) {
     x: (object.scene?.x || 0) * 3.15,
     y: Math.max(-.15, Math.min(1.4, (object.scene?.y || 0) * .48)),
     z: ((object.scene?.z ?? .5) - .5) * 3.8,
+  }
+}
+
+function mountedCameraPose(object, objects) {
+  const mount = object.type === 'camera' ? object.cameraMount : null
+  const target = mount && objects.find(candidate => candidate.id === mount.targetId && (candidate.type === 'monitor' || candidate.type === 'laptop'))
+  if (!target) return null
+  const targetPosition = scenePosition(target)
+  const rotation = THREE.MathUtils.degToRad(-(target.scene?.rotation || 0))
+  const targetScale = target.scene?.scale ?? 1
+  const targetWidth = (target.type === 'monitor' ? 1.25 : 1.1) * (target.dimensions?.width || 1) * targetScale
+  const targetHeight = (target.dimensions?.height || 1) * targetScale
+  const localX = (mount.offsetX || 0) * targetWidth * .42
+  const localZ = mount.style === 'top' ? .14 : .075
+  return {
+    x: targetPosition.x + localX * Math.cos(rotation) + localZ * Math.sin(rotation),
+    y: targetPosition.y + 1.08 * targetHeight + (mount.style === 'top' ? .12 : 0),
+    z: targetPosition.z - localX * Math.sin(rotation) + localZ * Math.cos(rotation),
+    rotation,
+    scale: mount.style === 'top' ? .6 : .28,
   }
 }
 
@@ -200,7 +218,7 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
       const hits = raycaster.intersectObjects([...objectGroups.values()], true)
       const id = hits[0]?.object?.userData?.objectId
       callbacksRef.current.onSelect?.(id || null)
-      if (id) {
+      if (id && hits[0]?.object?.userData?.draggable !== false) {
         draggingId = id
         controls.enabled = false
         renderer.domElement.setPointerCapture?.(event.pointerId)
@@ -289,10 +307,11 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
         runtime.objectGroups.set(object.id, group)
         runtime.scene.add(group)
       }
-      const position = scenePosition(object)
+      const mountPose = mountedCameraPose(object, objects)
+      const position = mountPose || scenePosition(object)
       group.position.set(position.x, position.y, position.z)
-      group.rotation.y = THREE.MathUtils.degToRad(-(object.scene?.rotation || 0))
-      const scale = object.scene?.scale || 1
+      group.rotation.y = mountPose?.rotation ?? THREE.MathUtils.degToRad(-(object.scene?.rotation || 0))
+      const scale = mountPose?.scale ?? object.scene?.scale ?? 1
       const dimensions = object.dimensions || {}
       group.scale.set(
         scale * (dimensions.width || 1),
@@ -300,6 +319,7 @@ export default function Workspace3DScene({ objects, selectedId, view, onSelect, 
         scale * (dimensions.depth || 1),
       )
       group.traverse(child => {
+        child.userData.draggable = !mountPose
         if (!child.isMesh || !child.material?.emissive) return
         if (object.id === selectedId) {
           child.material.emissive.setHex(child.material.userData.baseEmissive || 0x172c92)

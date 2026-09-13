@@ -8,7 +8,13 @@ const red = '#c2413b'
 const desk = { x: 50, y: 34, width: 300, height: 160 }
 const user = { x: 200, y: 235 }
 
-function devicePoint(device) {
+function devicePoint(device, devices = []) {
+  const mount = device.type === 'camera' ? device.cameraMount : null
+  const target = mount && devices.find(candidate => candidate.id === mount.targetId)
+  if (target) {
+    const anchor = devicePoint(target, devices)
+    return { x: anchor.x + (mount.offsetX || 0) * 18, y: anchor.y - (mount.style === 'top' ? 20 : 12) }
+  }
   return {
     x: desk.x + 32 + (device.col ?? 0.5) * (desk.width - 64),
     y: desk.y + 26 + (device.row ?? 0.5) * (desk.height - 52),
@@ -54,10 +60,8 @@ function DeviceIcon({ type, x, y }) {
   </g>
 
   if (type === 'camera') return <g {...shared} transform={`translate(${x - 15} ${y - 8})`}>
-    <rect width="30" height="16" rx="8" fill="#141c42" stroke={navy} strokeWidth="2" />
-    <circle cx="15" cy="8" r="5" fill="#080d20" stroke="#9bb0ff" strokeWidth="2" />
-    <circle cx="24" cy="5" r="1.5" fill="#2fe3a8" />
-    <path d="M11 17h8" stroke={navy} strokeWidth="2" strokeLinecap="round" />
+    <circle cx="15" cy="8" r="5" fill="#141c42" stroke={navy} strokeWidth="2" />
+    <circle cx="15" cy="8" r="2.5" fill="#080d20" stroke="#9bb0ff" strokeWidth="1.25" />
   </g>
 
   if (type === 'phone') return <g {...shared} transform={`translate(${x - 8} ${y - 17})`}>
@@ -117,8 +121,8 @@ export default function WorkspaceAttentionMap({ devices, className, style, showL
     <path d="M80 194Q200 214 320 194" fill="none" stroke={red} strokeWidth="2" strokeDasharray="5 7" opacity=".65" />
     <path d="M116 67Q200 35 284 67" fill="none" stroke={green} strokeWidth="2" strokeDasharray="5 7" opacity=".75" />
     {workspaceDevices.map((device, index) => {
-      const base = devicePoint(device)
-      const overlaps = workspaceDevices.slice(0, index).filter(previous =>
+      const base = devicePoint(device, workspaceDevices)
+      const overlaps = device.cameraMount ? 0 : workspaceDevices.slice(0, index).filter(previous =>
         Math.abs((previous.col ?? 0.5) - (device.col ?? 0.5)) < 0.02 &&
         Math.abs((previous.row ?? 0.5) - (device.row ?? 0.5)) < 0.02
       ).length

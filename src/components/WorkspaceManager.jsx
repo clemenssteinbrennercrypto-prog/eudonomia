@@ -11,6 +11,7 @@ import {
   workspaceSizeFromPhysicalScreen,
   workspaceSizeFromPreset,
 } from '../lib/workspaceSizePresets'
+import { cameraMountTargets, defaultCameraMount } from '../lib/workspaceCameraMount'
 import {
   createWorkspace,
   deleteWorkspace,
@@ -29,19 +30,19 @@ const ROTATABLE_TYPES = new Set(['monitor', 'laptop', 'ipad', 'phone', 'keyboard
 const TEMPLATE_OBJECTS = {
   laptop: [
     { id: 'laptop_main', type: 'laptop', role: 'primary_screen', col: .5, row: .52 },
-    { id: 'camera_main', type: 'camera', role: 'neutral', col: .5, row: .1 },
+    { id: 'camera_main', type: 'camera', role: 'neutral', col: .5, row: .1, cameraMount: { targetId: 'laptop_main', style: 'integrated', offsetX: 0 } },
     { id: 'phone_main', type: 'phone', role: 'distraction_device', col: .82, row: .35 },
   ],
   desktop: [
     { id: 'monitor_main', type: 'monitor', role: 'primary_screen', col: .5, row: .28 },
-    { id: 'camera_main', type: 'camera', role: 'neutral', col: .5, row: .08 },
+    { id: 'camera_main', type: 'camera', role: 'neutral', col: .5, row: .08, cameraMount: { targetId: 'monitor_main', style: 'integrated', offsetX: 0 } },
     { id: 'keyboard_main', type: 'keyboard', role: 'input_area', col: .5, row: .68 },
     { id: 'mouse_main', type: 'mouse', role: 'input_area', col: .75, row: .68 },
   ],
   dual: [
     { id: 'monitor_main', type: 'monitor', role: 'primary_screen', col: .38, row: .28 },
     { id: 'monitor_side', type: 'monitor', role: 'secondary_screen', col: .72, row: .3 },
-    { id: 'camera_main', type: 'camera', role: 'neutral', col: .38, row: .08 },
+    { id: 'camera_main', type: 'camera', role: 'neutral', col: .38, row: .08, cameraMount: { targetId: 'monitor_main', style: 'integrated', offsetX: 0 } },
     { id: 'keyboard_main', type: 'keyboard', role: 'input_area', col: .48, row: .68 },
   ],
 }
@@ -99,6 +100,7 @@ function Editor({ initial, onSave, onCancel }) {
   const selectedType = WORKSPACE_OBJECT_TYPES.find(type => type.id === selected?.type)
   const selectedSizePresets = selected ? sizePresetsForType(selected.type) : []
   const selectedCustomConfig = selected ? customScreenConfig(selected.type) : null
+  const cameraTargets = cameraMountTargets(draft.objects)
 
   const addObject = type => {
     if (type === 'camera') {
@@ -107,6 +109,7 @@ function Editor({ initial, onSave, onCancel }) {
     }
     const id = `${type}_${Date.now()}`
     const legacy = { id, type, role: defaultRoleForType(type), col: .5, row: .5, scale: 1, ...defaultWorkspaceSize(type) }
+    if (type === 'camera') legacy.cameraMount = defaultCameraMount(draft.objects)
     setDraft(current => ({ ...current, objects: [...current.objects, { ...legacy, scene: sceneFromLegacy(legacy), calibrationTarget: true }] }))
     setSelectedId(id)
   }
@@ -156,8 +159,15 @@ function Editor({ initial, onSave, onCancel }) {
     }
     setDraft(next)
   }
+  const updateCameraMount = patch => setDraft(current => {
+    const object = current.objects.find(item => item.id === selectedId)
+    if (!object || object.type !== 'camera') return current
+    const cameraMount = patch === null ? null : { ...(object.cameraMount || defaultCameraMount(current.objects)), ...patch }
+    const next = { ...current, objects: current.objects.map(item => item.id === selectedId ? { ...item, cameraMount } : item) }
+    return invalidateObjectCalibration(next, selectedId, true)
+  })
   const removeSelected = () => {
-    setDraft(current => ({ ...current, objects: current.objects.filter(object => object.id !== selectedId) }))
+    setDraft(current => ({ ...current, objects: current.objects.filter(object => object.id !== selectedId).map(object => object.type === 'camera' && object.cameraMount?.targetId === selectedId ? { ...object, cameraMount: null } : object) }))
     setSelectedId(null)
   }
   const moveObject = (id, position) => setDraft(current => {
@@ -185,7 +195,7 @@ function Editor({ initial, onSave, onCancel }) {
       <div className="workspace-actions"><button className="secondary" onClick={onCancel}>Cancel</button><button onClick={() => { if (!hasPrimary || !hasCamera) return setError('Add one primary screen and a camera before saving.'); onSave(draft) }}>Save workspace</button></div>
     </header>
     <div className="workspace-editor-body">
-      <aside className="workspace-palette"><h3>Objects</h3>{PALETTE_OBJECT_TYPES.map(type => <button key={type.id} className={type.id === 'camera' ? 'is-camera' : ''} onClick={() => addObject(type.id)}><span>{deviceGlyph(type.id)}</span>{type.id === 'camera' ? 'Tracking camera' : type.label}</button>)}</aside>
+      <aside className="workspace-palette"><h3>Objects</h3>{PALETTE_OBJECT_TYPES.map(type => <button key={type.id} className={type.id === 'camera' ? 'is-camera' : ''} onClick={() => addObject(type.id)}><span aria-hidden="true">{deviceGlyph(type.id)}</span>{type.id === 'camera' ? 'Tracking camera' : type.label}</button>)}</aside>
       <section className="workspace-stage">
         <div className="workspace-view-tabs">{['iso', 'top', 'front'].map(item => <button key={item} className={view === item ? 'is-active' : ''} onClick={() => setView(item)}>{item === 'iso' ? 'Isometric' : item === 'top' ? 'Top' : 'Front'}</button>)}</div>
         <Suspense fallback={<div className="workspace-3d-loading">Preparing 3D workspace…</div>}>
@@ -194,7 +204,7 @@ function Editor({ initial, onSave, onCancel }) {
         <div className="workspace-quality"><strong>{calibrated}/{draft.objects.length} calibrated</strong><span>{hasPrimary ? 'Primary screen set' : 'Primary screen missing'} · {hasCamera ? 'Camera set' : 'Camera missing'}</span>{error && <em>{error}</em>}<button disabled={!hasPrimary || !hasCamera} onClick={() => setCalibrating(true)}>Calibrate every object</button></div>
       </section>
       <aside className="workspace-properties"><h3>Properties</h3>{selected ? <>
-        <div className="workspace-object-kind"><span>{deviceGlyph(selected.type)}</span><div><strong>{selectedType?.label || selected.type}</strong><small>{selected.sizePreset ? 'Standard proportions' : selected.physicalSize ? 'Custom physical size' : 'Existing custom proportions'}</small></div></div>
+        <div className="workspace-object-kind"><span aria-hidden="true">{deviceGlyph(selected.type)}</span><div><strong>{selectedType?.label || selected.type}</strong><small>{selected.sizePreset ? 'Standard proportions' : selected.physicalSize ? 'Custom physical size' : 'Existing custom proportions'}</small></div></div>
         <label>Role<select value={selected.role} onChange={event => updateRole(event.target.value)}>{WORKSPACE_ROLES.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}</select></label>
         <div className="workspace-property-section">Size</div>
         {selectedSizePresets.length > 1 ? <>
@@ -203,11 +213,21 @@ function Editor({ initial, onSave, onCancel }) {
             ? <CustomScreenSizeEditor config={selectedCustomConfig} physicalSize={selected.physicalSize} onChange={updatePhysicalScreenSize}/>
             : <div className="workspace-custom-screen-size workspace-unmeasured-size"><small>This older custom shape has no physical measurement yet.</small><button type="button" onClick={() => { const physical = suggestedCustomScreenSize(selected); updatePhysicalScreenSize(physical.diagonalInches, physical.aspectRatio) }}>Enter measured size</button></div>)}
         </> : <div className="workspace-fixed-size"><span>Device size</span><strong>{selected.sizePreset ? selectedSizePresets[0]?.label || 'Standard' : 'Custom (existing)'}</strong>{!selected.sizePreset && selectedSizePresets[0] && <button type="button" onClick={() => updateSizePreset(selectedSizePresets[0].id)}>Use standard</button>}</div>}
-        <div className="workspace-property-section">Placement</div>
-        <label>Left / right<input type="range" min="-1" max="1" step="0.05" value={selected.scene.x} onChange={event => updateScene({ x: Number(event.target.value) })}/></label>
-        <label>Far / near<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
-        {HEIGHT_ADJUSTABLE_TYPES.has(selected.type) && <label>Vertical position<input type="range" min="-1" max="1" step="0.05" value={selected.scene.y} onChange={event => updateScene({ y: Number(event.target.value) })}/></label>}
-        {ROTATABLE_TYPES.has(selected.type) && <label>Rotation<input type="range" min="-45" max="45" step="5" value={selected.scene.rotation} onChange={event => updateScene({ rotation: Number(event.target.value) })}/></label>}
+        {selected.type === 'camera' && <>
+          <div className="workspace-property-section">Camera mount</div>
+          <label>Attached to<select aria-label="Camera mount target" value={selected.cameraMount?.targetId || 'free'} onChange={event => updateCameraMount(event.target.value === 'free' ? null : { targetId: event.target.value, style: 'integrated', offsetX: 0 })}><option value="free">Free placement</option>{cameraTargets.map((target, index) => <option key={target.id} value={target.id}>{target.role === 'primary_screen' ? 'Primary' : 'Secondary'} {target.type === 'laptop' ? 'laptop' : 'monitor'}{cameraTargets.length > 1 ? ` ${index + 1}` : ''}</option>)}</select></label>
+          {selected.cameraMount && <>
+            <label>Mount style<select aria-label="Camera mount style" value={selected.cameraMount.style} onChange={event => updateCameraMount({ style: event.target.value })}><option value="integrated">Built into bezel</option><option value="top">On top of display</option></select></label>
+            <label>Along the bezel<input aria-label="Camera horizontal mount position" type="range" min="-1" max="1" step="0.05" value={selected.cameraMount.offsetX} onChange={event => updateCameraMount({ offsetX: Number(event.target.value) })}/><small>The lens follows this display when it moves or rotates.</small></label>
+          </>}
+        </>}
+        {(!selected.cameraMount || selected.type !== 'camera') && <>
+          <div className="workspace-property-section">Placement</div>
+          <label>Left / right<input type="range" min="-1" max="1" step="0.05" value={selected.scene.x} onChange={event => updateScene({ x: Number(event.target.value) })}/></label>
+          <label>Far / near<input type="range" min="0" max="1" step="0.05" value={selected.scene.z} onChange={event => updateScene({ z: Number(event.target.value) })}/></label>
+          {HEIGHT_ADJUSTABLE_TYPES.has(selected.type) && <label>Vertical position<input type="range" min="-1" max="1" step="0.05" value={selected.scene.y} onChange={event => updateScene({ y: Number(event.target.value) })}/></label>}
+          {ROTATABLE_TYPES.has(selected.type) && <label>Rotation<input type="range" min="-45" max="45" step="5" value={selected.scene.rotation} onChange={event => updateScene({ rotation: Number(event.target.value) })}/></label>}
+        </>}
         <small>{WORKSPACE_ROLE_LABELS[selected.role]}</small><button className="danger" onClick={removeSelected}>Remove object</button>
       </> : <p>Select an object to place it precisely.</p>}</aside>
     </div>
@@ -222,7 +242,12 @@ export default function WorkspaceManager({ state, onChange, onContinue }) {
   const active = getActiveWorkspace(state)
   const commit = next => { const result = onChange(next); if (result?.ok === false) setError(result.error) }
   if (mode === 'quick') return <WorkspaceSetup devices={quickDevices} setDevices={setQuickDevices} onContinue={() => {
-    if (quickDevices.length) { const workspace = createWorkspace({ name: 'Quick workspace', objects: quickDevices.map(object => ({ ...object, scene: sceneFromLegacy(object) })) }); commit(saveWorkspaceDraft(state, workspace)) }
+    if (quickDevices.length) {
+      const objects = quickDevices.map(object => ({ ...object, scene: sceneFromLegacy(object) }))
+      const cameraMount = defaultCameraMount(objects)
+      const workspace = createWorkspace({ name: 'Quick workspace', objects: objects.map(object => object.type === 'camera' ? { ...object, cameraMount } : object) })
+      commit(saveWorkspaceDraft(state, workspace))
+    }
     setMode('library')
   }} />
   if (editing) return <Editor initial={editing} onCancel={() => { setEditing(null); setMode(state.workspaces.length ? 'library' : 'templates') }} onSave={draft => { commit(saveWorkspaceDraft(state, draft)); setEditing(null); setMode('library') }} />
