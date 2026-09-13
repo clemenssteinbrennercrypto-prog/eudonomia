@@ -16,12 +16,8 @@
 .workspace-card-grid article{border:1px solid #1c285a;background:#0a1028;border-radius:18px;padding:18px;overflow:hidden;transition:border-color .2s,transform .2s}
 .workspace-card-grid article:hover{transform:translateY(-2px);border-color:#405bc7}
 .workspace-card-grid article.is-active{border-color:#7a98ff;box-shadow:0 0 0 1px #7a98ff33,0 20px 60px #0005}
-.workspace-card-main{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:16px}
-.workspace-card-preview{position:relative;width:88px;height:88px;flex:none;overflow:hidden;border:1px solid #2b3b78;border-radius:15px;background:radial-gradient(circle at 50% 62%,#243579 0,#111944 50%,#070b1a 78%);box-shadow:inset 0 1px 0 #9bb0ff1f}
-.workspace-card-preview::before{content:"";position:absolute;z-index:0;left:12%;right:12%;top:29%;bottom:13%;border:1px solid #7088e266;border-radius:5px;background:linear-gradient(150deg,#24336d99,#11194488);transform:skewY(-5deg)}
-.workspace-card-device{position:absolute;z-index:1;display:grid;place-items:center;width:20px;height:20px;margin:-10px 0 0 -10px;color:#aebaff;font-size:16px;font-style:normal;line-height:1;text-shadow:0 0 9px #7a98ff80}
-.workspace-card-device.is-camera,.workspace-card-device.is-mouse{font-size:13px;color:#c0caff}
-.workspace-card-device.is-keyboard{font-size:14px}
+.workspace-card-main{display:grid;grid-template-columns:96px minmax(0,1fr);align-items:center;gap:16px}
+.workspace-card-preview{display:block;width:96px;height:96px;flex:none;overflow:hidden;border:1px solid #2b3b78;border-radius:15px;background:radial-gradient(circle at 50% 58%,#1c2a66 0,#0d1435 55%,#070b1a 82%);filter:drop-shadow(0 8px 16px #02040d80);box-shadow:inset 0 1px 0 #9bb0ff1f}
 .workspace-card-copy{min-width:0}.workspace-card-copy>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.workspace-card-copy strong{overflow:hidden;font-size:17px;text-overflow:ellipsis;white-space:nowrap}.workspace-card-copy em{flex:none;font-style:normal;font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#9bb0ff}.workspace-card-copy p{font-size:11px;margin:8px 0 0}
 .workspace-card-actions{display:flex;gap:6px;margin-top:16px;flex-wrap:wrap}.workspace-card-actions button{padding:7px 10px;font-size:11px;background:#151f4b;border:1px solid #27366f}.workspace-card-actions button:first-child{background:#2c46ff}
 .workspace-library>footer{padding-top:24px;border-top:1px solid #17214d;color:var(--text-muted)}.workspace-error,.workspace-quality em{color:#fca5a5!important}
