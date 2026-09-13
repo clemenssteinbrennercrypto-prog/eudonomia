@@ -1,28 +1,24 @@
 import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
-import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod } from './focusMetric'
+import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod, getFocusPeriodWindow } from './focusMetric'
 import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
 import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
 
-function periodWindow(range, now, offset) {
-  const safeOffset = Math.min(0, Number.isFinite(offset) ? Math.trunc(offset) : 0)
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  if (range === 'week') start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
-  if (range === 'month') start.setDate(1)
-  if (range === 'month') start.setMonth(start.getMonth() + safeOffset)
-  else start.setDate(start.getDate() + safeOffset * (range === 'week' ? 7 : 1))
-
-  const endExclusive = new Date(start)
-  if (range === 'month') endExclusive.setMonth(endExclusive.getMonth() + 1)
-  else endExclusive.setDate(endExclusive.getDate() + (range === 'week' ? 7 : 1))
-  return { start: start.getTime(), endExclusive: endExclusive.getTime() }
-}
-
-export function buildAttentionField(sessions, { range = 'day', offset = 0, now = Date.now(), bins = 96 } = {}) {
+export function buildAttentionField(sessions, { range = 'day', offset = 0, periodStart = null, now = Date.now(), bins = 96 } = {}) {
   const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'day'
-  const { start, endExclusive } = periodWindow(safeRange, now, offset)
+  const safeNow = new Date(now)
+  const windowNow = Number.isNaN(safeNow.getTime()) ? new Date() : safeNow
+  const nowMs = windowNow.getTime()
+  const requestedStart = new Date(periodStart)
+  const hasExplicitStart = periodStart != null && !Number.isNaN(requestedStart.getTime())
+  const periodWindow = getFocusPeriodWindow(
+    safeRange,
+    hasExplicitStart ? 0 : offset,
+    hasExplicitStart ? requestedStart : windowNow
+  )
+  const start = periodWindow.start.getTime()
+  const endExclusive = periodWindow.endExclusive.getTime()
   const width = Math.max(1, endExclusive - start)
-  const measurementEnd = Math.min(now, endExclusive)
+  const measurementEnd = Math.min(nowMs, endExclusive)
   const safeBins = Math.max(12, Math.min(160, Math.trunc(bins) || 96))
   const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false, paused: false }))
   const scoreableSessions = (Array.isArray(sessions) ? sessions : []).filter(session =>
@@ -38,7 +34,7 @@ export function buildAttentionField(sessions, { range = 'day', offset = 0, now =
     if (!Number.isFinite(sessionStartMs)) continue
     const sessionEndMs = sessionEndedAt(session)
     if (!Number.isFinite(sessionEndMs) || sessionEndMs < sessionStartMs) continue
-    if (sessionEndMs < start || sessionStartMs >= measurementEnd) continue
+    if (sessionEndMs <= start || sessionStartMs >= measurementEnd) continue
 
     const firstBin = Math.max(0, Math.floor(((sessionStartMs - start) / width) * safeBins))
     const lastBin = Math.min(safeBins - 1, Math.floor(((sessionEndMs - start) / width) * safeBins))
@@ -63,7 +59,7 @@ export function buildAttentionField(sessions, { range = 'day', offset = 0, now =
 
   return buckets.map((bucket, index) => {
     const bucketStart = start + (index / safeBins) * width
-    if (bucketStart >= now) return { index, timestamp: bucketStart, state: 'future', score: null }
+    if (bucketStart >= nowMs) return { index, timestamp: bucketStart, state: 'future', score: null }
     if (bucket.scores.length === 0) {
       return { index, timestamp: bucketStart, state: bucket.paused ? 'paused' : bucket.active ? 'no-signal' : 'inactive', score: null }
     }
@@ -80,10 +76,11 @@ function outcomeLabel(session) {
   return 'Unset'
 }
 
-export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, range = 'day', offset = 0, now = Date.now() }) {
+export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, range = 'day', offset = 0, periodStart = null, now = Date.now() }) {
   const period = buildFocusPeriod(ledger, {
     range: ['day', 'week', 'month'].includes(range) ? range : 'day',
     offset,
+    periodStart,
     now,
     sessions,
   })
@@ -119,7 +116,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
 
   return {
     period,
-    attention: buildAttentionField(sessions, { range, offset, now }),
+    attention: buildAttentionField(sessions, { range, offset, periodStart, now }),
     protection,
     recentSessions,
   }

@@ -1210,12 +1210,12 @@ body {
   transition: border-color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft);
 }
 
-.lab-period-navigation button:hover:not(:disabled) {
+.lab-period-navigation button:hover:not([aria-disabled='true']) {
   border-color: rgba(107, 140, 255, 0.55);
   background: rgba(44, 70, 255, 0.12);
 }
 
-.lab-period-navigation button:disabled {
+.lab-period-navigation button[aria-disabled='true'] {
   color: var(--text-muted);
   cursor: default;
   opacity: 0.32;

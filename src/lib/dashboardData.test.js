@@ -96,20 +96,27 @@ describe('dashboard data', () => {
     expect(bins[8]).toMatchObject({ state: 'inactive', score: null })
   })
 
-  it('uses the same historical month for the focus score and attention field', () => {
+  it.each([
+    ['day', -1, new Date(2026, 7, 24, 0, 0, 0).getTime(), 'Monday, Aug 24, 2026'],
+    ['week', -1, new Date(2026, 7, 17, 0, 0, 0).getTime(), 'Aug 17–Aug 23, 2026'],
+    ['month', -1, new Date(2026, 6, 1, 0, 0, 0).getTime(), 'July 2026'],
+  ])('uses the same historical %s window for the focus score and attention field', (range, offset, expectedStart, expectedTitle) => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),
       sessions: [],
       focusConfig: {},
       focusModeEnabled: false,
-      range: 'month',
-      offset: -1,
+      range,
+      offset,
       now: NOW,
     })
 
-    expect(result.period).toMatchObject({ range: 'month', offset: -1, title: 'July 2026' })
-    expect(result.attention[0].timestamp).toBe(new Date(2026, 6, 1, 0, 0, 0).getTime())
-    expect(result.attention.at(-1).timestamp).toBeLessThan(new Date(2026, 7, 1, 0, 0, 0).getTime())
+    const binWidth = result.attention[1].timestamp - result.attention[0].timestamp
+    const attentionEnd = result.attention.at(-1).timestamp + binWidth
+    expect(result.period).toMatchObject({ range, offset, title: expectedTitle })
+    expect(result.attention[0].timestamp).toBe(expectedStart)
+    expect(result.attention[0].timestamp).toBe(result.period.start.getTime())
+    expect(Math.round(attentionEnd)).toBe(result.period.endExclusive.getTime())
     expect(result.attention.every(bin => bin.state !== 'future')).toBe(true)
   })
 
@@ -126,6 +133,109 @@ describe('dashboard data', () => {
     expect(bins[0].timestamp).toBe(new Date(2026, 7, 24, 0, 0, 0).getTime())
     expect(bins[8]).toMatchObject({ state: 'strong', score: 82 })
     expect(bins.every(bin => bin.state !== 'future')).toBe(true)
+  })
+
+  it('does not carry a session ending at midnight into the next day', () => {
+    const endedAt = new Date(2026, 7, 25, 0, 0, 0).getTime()
+    const bins = buildAttentionField([{
+      startedAt: endedAt - 30 * 60 * 1000,
+      timestamp: endedAt,
+      actualSeconds: 30 * 60,
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      timeline: [{ second: 60, score: 82 }],
+    }], { range: 'day', now: NOW, bins: 24 })
+
+    expect(bins[0]).toMatchObject({ state: 'inactive', score: null })
+  })
+
+  it('keeps the score and attention field empty for a past period measured with an older ruler', () => {
+    const julyStart = new Date(2026, 6, 15, 9, 0, 0).getTime()
+    const currentStart = new Date(2026, 7, 25, 9, 0, 0).getTime()
+    const olderSession = {
+      id: 'older-ruler',
+      startedAt: julyStart,
+      timestamp: julyStart + 600_000,
+      actualSeconds: 600,
+      attentionScoringVersion: ATTENTION_SCORING_VERSION,
+      timeline: [{ second: 60, score: 82 }],
+    }
+    const currentSession = {
+      id: 'current-ruler',
+      startedAt: currentStart,
+      timestamp: currentStart + 600_000,
+      actualSeconds: 600,
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      timeline: [{ second: 60, score: 82 }],
+    }
+    const ledger = {
+      schemaVersion: 1,
+      days: {
+        '2026-07-15': {
+          sessions: {
+            [olderSession.id]: {
+              version: 1,
+              generation: ATTENTION_SCORING_VERSION,
+              measuredSeconds: 600,
+              scoreSum: 46_800,
+              deepFocusSeconds: 600,
+            },
+          },
+        },
+      },
+    }
+    const result = buildDashboardData({
+      ledger,
+      sessions: [currentSession, olderSession],
+      focusConfig: {},
+      focusModeEnabled: false,
+      range: 'month',
+      offset: -1,
+      now: NOW,
+    })
+
+    expect(result.period.score).toBeNull()
+    expect(result.attention.every(bin => ['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))).toBe(true)
+  })
+
+  it('uses the same 25-hour calendar day across the DST fallback', () => {
+    const previousTimezone = process.env.TZ
+    process.env.TZ = 'Europe/Vienna'
+    try {
+      const now = new Date(2026, 9, 25, 12, 0, 0).getTime()
+      const result = buildDashboardData({
+        ledger: emptyFocusLedger(),
+        sessions: [],
+        focusConfig: {},
+        focusModeEnabled: false,
+        range: 'day',
+        now,
+      })
+      const binWidth = result.attention[1].timestamp - result.attention[0].timestamp
+
+      expect(result.period.endExclusive.getTime() - result.period.start.getTime()).toBe(25 * 60 * 60 * 1000)
+      expect(Math.round(binWidth * result.attention.length)).toBe(25 * 60 * 60 * 1000)
+    } finally {
+      if (previousTimezone == null) delete process.env.TZ
+      else process.env.TZ = previousTimezone
+    }
+  })
+
+  it('keeps both signals on the same February month boundary', () => {
+    const now = new Date(2026, 2, 15, 12, 0, 0).getTime()
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [],
+      focusConfig: {},
+      focusModeEnabled: false,
+      range: 'month',
+      offset: -1,
+      now,
+    })
+    const binWidth = result.attention[1].timestamp - result.attention[0].timestamp
+
+    expect(result.period.title).toBe('February 2026')
+    expect(result.period.endExclusive.getTime() - result.period.start.getTime()).toBe(28 * 24 * 60 * 60 * 1000)
+    expect(Math.round(binWidth * result.attention.length)).toBe(28 * 24 * 60 * 60 * 1000)
   })
 
   it('never calls idle protection active', () => {

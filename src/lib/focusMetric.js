@@ -647,7 +647,7 @@ export function calculateDailyFocus(dayEntry) {
   }
 }
 
-function getPeriodWindow(range, offset, now) {
+export function getFocusPeriodWindow(range, offset, now) {
   const safeOffset = Math.min(0, Number.isFinite(offset) ? Math.trunc(offset) : 0)
   if (range === 'day') {
     const start = addDays(startOfDay(now), safeOffset)
@@ -707,7 +707,13 @@ export function buildFocusPeriod(ledger, options = {}) {
   const range = ['day', 'week', 'month', 'year'].includes(options.range) ? options.range : 'week'
   const now = new Date(options.now ?? Date.now())
   const safeNow = Number.isNaN(now.getTime()) ? new Date() : now
-  const { start, endExclusive, safeOffset } = getPeriodWindow(range, options.offset, safeNow)
+  const requestedStart = new Date(options.periodStart)
+  const hasExplicitStart = options.periodStart != null && !Number.isNaN(requestedStart.getTime())
+  const { start, endExclusive, safeOffset } = getFocusPeriodWindow(
+    range,
+    hasExplicitStart ? 0 : options.offset,
+    hasExplicitStart ? requestedStart : safeNow
+  )
   const safeLedger = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
   const generationCandidates = (Array.isArray(options.sessions) ? options.sessions : [])
     .filter(session => isScoreableGeneration(session?.attentionScoringVersion))
@@ -800,6 +806,6 @@ export function buildFocusPeriod(ledger, options = {}) {
     streak: currentStreak(allDays, safeNow),
     baseline,
     totalMeasuredDays: allDays.filter(day => day.score > 0).length,
-    canGoForward: safeOffset < 0,
+    canGoForward: endExclusive <= safeNow,
   }
 }

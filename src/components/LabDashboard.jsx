@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadFocusAppsConfig } from '../lib/storage'
-import { emptyFocusLedger } from '../lib/focusMetric'
+import { emptyFocusLedger, getFocusPeriodWindow } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { fetchCompanionDebug } from '../lib/nativeCompanion'
 
@@ -8,9 +8,9 @@ const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly'
 
 function SegmentedControl({ items, value, onChange, label }) {
   return (
-    <div className="lab-segments" aria-label={label}>
+    <div className="lab-segments" role="group" aria-label={label}>
       {items.map(([id, text]) => (
-        <button key={id} type="button" className={value === id ? 'is-active' : ''} onClick={() => onChange(id)}>{text}</button>
+        <button key={id} type="button" aria-pressed={value === id} className={value === id ? 'is-active' : ''} onClick={() => onChange(id)}>{text}</button>
       ))}
     </div>
   )
@@ -42,10 +42,17 @@ function AttentionField({ bins, range, title }) {
     return date.toLocaleDateString([], { day: '2-digit', month: 'short' })
   }
   const ticks = Number.isFinite(start) && Number.isFinite(end)
-    ? Array.from({ length: tickCount }, (_, index) => ({
-      position: index / (tickCount - 1),
-      timestamp: start + ((end - start) * index) / (tickCount - 1),
-    }))
+    ? range === 'day'
+      ? [0, 6, 12, 18, 24].map(hour => {
+        const tick = new Date(start)
+        tick.setHours(hour, 0, 0, 0)
+        const timestamp = tick.getTime()
+        return { position: (timestamp - start) / (end - start), timestamp }
+      })
+      : Array.from({ length: tickCount }, (_, index) => ({
+        position: index / (tickCount - 1),
+        timestamp: start + ((end - start) * index) / (tickCount - 1),
+      }))
     : []
 
   return (
@@ -72,7 +79,7 @@ function AttentionField({ bins, range, title }) {
 }
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
-  const [periodSelection, setPeriodSelection] = useState({ range: 'day', offset: 0 })
+  const [periodSelection, setPeriodSelection] = useState({ range: 'day', periodStart: null })
   const [nativeStatus, setNativeStatus] = useState({ checked: false, connected: false, helperInstalled: false })
   // Sessions and the ledger arrive as props — App owns loading them and
   // re-reads after every completed session, so this stays a pure render of
@@ -83,21 +90,38 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     sessions,
     focusConfig: loadFocusAppsConfig(),
   }), [ledger, sessions])
+  const dashboardNow = Date.now()
   const data = useMemo(() => buildDashboardData({
     ...source,
     focusModeEnabled,
     range: periodSelection.range,
-    offset: periodSelection.offset,
+    periodStart: periodSelection.periodStart,
+    now: dashboardNow,
     nativeStatus,
-  }), [source, focusModeEnabled, periodSelection, nativeStatus])
+  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus])
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
-  const selectRange = range => setPeriodSelection({ range, offset: 0 })
-  const movePeriod = delta => setPeriodSelection(current => ({
-    ...current,
-    offset: Math.min(0, current.offset + delta),
-  }))
+  const selectRange = range => setPeriodSelection({ range, periodStart: null })
+  const movePeriod = delta => setPeriodSelection(current => {
+    const realNow = Date.now()
+    const displayedWindow = getFocusPeriodWindow(
+      current.range,
+      0,
+      new Date(current.periodStart ?? realNow)
+    )
+    if (delta < 0) {
+      const previous = getFocusPeriodWindow(current.range, -1, displayedWindow.start)
+      return { ...current, periodStart: previous.start.getTime() }
+    }
+
+    const liveWindow = getFocusPeriodWindow(current.range, 0, new Date(realNow))
+    const nextStart = displayedWindow.endExclusive.getTime()
+    if (nextStart >= liveWindow.start.getTime()) {
+      return { ...current, periodStart: null }
+    }
+    return { ...current, periodStart: nextStart }
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -121,7 +145,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
         <div className="lab-period-navigation">
           <button type="button" onClick={() => movePeriod(-1)} aria-label={`Show previous ${periodSelection.range}`}>←</button>
           <strong aria-live="polite">{period.title}</strong>
-          <button type="button" onClick={() => movePeriod(1)} disabled={!period.canGoForward} aria-label={`Show next ${periodSelection.range}`}>→</button>
+          <button type="button" onClick={() => period.canGoForward && movePeriod(1)} aria-disabled={!period.canGoForward} aria-label={`Show next ${periodSelection.range}`}>→</button>
         </div>
       </section>
 
@@ -143,7 +167,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
           <Metric label="Measured time" value={period.score == null ? null : measuredMinutes} suffix="min" />
           <Metric label="Deep focus" value={period.score == null ? null : Math.round(period.deepFocusMinutes)} suffix="min" />
           <Metric label="Efficiency" value={period.efficiency} suffix="%" />
-          <Metric label="Consistency" value={period.streak} suffix="day streak" />
+          <Metric label="Consistency" value={period.score == null ? null : `${period.activeDays}/${period.elapsedDays}`} suffix="active days" />
         </div>
 
         <button className="lab-session-orb" type="button" onClick={onSession} aria-label="Open session setup">
