@@ -227,7 +227,7 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
       label: 'Permissions',
       state: permissionMissing ? 'missing' : connected ? 'no known issue' : 'unknown',
       detail: permissionMissing
-        ? `Enable Eudonomia Companion Automation access for ${permissionMissing} in System Settings.`
+        ? `Enable Eudaimonai Companion Automation access for ${permissionMissing} in System Settings.`
         : connected
           ? 'No Automation error reported by the companion.'
           : 'Cannot check permissions until the companion is reachable.',
@@ -592,7 +592,7 @@ function CompanionStatus() {
         }}>
           <div style={{ fontSize: 13, fontWeight: 900 }}>⚡ Frictionless blocking (one-time setup)</div>
           <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: 'var(--ultra-bright)' }}>
-            Enter your Mac password <b>once</b> to let Eudonomia block distraction sites silently — no password on every session. It installs a small helper that only edits your block list.
+            Enter your Mac password <b>once</b> to let Eudaimonai block distraction sites silently — no password on every session. It installs a small helper that only edits your block list.
           </div>
           <button
             onClick={runInstall}

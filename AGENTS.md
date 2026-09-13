@@ -1,4 +1,4 @@
-# Eudaimonai / Eudonomia — briefing for coding agents
+# Eudaimonai — briefing for coding agents
 
 Read this fully before your first edit. It exists so you start where the last
 agent left off instead of relearning — including the things that were tried and
@@ -81,7 +81,10 @@ npm run build:companion
   auto-updater will replace a locally installed build within minutes. To install
   a local build for testing, set a date-based version first, then restore the
   file. Do not commit the bumped version.
-- **`/Applications/Eudonomia.app` is what the user actually launches.** Building
+- **`/Applications/Eudonomia.app` is what the user actually launches** (the
+  installed bundle folder keeps its original name across updates even though
+  `productName`/display strings are now "Eudaimonai" — macOS/the updater does
+  not rename an existing `.app` directory in place). Building
   into `target/release/bundle` changes nothing for them until it is copied there.
 - **A push to `main` that touches companion build inputs updates only
   internal-channel installs.** Two release channels exist and they do not meet.

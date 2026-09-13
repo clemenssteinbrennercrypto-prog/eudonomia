@@ -115,7 +115,7 @@ const CAMERA_RECOVER_TRIES   = 3      // silent rebuild attempts before surfacin
 const CAMERA_FAULT_COPY = {
   permission: {
     title: 'Eudaimonai can’t see your camera',
-    hint: 'Camera access was blocked. Allow Eudonomia in System Settings → Privacy & Security → Camera, then start a new session.',
+    hint: 'Camera access was blocked. Allow Eudaimonai in System Settings → Privacy & Security → Camera, then start a new session.',
   },
   busy: {
     title: 'Your camera is in use by another app',
@@ -1224,7 +1224,7 @@ export default function SessionScreen({
   }, [resetCameraEvidence])
 
   // Window focus, visibility and the red close button are presentation state,
-  // not session state. The webcam must keep tracking while Eudonomia is behind
+  // not session state. The webcam must keep tracking while Eudaimonai is behind
   // the work app or hidden in the tray. Fresh-frame accounting remains the
   // authority: native AVFoundation frames continue independently of WebView
   // visibility, and any real capture loss is withheld by the native heartbeat.

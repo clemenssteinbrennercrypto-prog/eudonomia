@@ -1,6 +1,6 @@
-# Eudonomia (native macOS app)
+# Eudaimonai (native macOS app)
 
-A native macOS app (Tauri) that embeds the Eudonomia React interface in its own
+A native macOS app (Tauri) that embeds the Eudaimonai React interface in its own
 WebView and enforces distraction blocking on the whole machine. The native app
 is the product; there is no standalone browser-app runtime.
 

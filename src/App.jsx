@@ -76,7 +76,7 @@ function AppRefreshControl({ updateStatus }) {
 
   const title = updateAvailable
     ? isNative
-      ? 'Reload installs the available native app update and restarts Eudonomia.'
+      ? 'Reload installs the available native app update and restarts Eudaimonai.'
       : 'Reload refreshes this local development build.'
     : error
       ? `Update check unavailable: ${error}. Reload refreshes the current app only.`
@@ -89,7 +89,7 @@ function AppRefreshControl({ updateStatus }) {
         type="button"
         onClick={primaryAction}
         disabled={installing}
-        aria-label={isNative ? 'Reload Eudonomia and install any available update' : 'Reload current Eudaimonai app'}
+        aria-label={isNative ? 'Reload Eudaimonai and install any available update' : 'Reload current Eudaimonai app'}
       >
         <span className="app-refresh-icon" aria-hidden="true">↻</span>
         <span>{primaryLabel}</span>

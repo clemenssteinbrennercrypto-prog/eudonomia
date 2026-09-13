@@ -90,7 +90,7 @@ const BASE_APPS: &[&str] = &[
     "SecurityAgent",
     "UserNotificationCenter",
     "osascript",
-    "Eudonomia Companion",
+    "Eudaimonai Companion",
     "eudonomia-companion",
 ];
 
@@ -309,7 +309,7 @@ fn redirect_browser_tab(app: &str, debug: &SharedDebug) {
 fn notify_blocked(label: &str, debug: &SharedDebug) {
     let esc = escape_applescript(label);
     let script = format!(
-        r#"display notification "{esc} is blocked during your focus session" with title "Eudonomia""#
+        r#"display notification "{esc} is blocked during your focus session" with title "Eudaimonai""#
     );
     let _ = run_osascript(&script, debug, None);
 }
@@ -607,7 +607,7 @@ mod tests {
         // The companion itself → never hidden.
         assert!(!should_hide_app(
             true,
-            "eudonomia companion",
+            "eudaimonai companion",
             false,
             &allowed,
             &[]

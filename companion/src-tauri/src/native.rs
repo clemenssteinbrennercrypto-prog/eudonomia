@@ -212,7 +212,7 @@ fn apply_session_payload(
     let should_hold_app_nap = session_state == "active" || session_state == "paused";
     if let Ok(mut guard) = state.app_nap.lock() {
         if should_hold_app_nap && guard.is_none() {
-            *guard = Some(crate::app_nap::begin("Eudonomia live focus session"));
+            *guard = Some(crate::app_nap::begin("Eudaimonai live focus session"));
         } else if !should_hold_app_nap {
             if let Some(token) = guard.take() {
                 crate::app_nap::end(token);

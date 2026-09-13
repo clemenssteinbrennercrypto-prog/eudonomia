@@ -1,6 +1,6 @@
-// Eudonomia — macOS app.
+// Eudaimonai — macOS app.
 //
-// A normal windowed app that loads the bundled Eudonomia UI in its own WebView,
+// A normal windowed app that loads the bundled Eudaimonai UI in its own WebView,
 // plus a menubar tray for quick access and quit. Loading the UI in the app's own
 // window. The WebView talks to Rust only through Tauri commands and events, so
 // private activity data is never exposed through a local network port.
@@ -180,7 +180,7 @@ async fn install_native_update(app: tauri::AppHandle) -> NativeUpdateInstallResu
     }
 }
 
-/// Show and focus the main Eudonomia window (defined in tauri.conf.json).
+/// Show and focus the main Eudaimonai window (defined in tauri.conf.json).
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
         let _ = window.show();
@@ -318,8 +318,8 @@ fn main() {
             app.manage(native_camera::NativeCameraState::default());
             activity::start_polling(native_state, app.handle().clone());
 
-            let open = MenuItem::with_id(app, "open", "Open Eudonomia", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Eudonomia", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open Eudaimonai", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Eudaimonai", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;
 
             TrayIconBuilder::with_id("main-tray")
