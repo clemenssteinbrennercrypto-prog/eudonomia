@@ -51,6 +51,31 @@ function deviceGlyph(type) {
   return ({ monitor: '▭', laptop: '▱', camera: '◉', phone: '▯', keyboard: '⌨', mouse: '●', ipad: '▯', paper: '▤', notebook: '▥', book: '▰' })[type] || '◆'
 }
 
+function miniaturePosition(object) {
+  const col = Number.isFinite(Number(object.col)) ? Number(object.col) : 0.5
+  const row = Number.isFinite(Number(object.row)) ? Number(object.row) : 0.5
+  return {
+    left: `${Math.max(13, Math.min(87, col * 100))}%`,
+    top: `${Math.max(14, Math.min(82, row * 100))}%`,
+  }
+}
+
+function WorkspaceMiniature({ workspace }) {
+  return <div
+    className="workspace-card-preview"
+    role="img"
+    aria-label={`Layout for ${workspace.name} with ${workspace.objects.length} objects`}
+  >
+    {workspace.objects.map(object => <i
+      key={object.id}
+      className={`workspace-card-device is-${object.type}`}
+      data-device-type={object.type}
+      style={miniaturePosition(object)}
+      aria-hidden="true"
+    >{deviceGlyph(object.type)}</i>)}
+  </div>
+}
+
 function Editor({ initial, onSave, onCancel }) {
   const [draft, setDraft] = useState(() => structuredClone(initial))
   const [view, setView] = useState('iso')
@@ -165,9 +190,20 @@ export default function WorkspaceManager({ state, onChange, onContinue }) {
   }} />
   if (editing) return <Editor initial={editing} onCancel={() => { setEditing(null); setMode(state.workspaces.length ? 'library' : 'templates') }} onSave={draft => { commit(saveWorkspaceDraft(state, draft)); setEditing(null); setMode('library') }} />
   if (mode === 'templates') return <main className="workspace-templates"><header><span>Workspace setup</span><h1>Build the desk Eudaimonai will understand.</h1><p>Start visually, then refine every gaze target. Nothing leaves this device.</p></header><div className="workspace-template-grid">{Object.keys(TEMPLATE_OBJECTS).map(kind => <button key={kind} onClick={() => setEditing(templateWorkspace(kind, state.workspaces.length))}><div className={`workspace-template-scene ${kind}`}><i/><i/><i/></div><strong>{kind === 'laptop' ? 'Laptop' : kind === 'desktop' ? 'Desktop' : 'Dual screen'}</strong><span>Open editable scene</span></button>)}</div><button className="workspace-quick-link" onClick={() => setMode('quick')}>Use quick question setup instead</button></main>
-  return <main className="workspace-library"><header><div><span>Workspace library</span><h1>Your focus environments</h1><p>The active workspace gives every session its spatial context.</p></div><button onClick={() => setMode('templates')}>New workspace</button></header>{error && <p className="workspace-error">{error}</p>}<div className="workspace-card-grid">{state.workspaces.map(workspace => {
-    const isActive = workspace.id === state.activeWorkspaceId
-    const count = Object.keys(workspace.calibration?.targets || {}).length
-    return <article key={workspace.id} className={isActive ? 'is-active' : ''}><div className="workspace-card-preview"><span>{workspace.objects.map(object => deviceGlyph(object.type)).join(' ')}</span></div><div className="workspace-card-copy"><div><strong>{workspace.name}</strong>{isActive && <em>Active</em>}</div><p>{workspace.objects.length} objects · {count}/{workspace.objects.length} calibrated · revision {workspace.revision}</p></div><div className="workspace-card-actions">{!isActive && <button onClick={() => commit({ ...state, activeWorkspaceId: workspace.id })}>Use</button>}<button onClick={() => setEditing(workspace)}>Edit</button><button onClick={() => commit(duplicateWorkspace(state, workspace.id))}>Duplicate</button><button disabled={state.workspaces.length <= 1} onClick={() => commit(deleteWorkspace(state, workspace.id))}>Delete</button></div></article>
-  })}</div><footer><span>{active ? `${active.name} will be used for the next session.` : 'Create a workspace to continue.'}</span><button disabled={!active} onClick={onContinue}>Done</button></footer></main>
+  return <main className="workspace-library">
+    <header><div><span>Workspace library</span><h1>Your focus environments</h1><p>The active workspace gives every session its spatial context.</p></div><button onClick={() => setMode('templates')}>New workspace</button></header>
+    {error && <p className="workspace-error">{error}</p>}
+    <div className="workspace-card-grid">{state.workspaces.map(workspace => {
+      const isActive = workspace.id === state.activeWorkspaceId
+      const count = Object.keys(workspace.calibration?.targets || {}).length
+      return <article key={workspace.id} className={isActive ? 'is-active' : ''}>
+        <div className="workspace-card-main">
+          <WorkspaceMiniature workspace={workspace} />
+          <div className="workspace-card-copy"><div><strong>{workspace.name}</strong>{isActive && <em>Active</em>}</div><p>{workspace.objects.length} objects · {count}/{workspace.objects.length} calibrated · revision {workspace.revision}</p></div>
+        </div>
+        <div className="workspace-card-actions">{!isActive && <button onClick={() => commit({ ...state, activeWorkspaceId: workspace.id })}>Use</button>}<button onClick={() => setEditing(workspace)}>Edit</button><button onClick={() => commit(duplicateWorkspace(state, workspace.id))}>Duplicate</button><button disabled={state.workspaces.length <= 1} onClick={() => commit(deleteWorkspace(state, workspace.id))}>Delete</button></div>
+      </article>
+    })}</div>
+    <footer><span>{active ? `${active.name} will be used for the next session.` : 'Create a workspace to continue.'}</span><button disabled={!active} onClick={onContinue}>Done</button></footer>
+  </main>
 }
