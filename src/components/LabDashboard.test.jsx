@@ -1,6 +1,9 @@
+/** @vitest-environment jsdom */
 import React from 'react'
+import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import LabDashboard from './LabDashboard'
 import { FOCUS_METRIC_V1 } from '../lib/focusMetric'
 import { NATIVE_CAMERA_MEASUREMENT_V2 } from '../lib/cameraMeasurement'
@@ -19,9 +22,34 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 7, 26, 14, 0, 0))
 })
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('LabDashboard metric labels', () => {
+  it('navigates one shared day, week, or month across both dashboard signals', () => {
+    render(React.createElement(LabDashboard, {
+      focusModeEnabled: false,
+      sessions: [],
+      ledger: loadFocusLedger(),
+      onSession() {},
+      onProtection() {},
+      onAnalytics() {},
+    }))
+
+    expect(screen.getAllByRole('button', { name: /^(Daily|Weekly|Monthly)$/ })).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Show next day' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monthly' }))
+    expect(screen.getByRole('img', { name: 'Attention field for August 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show next month' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show previous month' }))
+    expect(screen.getByRole('img', { name: 'Attention field for July 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show next month' })).toBeEnabled()
+  })
+
   it('keeps measured time and efficiency semantically distinct', () => {
     // saveSession still runs so the focus ledger is built by the real code
     // path; sessions and ledger are then handed to the component as props,

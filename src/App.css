@@ -1172,6 +1172,55 @@ body {
   font-family: var(--font-sans, var(--font));
 }
 
+.lab-period-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  animation: labRise 700ms var(--ease-out) both;
+}
+
+.lab-period-navigation {
+  display: grid;
+  grid-template-columns: 30px minmax(190px, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+}
+
+.lab-period-navigation strong {
+  color: var(--text-secondary);
+  font-family: var(--font-mono, var(--mono));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.lab-period-navigation button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(122, 152, 255, 0.025);
+  color: var(--ultra-bright);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft);
+}
+
+.lab-period-navigation button:hover:not(:disabled) {
+  border-color: rgba(107, 140, 255, 0.55);
+  background: rgba(44, 70, 255, 0.12);
+}
+
+.lab-period-navigation button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.32;
+}
+
 .lab-hero {
   display: grid;
   grid-template-columns: minmax(230px, 0.72fr) minmax(420px, 1.7fr) 168px;
@@ -1212,6 +1261,15 @@ body {
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lab-period-scope {
+  color: var(--text-muted);
+  font-family: var(--font-mono, var(--mono));
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-align: right;
   text-transform: uppercase;
 }
 
@@ -1817,6 +1875,9 @@ body {
   .app-shell-nav-item { font-size: 9px; }
   .app-shell-soon { display: none; }
   .lab-dashboard { padding: 26px 16px 80px; gap: 26px; }
+  .lab-period-toolbar { align-items: stretch; flex-direction: column; gap: 14px; }
+  .lab-period-toolbar .lab-segments { align-self: flex-start; }
+  .lab-period-navigation { grid-template-columns: 30px minmax(0, 1fr) 30px; }
   .lab-hero { grid-template-columns: 1fr 90px; }
   .lab-score-block { padding-right: 16px; min-width: 0; }
   .lab-score strong { font-size: 76px; }
@@ -1833,6 +1894,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell-header::after,
+  .lab-period-toolbar,
   .lab-hero,
   .lab-attention-section,
   .lab-lower-grid,

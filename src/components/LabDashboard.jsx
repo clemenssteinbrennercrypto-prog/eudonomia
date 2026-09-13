@@ -4,8 +4,7 @@ import { emptyFocusLedger } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { fetchCompanionDebug } from '../lib/nativeCompanion'
 
-const SCORE_RANGES = [['day', 'Daily'], ['week', 'Weekly']]
-const FIELD_RANGES = [['day', 'Today'], ['week', 'Week'], ['month', 'Month']]
+const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
 function SegmentedControl({ items, value, onChange, label }) {
   return (
@@ -26,12 +25,10 @@ function Metric({ label, value, suffix }) {
   )
 }
 
-function AttentionField({ bins }) {
+function AttentionField({ bins, range, title }) {
   const start = bins[0]?.timestamp
   const interval = bins.length > 1 ? bins[1].timestamp - start : 0
   const end = bins.at(-1)?.timestamp + interval
-  const rangeDays = Math.round((end - start) / (24 * 60 * 60 * 1000))
-  const range = rangeDays <= 1 ? 'day' : rangeDays <= 7 ? 'week' : 'month'
   const tickCount = range === 'day' ? 5 : range === 'week' ? 8 : 6
   const formatTick = (timestamp, index) => {
     const date = new Date(timestamp)
@@ -53,7 +50,7 @@ function AttentionField({ bins }) {
 
   return (
     <div className="attention-timeline">
-      <div className="attention-field" role="img" aria-label={`Attention field over ${range === 'day' ? 'today' : `this ${range}`}`}>
+      <div className="attention-field" role="img" aria-label={`Attention field for ${title}`}>
         {bins.map(bin => (
           <i
             key={bin.index}
@@ -75,8 +72,7 @@ function AttentionField({ bins }) {
 }
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
-  const [scoreRange, setScoreRange] = useState('day')
-  const [fieldRange, setFieldRange] = useState('day')
+  const [periodSelection, setPeriodSelection] = useState({ range: 'day', offset: 0 })
   const [nativeStatus, setNativeStatus] = useState({ checked: false, connected: false, helperInstalled: false })
   // Sessions and the ledger arrive as props — App owns loading them and
   // re-reads after every completed session, so this stays a pure render of
@@ -90,13 +86,18 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
   const data = useMemo(() => buildDashboardData({
     ...source,
     focusModeEnabled,
-    scoreRange,
-    fieldRange,
+    range: periodSelection.range,
+    offset: periodSelection.offset,
     nativeStatus,
-  }), [source, focusModeEnabled, scoreRange, fieldRange, nativeStatus])
+  }), [source, focusModeEnabled, periodSelection, nativeStatus])
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
+  const selectRange = range => setPeriodSelection({ range, offset: 0 })
+  const movePeriod = delta => setPeriodSelection(current => ({
+    ...current,
+    offset: Math.min(0, current.offset + delta),
+  }))
 
   useEffect(() => {
     let cancelled = false
@@ -115,6 +116,15 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
 
   return (
     <main className="lab-dashboard">
+      <section className="lab-period-toolbar" aria-label="Dashboard time period">
+        <SegmentedControl items={PERIOD_RANGES} value={periodSelection.range} onChange={selectRange} label="Dashboard range" />
+        <div className="lab-period-navigation">
+          <button type="button" onClick={() => movePeriod(-1)} aria-label={`Show previous ${periodSelection.range}`}>←</button>
+          <strong aria-live="polite">{period.title}</strong>
+          <button type="button" onClick={() => movePeriod(1)} disabled={!period.canGoForward} aria-label={`Show next ${periodSelection.range}`}>→</button>
+        </div>
+      </section>
+
       <section className="lab-hero" aria-labelledby="lab-title">
         <div className="lab-score-block">
           <div className="lab-section-head">
@@ -122,11 +132,10 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
               <span className="lab-eyebrow">Command / Lab</span>
               <h1 id="lab-title">Focus Score</h1>
             </div>
-            <SegmentedControl items={SCORE_RANGES} value={scoreRange} onChange={setScoreRange} label="Focus score range" />
           </div>
           <div className={`lab-score${period.score == null ? ' is-empty' : ''}`}>
             <strong>{period.score ?? '—'}</strong>
-            <span>{period.score == null ? 'Not measured' : `${scoreRange === 'day' ? 'Today' : 'This week'} · v1`}</span>
+            <span>{period.score == null ? 'Not measured' : `${PERIOD_RANGES.find(([id]) => id === periodSelection.range)?.[1]} · v1`}</span>
           </div>
         </div>
 
@@ -149,9 +158,9 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
             <span className="lab-eyebrow">Measured signal</span>
             <h2>Attention Field</h2>
           </div>
-          <SegmentedControl items={FIELD_RANGES} value={fieldRange} onChange={setFieldRange} label="Attention field range" />
+          <span className="lab-period-scope">{period.title}</span>
         </div>
-        <AttentionField bins={data.attention} />
+        <AttentionField bins={data.attention} range={periodSelection.range} title={period.title} />
         {!hasAttentionSignal && <p className="attention-empty">Complete a measured session to reveal your attention field.</p>}
         <div className="attention-legend">
           <span className="is-strong">Strong</span><span className="is-focused">Focused</span><span className="is-drift">Drift</span><span className="is-paused">Paused</span><span className="is-no-signal">No signal</span><span className="is-inactive">Inactive</span><span className="is-future">Future</span>

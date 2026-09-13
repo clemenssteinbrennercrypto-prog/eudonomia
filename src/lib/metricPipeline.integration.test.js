@@ -98,8 +98,7 @@ describe('native V2 metric pipeline', () => {
       sessions,
       focusConfig: {},
       focusModeEnabled: false,
-      scoreRange: 'day',
-      fieldRange: 'day',
+      range: 'day',
       now: NOW,
     })
     expect(lab.period).toMatchObject({

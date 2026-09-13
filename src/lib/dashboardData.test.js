@@ -96,9 +96,41 @@ describe('dashboard data', () => {
     expect(bins[8]).toMatchObject({ state: 'inactive', score: null })
   })
 
+  it('uses the same historical month for the focus score and attention field', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [],
+      focusConfig: {},
+      focusModeEnabled: false,
+      range: 'month',
+      offset: -1,
+      now: NOW,
+    })
+
+    expect(result.period).toMatchObject({ range: 'month', offset: -1, title: 'July 2026' })
+    expect(result.attention[0].timestamp).toBe(new Date(2026, 6, 1, 0, 0, 0).getTime())
+    expect(result.attention.at(-1).timestamp).toBeLessThan(new Date(2026, 7, 1, 0, 0, 0).getTime())
+    expect(result.attention.every(bin => bin.state !== 'future')).toBe(true)
+  })
+
+  it('retrieves measured attention from the previous day', () => {
+    const start = new Date(2026, 7, 24, 8, 0, 0).getTime()
+    const bins = buildAttentionField([{
+      startedAt: start,
+      timestamp: start + 10 * 60 * 1000,
+      actualSeconds: 10 * 60,
+      attentionScoringVersion: NATIVE_CAMERA_MEASUREMENT_V2.attentionScoringVersion,
+      timeline: [{ second: 60, score: 82 }],
+    }], { range: 'day', offset: -1, now: NOW, bins: 24 })
+
+    expect(bins[0].timestamp).toBe(new Date(2026, 7, 24, 0, 0, 0).getTime())
+    expect(bins[8]).toMatchObject({ state: 'strong', score: 82 })
+    expect(bins.every(bin => bin.state !== 'future')).toBe(true)
+  })
+
   it('never calls idle protection active', () => {
     const base = {
-      ledger: emptyFocusLedger(), sessions: [], scoreRange: 'day', fieldRange: 'day', now: NOW,
+      ledger: emptyFocusLedger(), sessions: [], range: 'day', now: NOW,
     }
     expect(buildDashboardData({ ...base, focusModeEnabled: false, focusConfig: {} }).protection.state).toBe('off')
     expect(buildDashboardData({ ...base, focusModeEnabled: true, focusConfig: {} }).protection.state).toBe('empty')

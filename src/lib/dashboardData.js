@@ -3,27 +3,26 @@ import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod } from '.
 import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
 import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
 
-const RANGE_MS = {
-  day: 24 * 60 * 60 * 1000,
-  week: 7 * 24 * 60 * 60 * 1000,
-}
-
-function startOfRange(range, now) {
+function periodWindow(range, now, offset) {
+  const safeOffset = Math.min(0, Number.isFinite(offset) ? Math.trunc(offset) : 0)
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
   if (range === 'week') start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
   if (range === 'month') start.setDate(1)
-  return start.getTime()
+  if (range === 'month') start.setMonth(start.getMonth() + safeOffset)
+  else start.setDate(start.getDate() + safeOffset * (range === 'week' ? 7 : 1))
+
+  const endExclusive = new Date(start)
+  if (range === 'month') endExclusive.setMonth(endExclusive.getMonth() + 1)
+  else endExclusive.setDate(endExclusive.getDate() + (range === 'week' ? 7 : 1))
+  return { start: start.getTime(), endExclusive: endExclusive.getTime() }
 }
 
-export function buildAttentionField(sessions, { range = 'day', now = Date.now(), bins = 96 } = {}) {
+export function buildAttentionField(sessions, { range = 'day', offset = 0, now = Date.now(), bins = 96 } = {}) {
   const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'day'
-  const start = startOfRange(safeRange, now)
-  const nominalEnd = safeRange === 'month'
-    ? new Date(new Date(start).getFullYear(), new Date(start).getMonth() + 1, 1).getTime()
-    : start + RANGE_MS[safeRange]
-  const end = nominalEnd
-  const width = Math.max(1, nominalEnd - start)
+  const { start, endExclusive } = periodWindow(safeRange, now, offset)
+  const width = Math.max(1, endExclusive - start)
+  const measurementEnd = Math.min(now, endExclusive)
   const safeBins = Math.max(12, Math.min(160, Math.trunc(bins) || 96))
   const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false, paused: false }))
   const scoreableSessions = (Array.isArray(sessions) ? sessions : []).filter(session =>
@@ -39,7 +38,7 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
     if (!Number.isFinite(sessionStartMs)) continue
     const sessionEndMs = sessionEndedAt(session)
     if (!Number.isFinite(sessionEndMs) || sessionEndMs < sessionStartMs) continue
-    if (sessionEndMs < start || sessionStartMs > Math.min(now, end)) continue
+    if (sessionEndMs < start || sessionStartMs >= measurementEnd) continue
 
     const firstBin = Math.max(0, Math.floor(((sessionStartMs - start) / width) * safeBins))
     const lastBin = Math.min(safeBins - 1, Math.floor(((sessionEndMs - start) / width) * safeBins))
@@ -56,7 +55,7 @@ export function buildAttentionField(sessions, { range = 'day', now = Date.now(),
     for (const point of session.timeline || []) {
       if (!Number.isFinite(point?.second) || !Number.isFinite(point?.score)) continue
       const pointTime = sessionStartMs + timelineWallSecond(point) * 1000
-      if (pointTime < start || pointTime > Math.min(now, end)) continue
+      if (pointTime < start || pointTime >= measurementEnd) continue
       const index = Math.min(safeBins - 1, Math.max(0, Math.floor(((pointTime - start) / width) * safeBins)))
       buckets[index].scores.push(point.score)
     }
@@ -81,9 +80,10 @@ function outcomeLabel(session) {
   return 'Unset'
 }
 
-export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, scoreRange = 'day', fieldRange = 'day', now = Date.now() }) {
+export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, range = 'day', offset = 0, now = Date.now() }) {
   const period = buildFocusPeriod(ledger, {
-    range: scoreRange === 'week' ? 'week' : 'day',
+    range: ['day', 'week', 'month'].includes(range) ? range : 'day',
+    offset,
     now,
     sessions,
   })
@@ -119,7 +119,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
 
   return {
     period,
-    attention: buildAttentionField(sessions, { range: fieldRange, now }),
+    attention: buildAttentionField(sessions, { range, offset, now }),
     protection,
     recentSessions,
   }
