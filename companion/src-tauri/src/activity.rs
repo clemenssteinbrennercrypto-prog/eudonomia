@@ -5,6 +5,7 @@
 // and emit it directly to the bundled Tauri WebView.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,7 +25,12 @@ pub type SharedActivity = Arc<Mutex<ActivityState>>;
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct DebugState {
     pub last_osascript_error: Option<String>,
+    /// Legacy summary kept for existing diagnostics. `missing_permissions` is
+    /// the authoritative set exposed to new UI code.
     pub permission_missing: Option<String>,
+    pub missing_permissions: Vec<String>,
+    #[serde(skip)]
+    pub permission_probe_ts: HashMap<String, u64>,
     pub last_poll_ts: u64,
     pub session_state: String,
     pub session_active: bool,
@@ -159,13 +165,83 @@ fn should_hide_app(
 /// planned session end (+ grace) has passed — never block indefinitely.
 const BLOCK_GRACE_MS: u64 = 2 * 60 * 1000;
 const BLOCK_NOTIFY_COOLDOWN_MS: u64 = 15_000;
+const PERMISSION_RECHECK_INTERVAL_MS: u64 = 30_000;
 
+const AUTOMATION_BROWSER_APPS: &[&str] = &["Safari", "Google Chrome", "Arc", "Brave Browser"];
 const BROWSER_APPS: &[&str] = &["Safari", "Google Chrome", "Arc", "Brave Browser", "Firefox"];
+
+fn sync_permission_summary(debug: &mut DebugState) {
+    debug.missing_permissions.sort_by(|a, b| {
+        let a_system = a == "System Events";
+        let b_system = b == "System Events";
+        b_system.cmp(&a_system).then_with(|| a.cmp(b))
+    });
+    debug.missing_permissions.dedup();
+    debug.permission_missing = debug.missing_permissions.first().cloned();
+}
+
+fn record_permission_denial(debug: &mut DebugState, context: Option<&str>) {
+    let Some(name) = context.map(str::trim).filter(|name| !name.is_empty()) else {
+        return;
+    };
+    if !debug
+        .missing_permissions
+        .iter()
+        .any(|missing| missing == name)
+    {
+        debug.missing_permissions.push(name.to_string());
+    }
+    sync_permission_summary(debug);
+}
+
+fn record_permission_success(debug: &mut DebugState, context: Option<&str>) {
+    let Some(name) = context.map(str::trim).filter(|name| !name.is_empty()) else {
+        return;
+    };
+    debug.missing_permissions.retain(|missing| missing != name);
+    debug.permission_probe_ts.remove(name);
+    sync_permission_summary(debug);
+}
+
+fn due_browser_permission_rechecks(
+    debug: &mut DebugState,
+    frontmost_app: &str,
+    now: u64,
+) -> Vec<String> {
+    let candidates: Vec<String> = debug
+        .missing_permissions
+        .iter()
+        .filter(|app| {
+            app.as_str() != frontmost_app && AUTOMATION_BROWSER_APPS.contains(&app.as_str())
+        })
+        .cloned()
+        .collect();
+    candidates
+        .into_iter()
+        .filter(|app| {
+            let last = debug.permission_probe_ts.get(app).copied().unwrap_or(0);
+            if last > 0 && now.saturating_sub(last) < PERMISSION_RECHECK_INTERVAL_MS {
+                return false;
+            }
+            debug.permission_probe_ts.insert(app.clone(), now);
+            true
+        })
+        .collect()
+}
 
 fn run_osascript(
     script: &str,
     debug: &SharedDebug,
     permission_context: Option<&str>,
+) -> Option<String> {
+    run_osascript_with_confirmation(script, debug, permission_context, true)
+}
+
+fn run_osascript_with_confirmation(
+    script: &str,
+    debug: &SharedDebug,
+    permission_context: Option<&str>,
+    success_confirms_permission: bool,
 ) -> Option<String> {
     let output = Command::new("osascript")
         .arg("-e")
@@ -182,19 +258,15 @@ fn run_osascript(
         if let Ok(mut d) = debug.lock() {
             d.last_osascript_error = Some(stderr.clone());
             if stderr.contains("-1743") || stderr.contains("1743") {
-                d.permission_missing = Some(
-                    permission_context
-                        .unwrap_or("Browser (check Automation permissions)")
-                        .to_string(),
-                );
+                record_permission_denial(&mut d, permission_context);
             }
         }
         return None;
     }
     if let Ok(mut d) = debug.lock() {
         d.last_osascript_error = None;
-        if permission_context.is_some() {
-            d.permission_missing = None;
+        if success_confirms_permission {
+            record_permission_success(&mut d, permission_context);
         }
     }
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -247,6 +319,34 @@ end tell"#
     run_osascript(&script, debug, Some(app))
 }
 
+/// Recheck browser Automation without bringing the browser to the front or
+/// launching a closed browser. This lets a permission granted in System
+/// Settings clear while the user is back in Eudaimonai. A closed browser stays
+/// unresolved because no successful Apple event has proved the permission.
+fn recheck_missing_browser_permissions(debug: &SharedDebug, frontmost_app: &str) {
+    let due = debug
+        .lock()
+        .map(|mut state| due_browser_permission_rechecks(&mut state, frontmost_app, now_ms()))
+        .unwrap_or_default();
+
+    for app in due {
+        let esc = escape_applescript(&app);
+        let script = format!(
+            r#"if application "{esc}" is running then
+  tell application "{esc}" to count windows
+  return "verified"
+end if
+return "not-running""#
+        );
+        let result = run_osascript_with_confirmation(&script, debug, Some(&app), false);
+        if result.as_deref() == Some("verified") {
+            if let Ok(mut state) = debug.lock() {
+                record_permission_success(&mut state, Some(&app));
+            }
+        }
+    }
+}
+
 /// Extract a bare hostname ("youtube.com") from a URL string, without pulling
 /// in a full URL-parsing dependency.
 fn extract_domain(url: &str) -> Option<String> {
@@ -282,7 +382,7 @@ fn hide_app(app: &str, debug: &SharedDebug) {
     let esc = escape_applescript(app);
     let script =
         format!(r#"tell application "System Events" to set visible of process "{esc}" to false"#);
-    let _ = run_osascript(&script, debug, None);
+    let _ = run_osascript(&script, debug, Some("System Events"));
 }
 
 /// Redirect the front tab of a browser away from a blocked domain. This is what
@@ -538,6 +638,8 @@ fn poll_once(
         return None;
     };
 
+    recheck_missing_browser_permissions(debug, &app);
+
     let url = if BROWSER_APPS.contains(&app.as_str()) {
         browser_url(&app, debug).filter(|u| !u.is_empty())
     } else {
@@ -580,10 +682,67 @@ pub fn start_polling(state: crate::native::NativeState, app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{domain_is_blocked, extract_domain, should_hide_app};
+    use super::{
+        domain_is_blocked, due_browser_permission_rechecks, extract_domain,
+        record_permission_denial, record_permission_success, should_hide_app, DebugState,
+        PERMISSION_RECHECK_INTERVAL_MS,
+    };
 
     fn v(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn automation_permissions_are_recorded_and_cleared_per_target() {
+        let mut debug = DebugState::default();
+        record_permission_denial(&mut debug, Some("Safari"));
+        record_permission_denial(&mut debug, Some("System Events"));
+        record_permission_denial(&mut debug, Some("Safari"));
+
+        assert_eq!(debug.missing_permissions, v(&["System Events", "Safari"]));
+        assert_eq!(debug.permission_missing.as_deref(), Some("System Events"));
+
+        record_permission_success(&mut debug, Some("System Events"));
+        assert_eq!(debug.missing_permissions, v(&["Safari"]));
+        assert_eq!(debug.permission_missing.as_deref(), Some("Safari"));
+
+        record_permission_success(&mut debug, Some("Google Chrome"));
+        assert_eq!(debug.missing_permissions, v(&["Safari"]));
+
+        record_permission_success(&mut debug, Some("Safari"));
+        assert!(debug.missing_permissions.is_empty());
+        assert_eq!(debug.permission_missing, None);
+    }
+
+    #[test]
+    fn context_free_scripts_do_not_change_permission_state() {
+        let mut debug = DebugState::default();
+        record_permission_denial(&mut debug, None);
+        assert!(debug.missing_permissions.is_empty());
+
+        record_permission_denial(&mut debug, Some("Safari"));
+        record_permission_success(&mut debug, None);
+        assert_eq!(debug.missing_permissions, v(&["Safari"]));
+    }
+
+    #[test]
+    fn browser_permission_rechecks_skip_frontmost_unknown_and_recent_targets() {
+        let mut debug = DebugState::default();
+        debug.missing_permissions = v(&["Safari", "Google Chrome", "System Events"]);
+
+        assert_eq!(
+            due_browser_permission_rechecks(&mut debug, "Safari", 100_000),
+            v(&["Google Chrome"])
+        );
+        assert!(due_browser_permission_rechecks(&mut debug, "Safari", 100_001).is_empty());
+        assert_eq!(
+            due_browser_permission_rechecks(
+                &mut debug,
+                "Safari",
+                100_000 + PERMISSION_RECHECK_INTERVAL_MS
+            ),
+            v(&["Google Chrome"])
+        );
     }
 
     #[test]

@@ -194,7 +194,7 @@ describe('FocusAppsScreen readiness', () => {
   })
 
   it('asks for System Events access before claiming app protection', async () => {
-    companion.debug = { helperInstalled: true, permissionMissing: 'System Events' }
+    companion.debug = { helperInstalled: true, permissionMissing: 'System Events', missingPermissions: ['System Events'] }
     await renderScreen()
 
     fireEvent.click(setupButton('Writing'))
@@ -205,7 +205,7 @@ describe('FocusAppsScreen readiness', () => {
   })
 
   it('keeps a browser permission gap scoped to setups that block websites', async () => {
-    companion.debug = { helperInstalled: true, permissionMissing: 'Safari', lastActivity: { app: 'Safari', url: null, ts: 1 } }
+    companion.debug = { helperInstalled: true, permissionMissing: 'Safari', missingPermissions: ['Safari'], lastActivity: { app: 'Safari', url: null, ts: 1 } }
     await renderScreen()
 
     const banner = () => within(document.querySelector('.protection-readiness'))
@@ -227,5 +227,28 @@ describe('FocusAppsScreen readiness', () => {
   it('reports ready once the Companion confirms it can enforce the rules', async () => {
     await renderScreen()
     expect(screen.getByText('Ready for focus')).toBeInTheDocument()
+  })
+
+  it('shows browser Automation gaps as partial protection when hosts blocking is active', async () => {
+    const now = Date.now()
+    companion.debug = {
+      helperInstalled: true,
+      permissionMissing: 'Safari',
+      missingPermissions: ['Safari'],
+      sessionActive: true,
+      sessionState: 'active',
+      sessionEndTs: now + 60_000,
+      lastPollTs: now,
+      lastActivity: { app: 'Eudaimonai Companion', url: null, ts: now },
+      blockedDomainsCount: 1,
+      hostBlockActive: true,
+    }
+    await renderScreen()
+    fireEvent.click(screen.getByText('Advanced'))
+
+    expect(screen.getByText('Protection: Partially protected')).toBeInTheDocument()
+    const website = screen.getByText('Website blocking').parentElement
+    expect(within(website).getByText('limited')).toBeInTheDocument()
+    expect(within(website).getByText(/tab|close blocked websites|Automation access/i)).toBeInTheDocument()
   })
 })

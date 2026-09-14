@@ -73,31 +73,30 @@ describe('useCompanionStatus', () => {
     expect(fetchCompanionDebug).toHaveBeenCalledTimes(3)
   })
 
-  it('keeps a browser permission gap visible after the raw report disappears', async () => {
-    vi.setSystemTime(1_000_000)
-    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: 'Safari', lastActivity: { app: 'Safari', url: null, ts: 999_000 } })
+  it('uses the native permission set across polls', async () => {
+    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: 'Safari', missingPermissions: ['Safari'] })
     const { result } = renderHook(() => useCompanionStatus({ intervalMs: 1000 }))
     await flush()
     expect(result.current.missingPermissions).toEqual([{ name: 'Safari', scope: 'browser' }])
 
-    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: null, lastActivity: { app: 'Slack', url: null, ts: 1_000_900 } })
+    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: 'Safari', missingPermissions: ['Safari'] })
     await act(async () => { vi.advanceTimersByTime(1000) })
     expect(result.current.missingPermissions).toEqual([{ name: 'Safari', scope: 'browser' }])
 
-    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: null, lastActivity: { app: 'Safari', url: 'https://example.com', ts: 1_001_900 } })
+    fetchCompanionDebug.mockResolvedValueOnce({ helperInstalled: true, permissionMissing: null, missingPermissions: [] })
     await act(async () => { vi.advanceTimersByTime(1000) })
     expect(result.current.missingPermissions).toEqual([])
   })
 
-  it('forgets latched permissions across a disabled period', async () => {
-    fetchCompanionDebug.mockResolvedValue({ helperInstalled: true, permissionMissing: 'Safari' })
+  it('returns to unchecked while disabled and accepts the next native state', async () => {
+    fetchCompanionDebug.mockResolvedValue({ helperInstalled: true, permissionMissing: 'Safari', missingPermissions: ['Safari'] })
     const { result, rerender } = renderHook(({ enabled }) => useCompanionStatus({ enabled, intervalMs: 1000 }), { initialProps: { enabled: true } })
     await flush()
     expect(result.current.missingPermissions).toHaveLength(1)
 
     rerender({ enabled: false })
     await flush()
-    fetchCompanionDebug.mockResolvedValue({ helperInstalled: true, permissionMissing: null })
+    fetchCompanionDebug.mockResolvedValue({ helperInstalled: true, permissionMissing: null, missingPermissions: [] })
     rerender({ enabled: true })
     await flush()
     expect(result.current.missingPermissions).toEqual([])

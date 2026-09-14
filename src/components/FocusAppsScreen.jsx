@@ -28,7 +28,7 @@ import {
   protectionSetupNameIssue,
   removeProtectionSetup,
 } from '../lib/protectionSetups'
-import { getProtectionReadiness } from '../lib/protectionReadiness'
+import { getProtectionReadiness, missingPermissionsFromDebug } from '../lib/protectionReadiness'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
 import {
   loadContractSettings,
@@ -141,8 +141,11 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
   const lastActivityTs = debug?.lastActivity?.ts || 0
   const pollFresh = lastPollTs > 0 && now - lastPollTs <= TRACKING_STALE_MS
   const activityFresh = lastActivityTs > 0 && now - lastActivityTs <= TRACKING_STALE_MS
-  const permissionMissing = debug?.permissionMissing
-  const trackingActive = connected && pollFresh && activityFresh && !permissionMissing
+  const missingPermissions = missingPermissionsFromDebug(debug)
+  const systemPermissionMissing = missingPermissions.some(item => item.scope === 'system')
+  const browserPermissionsMissing = missingPermissions.filter(item => item.scope === 'browser')
+  const permissionMissing = missingPermissions.map(item => item.name).join(', ')
+  const trackingActive = connected && pollFresh && activityFresh && !systemPermissionMissing
   const trackingKnown = connected && lastPollTs > 0
   const blockedAppsCount = debug?.blockedAppsCount || 0
   const blockedDomainsCount = debug?.blockedDomainsCount || 0
@@ -173,15 +176,15 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
     },
     {
       label: 'Tracking',
-      state: !connected || permissionMissing
+      state: !connected || systemPermissionMissing
         ? 'unavailable'
         : trackingActive
           ? 'active'
           : trackingKnown
             ? 'stale'
             : 'unavailable',
-      detail: permissionMissing
-        ? `Missing Automation permission for ${permissionMissing}.`
+      detail: systemPermissionMissing
+        ? 'Missing Automation permission for System Events.'
         : trackingActive
           ? `Last activity ${ageLabel(lastActivityTs, now)}.`
           : trackingKnown
@@ -192,30 +195,34 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
       label: 'Website blocking',
       state: !sessionActive || !websiteBlockingConfigured
         ? 'off'
-        : hostActive
-          ? 'active'
-          : hostCancelled
-            ? 'off'
-            : hostFailed
-              ? 'failed'
-              : 'unconfirmed',
+        : systemPermissionMissing || browserPermissionsMissing.length > 0
+          ? 'limited'
+          : hostActive
+            ? 'active'
+            : hostCancelled
+              ? 'off'
+              : hostFailed
+                ? 'failed'
+                : 'unconfirmed',
       detail: !sessionActive
         ? 'Off because there is no active session.'
         : !websiteBlockingConfigured
           ? 'No blocked websites are configured for this session.'
-          : hostActive
-            ? `${blockedDomainsCount} domain${blockedDomainsCount === 1 ? '' : 's'} blocked system-wide via /etc/hosts.`
-            : hostCancelled
-              ? 'Off because the admin password prompt was dismissed.'
-              : hostFailed
-                ? `Failed: ${debug.hostBlockError}`
-                : 'Requested, but the companion has not confirmed the hosts block yet.',
+          : systemPermissionMissing || browserPermissionsMissing.length > 0
+            ? `Cannot reliably close blocked websites without Automation access for ${permissionMissing}.`
+            : hostActive
+              ? `${blockedDomainsCount} domain${blockedDomainsCount === 1 ? '' : 's'} blocked system-wide via /etc/hosts.`
+              : hostCancelled
+                ? 'Off because the admin password prompt was dismissed.'
+                : hostFailed
+                  ? `Failed: ${debug.hostBlockError}`
+                  : 'Requested, but the companion has not confirmed the hosts block yet.',
     },
     {
       label: 'App blocking',
       state: !sessionActive || !appBlockingConfigured
         ? 'off'
-        : permissionMissing
+        : systemPermissionMissing
           ? 'failed'
           : trackingActive
             ? 'active'
@@ -224,7 +231,7 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
         ? 'Off because there is no active session.'
         : !appBlockingConfigured
           ? 'No blocked apps or strict allowlist are configured for this session.'
-          : permissionMissing
+          : systemPermissionMissing
             ? 'Cannot reliably hide apps without Automation permission.'
             : trackingActive
               ? strictMode
@@ -253,8 +260,9 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
   ]
 
   const blockingConfigured = appBlockingConfigured || websiteBlockingConfigured
-  const websiteOk = !websiteBlockingConfigured || hostActive
-  const appOk = !appBlockingConfigured || (trackingActive && !permissionMissing)
+  const websitePermissionMissing = systemPermissionMissing || browserPermissionsMissing.length > 0
+  const websiteOk = !websiteBlockingConfigured || (hostActive && !websitePermissionMissing)
+  const appOk = !appBlockingConfigured || trackingActive
 
   if (!connected) {
     return {
@@ -276,7 +284,7 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
       dimensions,
     }
   }
-  if (!trackingActive || permissionMissing || hostFailed || hostCancelled) {
+  if (!trackingActive || hostFailed || hostCancelled) {
     return {
       level: 'degraded',
       title: 'Degraded',

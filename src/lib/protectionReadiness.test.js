@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   UNCHECKED_COMPANION_STATUS,
-  UNNAMED_PERMISSION_HOLD_MS,
   companionStatusFromDebug,
   getProtectionReadiness,
-  missingPermissionsFromLatch,
-  nextPermissionLatch,
+  missingPermissionsFromDebug,
   permissionTarget,
   protectionRuleCounts,
 } from './protectionReadiness'
@@ -47,6 +45,8 @@ describe('protection readiness', () => {
     expect(companionStatusFromDebug(null)).toEqual({ checked: true, connected: false, helperInstalled: false, missingPermissions: [] })
     expect(companionStatusFromDebug({ helperInstalled: 'yes' })).toEqual({ checked: true, connected: true, helperInstalled: false, missingPermissions: [] })
     expect(companionStatusFromDebug({ helperInstalled: true, permissionMissing: '  Safari ' }).missingPermissions).toEqual([SAFARI])
+    expect(companionStatusFromDebug({ helperInstalled: true, permissionMissing: 'Safari', missingPermissions: [] }).missingPermissions).toEqual([])
+    expect(companionStatusFromDebug({ missingPermissions: ['Safari', 'System Events', 'Safari'] }).missingPermissions).toEqual([SYSTEM, SAFARI])
     expect(companionStatusFromDebug({ permissionMissing: '   ' }).missingPermissions).toEqual([])
     expect(companionStatusFromDebug({ permissionMissing: true }).missingPermissions).toEqual([])
   })
@@ -54,10 +54,10 @@ describe('protection readiness', () => {
 
 describe('which Automation permission blocks which rules', () => {
   it('attributes each Companion report to what it actually blocks', () => {
-    expect(permissionTarget('System Events')).toEqual({ name: 'System Events', scope: 'system', named: true })
-    expect(permissionTarget('Brave Browser')).toEqual({ name: 'Brave Browser', scope: 'browser', named: true })
-    // hide_app names no target, so the Companion falls back to this label.
-    expect(permissionTarget('Browser (check Automation permissions)')).toEqual({ name: 'System Events', scope: 'system', named: false })
+    expect(permissionTarget('System Events')).toEqual({ name: 'System Events', scope: 'system' })
+    expect(permissionTarget('Brave Browser')).toEqual({ name: 'Brave Browser', scope: 'browser' })
+    // Legacy unnamed reports are treated as system-wide rather than guessed narrow.
+    expect(permissionTarget('Browser (check Automation permissions)')).toEqual({ name: 'System Events', scope: 'system' })
     expect(permissionTarget('Something new')).toMatchObject({ name: 'System Events', scope: 'system' })
     expect(permissionTarget('')).toBeNull()
     expect(permissionTarget(null)).toBeNull()
@@ -107,75 +107,17 @@ describe('which Automation permission blocks which rules', () => {
   })
 })
 
-describe('permission latch', () => {
-  const T = 1_000_000
-  const debugAt = (overrides = {}) => ({ helperInstalled: true, lastActivity: { app: 'Slack', url: null, ts: T - 1000 }, ...overrides })
-
-  it('keeps a browser report after the user switches away from that browser', () => {
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: 'Safari', lastActivity: { app: 'Safari', url: null, ts: T - 100 } }), T)
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Slack', url: null, ts: T + 3000 } }), T + 3000)
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Terminal', url: null, ts: T + 60_000 } }), T + 60_000)
-
-    expect(missingPermissionsFromLatch(latch)).toEqual([SAFARI])
+describe('native permission reports', () => {
+  it('trusts an explicit empty native set over the legacy scalar', () => {
+    expect(missingPermissionsFromDebug({ permissionMissing: 'Safari', missingPermissions: [] })).toEqual([])
   })
 
-  it('clears a browser report only when that browser later yields a URL', () => {
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: 'Safari' }), T)
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Safari', url: null, ts: T + 3000 } }), T + 3000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SAFARI])
-
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Google Chrome', url: 'https://example.com', ts: T + 6000 } }), T + 6000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SAFARI])
-
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Safari', url: 'https://example.com', ts: T - 5 } }), T + 9000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SAFARI])
-
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Safari', url: 'https://example.com', ts: T + 12_000 } }), T + 12_000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([])
-  })
-
-  it('clears a named System Events report once frontmost detection works again', () => {
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: 'System Events' }), T)
-    latch = nextPermissionLatch(latch, debugAt(), T + 3000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SYSTEM])
-
-    latch = nextPermissionLatch(latch, debugAt({ lastActivity: { app: 'Slack', url: null, ts: T + 6000 } }), T + 6000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([])
-  })
-
-  it('holds an unnamed report for the full hold window despite fresh activity', () => {
-    const unnamed = 'Browser (check Automation permissions)'
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: unnamed }), T)
-    const fresh = at => debugAt({ lastActivity: { app: 'Slack', url: null, ts: at } })
-
-    latch = nextPermissionLatch(latch, fresh(T + UNNAMED_PERMISSION_HOLD_MS - 1), T + UNNAMED_PERMISSION_HOLD_MS - 1)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SYSTEM])
-
-    latch = nextPermissionLatch(latch, fresh(T + UNNAMED_PERMISSION_HOLD_MS), T + UNNAMED_PERMISSION_HOLD_MS)
-    expect(missingPermissionsFromLatch(latch)).toEqual([])
-  })
-
-  it('restarts the hold on a repeated report and never downgrades a named one', () => {
-    const unnamed = 'Browser (check Automation permissions)'
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: unnamed }), T)
-    latch = nextPermissionLatch(latch, debugAt({ permissionMissing: unnamed }), T + 60_000)
-    latch = nextPermissionLatch(latch, debugAt(), T + UNNAMED_PERMISSION_HOLD_MS + 1)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SYSTEM])
-
-    let named = nextPermissionLatch({}, debugAt({ permissionMissing: 'System Events' }), T)
-    named = nextPermissionLatch(named, debugAt({ permissionMissing: unnamed }), T + 1000)
-    expect(named['System Events'].named).toBe(true)
-  })
-
-  it('drops everything when the Companion disappears', () => {
-    const latch = nextPermissionLatch({}, debugAt({ permissionMissing: 'Safari' }), T)
-    expect(nextPermissionLatch(latch, null, T + 3000)).toEqual({})
-  })
-
-  it('lists System Events before browsers', () => {
-    let latch = nextPermissionLatch({}, debugAt({ permissionMissing: 'Safari' }), T)
-    latch = nextPermissionLatch(latch, debugAt({ permissionMissing: 'System Events', lastActivity: { app: 'Safari', url: null, ts: T - 1 } }), T + 3000)
-    expect(missingPermissionsFromLatch(latch)).toEqual([SYSTEM, SAFARI])
+  it('normalizes, deduplicates, and orders native reports', () => {
+    expect(missingPermissionsFromDebug({ missingPermissions: ['Safari', 'Something old', 'Safari', 'Google Chrome'] })).toEqual([
+      SYSTEM,
+      { name: 'Google Chrome', scope: 'browser' },
+      SAFARI,
+    ])
   })
 })
 

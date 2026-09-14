@@ -4,11 +4,6 @@ export const SYSTEM_EVENTS_PERMISSION = 'System Events'
 // (companion/src-tauri/src/activity.rs: browser_url, redirect_browser_tab).
 export const COMPANION_AUTOMATION_BROWSERS = Object.freeze(['Safari', 'Google Chrome', 'Arc', 'Brave Browser'])
 
-// A report without a named target ("Browser (check Automation permissions)")
-// comes from an osascript call that names no app, which can succeed again only
-// when it next runs. Hold it this long before trusting its absence.
-export const UNNAMED_PERMISSION_HOLD_MS = 2 * 60 * 1000
-
 export const UNCHECKED_COMPANION_STATUS = Object.freeze({
   checked: false,
   connected: false,
@@ -27,59 +22,33 @@ export const UNCHECKED_COMPANION_STATUS = Object.freeze({
 export function permissionTarget(report) {
   const name = typeof report === 'string' ? report.trim() : ''
   if (!name) return null
-  if (COMPANION_AUTOMATION_BROWSERS.includes(name)) return { name, scope: 'browser', named: true }
-  return { name: SYSTEM_EVENTS_PERMISSION, scope: 'system', named: name === SYSTEM_EVENTS_PERMISSION }
+  if (COMPANION_AUTOMATION_BROWSERS.includes(name)) return { name, scope: 'browser' }
+  return { name: SYSTEM_EVENTS_PERMISSION, scope: 'system' }
 }
 
-// The Companion clears `permissionMissing` whenever any named osascript call
-// succeeds, and only asks a browser while it is frontmost. The raw report
-// therefore comes and goes as the user switches apps. This latch keeps a
-// report until the Companion's own activity shows the permission working:
-// - a browser: an activity from that browser, newer than the report, that
-//   carries a URL (reading the URL is the Automation call that failed);
-// - System Events: any activity newer than the report (frontmost detection is
-//   the System Events call, and activity only updates when it succeeds);
-// - an unnamed report: no repeat for UNNAMED_PERMISSION_HOLD_MS.
-export function nextPermissionLatch(latch, debug, now = Date.now()) {
-  if (!debug) return {}
-  const target = permissionTarget(debug.permissionMissing)
-  const activity = debug.lastActivity
-  const activityTs = Number(activity?.ts) || 0
-  const next = {}
-  for (const [name, entry] of Object.entries(latch || {})) {
-    if (target?.name === name) continue
-    const resolved = entry.scope === 'browser'
-      ? activity?.app === name && Boolean(activity?.url) && activityTs > entry.reportedAt
-      : entry.named
-        ? activityTs > entry.reportedAt
-        : now - entry.reportedAt >= UNNAMED_PERMISSION_HOLD_MS
-    if (!resolved) next[name] = entry
+// New Companion builds keep the complete permission set in native state, so
+// it survives React screen changes and can be cleared only by a successful
+// AppleScript call to that same target. The legacy scalar remains a safe
+// fallback for older debug payloads.
+export function missingPermissionsFromDebug(debug) {
+  const reports = Array.isArray(debug?.missingPermissions)
+    ? debug.missingPermissions
+    : [debug?.permissionMissing]
+  const byName = new Map()
+  for (const report of reports) {
+    const target = permissionTarget(report)
+    if (target) byName.set(target.name, target)
   }
-  if (target) {
-    const previous = latch?.[target.name]
-    next[target.name] = {
-      scope: target.scope,
-      // Once System Events is reported by name, an unnamed repeat must not
-      // downgrade it to the time-based hold.
-      named: target.named || previous?.named === true,
-      reportedAt: now,
-    }
-  }
-  return next
-}
-
-export function missingPermissionsFromLatch(latch) {
-  return Object.entries(latch || {})
-    .map(([name, entry]) => ({ name, scope: entry.scope }))
+  return [...byName.values()]
     .sort((a, b) => (a.scope === b.scope ? a.name.localeCompare(b.name) : a.scope === 'system' ? -1 : 1))
 }
 
-export function companionStatusFromDebug(debug, latch = nextPermissionLatch({}, debug)) {
+export function companionStatusFromDebug(debug) {
   return {
     checked: true,
     connected: Boolean(debug),
     helperInstalled: debug?.helperInstalled === true,
-    missingPermissions: debug ? missingPermissionsFromLatch(latch) : [],
+    missingPermissions: debug ? missingPermissionsFromDebug(debug) : [],
   }
 }
 
