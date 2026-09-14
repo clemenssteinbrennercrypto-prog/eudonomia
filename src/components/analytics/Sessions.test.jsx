@@ -100,7 +100,7 @@ describe('Sessions — wall-clock timing', () => {
     const html = render([s])
 
     expect(html).toContain('60m active')
-    expect(html).toContain('180m paused')
+    expect(html).toContain('180m break')
   })
 
   it('exports wall, active, and pause durations as separate columns', () => {

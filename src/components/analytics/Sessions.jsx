@@ -136,7 +136,7 @@ function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
           {fmtDate(displayTimestamp)} · {startedAt == null ? fmtTime(session.timestamp) : `${fmtTime(startedAt)}–${fmtTime(endedAt)}`}
           {session.workspace?.name ? ` · ${session.workspace.name}` : ''}
           {' · '}{fmtDuration(session.actualSeconds)} active
-          {pausedSeconds != null ? ` · ${fmtDuration(pausedSeconds)} paused` : ''}
+          {pausedSeconds != null ? ` · ${fmtDuration(pausedSeconds)} break` : ''}
         </p>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>

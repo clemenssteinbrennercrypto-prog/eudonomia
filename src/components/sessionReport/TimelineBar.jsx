@@ -74,7 +74,7 @@ export default function TimelineBar({ timeline = [], session = null, height = 12
                 left: `${(start / wallSeconds) * 100}%`,
                 width: `${((end - start) / wallSeconds) * 100}%`,
                 background: 'repeating-linear-gradient(135deg, rgba(148,163,184,0.48) 0 4px, rgba(71,85,105,0.58) 4px 8px)',
-              }} title={`Pause · ${fmtTime(pause.startedAt)}–${fmtTime(pause.endedAt)}`} />
+              }} title={`Break · ${fmtTime(pause.startedAt)}–${fmtTime(pause.endedAt)}`} />
             )
           })}
         </div>

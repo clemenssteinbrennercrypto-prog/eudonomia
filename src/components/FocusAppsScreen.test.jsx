@@ -251,4 +251,24 @@ describe('FocusAppsScreen readiness', () => {
     expect(within(website).getByText('limited')).toBeInTheDocument()
     expect(within(website).getByText(/tab|close blocked websites|Automation access/i)).toBeInTheDocument()
   })
+
+  it('reports configured protection as active while focus measurement is paused', async () => {
+    const now = Date.now()
+    companion.debug = {
+      helperInstalled: true,
+      sessionActive: true,
+      sessionState: 'paused',
+      sessionEndTs: now + 60_000,
+      lastPollTs: now,
+      lastActivity: { app: 'Eudaimonai Companion', url: null, ts: now },
+      blockedAppsCount: 1,
+    }
+    await renderScreen()
+    fireEvent.click(screen.getByText('Advanced'))
+
+    expect(screen.getByText('Protection: Fully protected')).toBeInTheDocument()
+    expect(screen.getByText('Focus measurement paused. Blocking remains active until the session ends.')).toBeInTheDocument()
+    const appBlocking = screen.getByText('App blocking').parentElement
+    expect(within(appBlocking).getByText('active')).toBeInTheDocument()
+  })
 })

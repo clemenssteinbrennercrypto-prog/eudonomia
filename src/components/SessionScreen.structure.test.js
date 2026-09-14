@@ -17,6 +17,34 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source).not.toMatch(/accumulateMeasurement\(\{[^}]*pausedSeconds/s)
   })
 
+  it('keeps protection and the planned wall clock running during a pause', () => {
+    const pauseStart = source.indexOf('const pauseSession = useCallback')
+    const resumeStart = source.indexOf('const resumeSession = useCallback', pauseStart)
+    const pauseHandler = source.slice(pauseStart, resumeStart)
+    expect(pauseHandler).toContain("pushBlockingState(true, 'paused')")
+    expect(pauseHandler).toContain('resetCameraEvidence()')
+    expect(pauseHandler).toContain('activeDistractionSinceRef.current = null')
+    expect(pauseHandler).toContain('recoveryElapsedBeforeFaultRef.current = null')
+    expect(pauseHandler).not.toContain("pushBlockingState(false, 'paused')")
+
+    const resumeEnd = source.indexOf('const interruptCamera = useCallback', resumeStart)
+    const resumeHandler = source.slice(resumeStart, resumeEnd)
+    expect(resumeHandler).toContain('if (ref.current > 0) ref.current += breakDuration')
+    expect(resumeHandler).not.toContain('lastGentleReminderRef.current = resumedAt')
+
+    const tickStart = source.indexOf('const tick = setInterval(() => {')
+    const measurementPauseGuard = source.indexOf('if (isPausedRef.current) return', tickStart)
+    const beforeMeasurementGuard = source.slice(tickStart, measurementPauseGuard)
+    expect(beforeMeasurementGuard).toContain('const sessionStartedAt = firstActiveAtRef.current')
+    expect(beforeMeasurementGuard).toContain('setTimeLeft(sessionTimerSeconds(duration, wallElapsedExact))')
+
+    const keepaliveStart = source.indexOf('const pushBlocking = () => {')
+    const keepaliveEnd = source.indexOf('pushBlocking()', keepaliveStart)
+    const keepalive = source.slice(keepaliveStart, keepaliveEnd)
+    expect(keepalive).toContain("pushBlockingState(true, isPausedRef.current ? 'paused' : 'active')")
+    expect(keepalive).not.toContain('!isPausedRef.current')
+  })
+
   it('stops a finished session before the tick can touch camera health', () => {
     const tickStart = source.indexOf('const tick = setInterval(() => {')
     const guard = source.indexOf('if (sessionEndedRef.current) return', tickStart)

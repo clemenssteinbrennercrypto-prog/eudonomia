@@ -193,7 +193,7 @@ const PHASE_INTERVENTION_POLICY = {
     alertDelayMult: 0.75,
     gentleDelayMs: 25_000,
     preDriftNudge: true,
-    cue: 'Drift is active. Switch back or pause the session.',
+    cue: 'Drift is active. Switch back or take a break.',
   },
 }
 
@@ -225,9 +225,9 @@ const PHASE_ALERT_COPY = {
     phone: { text: 'Put the phone away.', sub: 'Recovery needs fewer inputs, not more' },
   },
   drift: {
-    default: { text: 'Pause or switch back.', sub: 'The session has left productive focus' },
+    default: { text: 'Take a break or switch back.', sub: 'The session has left productive focus' },
     distraction_app: { text: 'Switch back or end the session.', sub: 'This is now active drift' },
-    away: { text: 'Return or pause.', sub: 'Do not leave the timer running unattended' },
+    away: { text: 'Return or take a break.', sub: 'Do not leave the timer running unattended' },
   },
 }
 
@@ -1189,9 +1189,22 @@ export default function SessionScreen({
     isPausedRef.current = true
     pausedAtRef.current = Date.now()
     statsSampleAtRef.current = pausedAtRef.current
+    // A break ends every measurement hold and streak. Native frames keep
+    // arriving for heartbeat/restart safety, but no wall-clock pause may mature
+    // an alert, penalty, recovery window or flow claim behind the overlay.
+    resetCameraEvidence()
+    recoveryElapsedBeforeFaultRef.current = null
+    lastDistractionRef.current = 0
+    activeFocusAppRef.current = null
+    activeDistractionAppRef.current = null
+    activeDistractionSinceRef.current = null
+    activityFocusBonusRef.current = 0
+    activityDistractionPenaltyRef.current = 0
+    lastActivityScoreTickRef.current = null
     setIsPaused(true)
-    await pushBlockingState(false, 'paused')
-  }, [pushBlockingState])
+    // Protection is a session commitment, not a measurement preference.
+    await pushBlockingState(true, 'paused')
+  }, [pushBlockingState, resetCameraEvidence])
 
   const resumeSession = useCallback(async () => {
     if (sessionEndedRef.current || !isPausedRef.current) return
@@ -1199,9 +1212,27 @@ export default function SessionScreen({
       restartCamera(true)
       return
     }
+    const resumingBreak = firstActiveAtRef.current != null
+    const resumedAt = Date.now()
+    const breakDuration = resumingBreak && pausedAtRef.current
+      ? Math.max(0, resumedAt - pausedAtRef.current)
+      : 0
     explicitResumeRequiredRef.current = false
     isPausedRef.current = false
-    closePauseAt(Date.now())
+    closePauseAt(resumedAt)
+    // Cooldowns and the adaptive no-alert window measure active attention time,
+    // so remove the break from their timestamps instead of granting a fresh
+    // cooldown that repeated short breaks could exploit.
+    if (resumingBreak) {
+      for (const ref of [
+        lastAlertTimeRef,
+        lastGentleReminderRef,
+        lastPhaseCueRef,
+        lastNoAlertCheckRef,
+      ]) {
+        if (ref.current > 0) ref.current += breakDuration
+      }
+    }
     setIsPaused(false)
     await pushBlockingState(true, 'active')
   }, [closePauseAt, pushBlockingState, restartCamera])
@@ -1299,7 +1330,8 @@ export default function SessionScreen({
     const allowedApps = focusCfg?.focusApps || []
     companionBlockingRef.current = { blockedApps, blockedDomains, strictMode, allowedApps }
     const pushBlocking = () => {
-      if (!isPausedRef.current && !sessionEndedRef.current) pushBlockingState(true)
+      if (sessionEndedRef.current || firstActiveAtRef.current == null) return
+      pushBlockingState(true, isPausedRef.current ? 'paused' : 'active')
     }
     pushBlocking()
     const blockingInterval = setInterval(pushBlocking, 30_000)
@@ -2587,9 +2619,12 @@ export default function SessionScreen({
       const now = Date.now()
       const previousSampleAt = statsSampleAtRef.current
       statsSampleAtRef.current = now
-      if (!isPausedRef.current) {
-        const elapsedExact = (now - startTimeRef.current - pausedTotalRef.current) / 1000
-        setTimeLeft(sessionTimerSeconds(duration, elapsedExact))
+      const sessionStartedAt = firstActiveAtRef.current
+      if (sessionStartedAt != null) {
+        // The planned session is a wall-clock commitment. A break withholds
+        // measurement but does not extend the deadline or stop protection.
+        const wallElapsedExact = (now - sessionStartedAt) / 1000
+        setTimeLeft(sessionTimerSeconds(duration, wallElapsedExact))
       }
       if (!cameraReadyRef.current) {
         const connectingSince = lastRecoverAtRef.current || startTimeRef.current
@@ -2827,7 +2862,7 @@ export default function SessionScreen({
           </div>
         </div>
       )}
-      {/* Pause overlay */}
+      {/* Break overlay */}
       {isPaused && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 50,
@@ -2837,13 +2872,15 @@ export default function SessionScreen({
           backdropFilter: 'blur(2px)',
         }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            {cameraStatus === 'ready' ? 'Paused' : cameraStatus === 'fault' ? 'Camera unavailable' : 'Reconnecting camera'}
+            {cameraStatus === 'ready' ? 'Break' : cameraStatus === 'fault' ? 'Camera unavailable' : 'Reconnecting camera'}
           </span>
-          {cameraStatus !== 'ready' && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
-              The timer and focus measurement are stopped. Resume becomes available only after a new camera frame is verified.
-            </span>
-          )}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+            {initialCameraPending
+              ? 'The session starts after the first verified camera frame.'
+              : cameraStatus === 'ready'
+                ? 'Focus measurement is paused. Protection and session time stay active.'
+                : 'Focus measurement is paused. Protection and session time stay active. Resume becomes available after a new camera frame is verified.'}
+          </span>
           <button
             onClick={() => cameraStatus === 'ready' ? resumeSession() : restartCamera(true)}
             style={{
@@ -3083,7 +3120,7 @@ export default function SessionScreen({
             background: 'rgba(0,0,0,0.55)', borderRadius: 100, padding: '5px 14px',
             fontSize: 11, color: '#fff', letterSpacing: '0.04em', fontWeight: 500,
           }}>
-            space pause · esc end · h camera
+            space break · esc end · h camera
           </span>
         </div>
       </div>

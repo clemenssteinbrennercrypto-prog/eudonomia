@@ -58,7 +58,7 @@ export default function MeasuredFacts({ session, analysis }) {
             <div className="stat-divider" />
             <div className="stat">
               <span className="stat-value">{fmtDuration(pausedSeconds)}</span>
-              <span className="stat-label">pause time</span>
+              <span className="stat-label">break time</span>
             </div>
           </>
         )}

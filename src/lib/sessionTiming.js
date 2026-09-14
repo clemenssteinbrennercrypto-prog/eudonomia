@@ -1,6 +1,7 @@
 // Wall-clock timing for a session is separate from its active/scored clock.
-// `actualSeconds` intentionally stops during a user pause; `startedAt`,
-// `endedAt`, and explicit pause intervals preserve when the work happened.
+// `actualSeconds` intentionally stops during a user pause; the planned session
+// deadline does not. `startedAt`, `endedAt`, and explicit pause intervals
+// preserve both the wall span and the active work that happened inside it.
 
 const finite = value => Number.isFinite(value)
 

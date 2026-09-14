@@ -106,10 +106,10 @@ describe('EndScreen post-session flow', () => {
     })
 
     expect(html).toContain('active time')
-    expect(html).toContain('pause time')
+    expect(html).toContain('break time')
     expect(html).toContain('60m')
     expect(html).toContain('180m')
-    expect(html).toContain('Pause')
+    expect(html).toContain('Break')
     expect(html).toContain('83%')
   })
 })

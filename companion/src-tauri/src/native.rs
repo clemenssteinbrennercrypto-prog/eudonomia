@@ -172,10 +172,10 @@ fn apply_session_payload(
 ) -> CompanionSession {
     let active = payload.active && payload.end_ts > received_at;
     let requested_state = payload.session_state.as_deref().unwrap_or("");
-    let session_state = if active {
-        "active"
-    } else if requested_state == "paused" {
+    let session_state = if active && requested_state == "paused" {
         "paused"
+    } else if active {
+        "active"
     } else if requested_state == "ended" {
         "ended"
     } else {
@@ -466,6 +466,57 @@ mod tests {
     }
 
     #[test]
+    fn paused_session_keeps_protection_active_and_preserves_blocking_rules() {
+        let state = state();
+        let response = apply_session_payload(
+            &state,
+            SessionPayload {
+                active: true,
+                end_ts: 200,
+                session_state: Some("paused".to_string()),
+                blocked_apps: vec!["Discord".to_string()],
+                blocked_domains: vec!["reddit.com".to_string()],
+                strict_mode: true,
+                allowed_apps: vec!["Code".to_string()],
+            },
+            100,
+        );
+
+        let config = state.session.lock().expect("session state");
+        assert!(response.active);
+        assert_eq!(response.session_state, "paused");
+        assert!(config.active);
+        assert_eq!(config.state, "paused");
+        assert_eq!(config.blocked_apps, vec!["Discord"]);
+        assert_eq!(config.blocked_domains, vec!["reddit.com"]);
+        assert!(config.strict_mode);
+        assert_eq!(config.allowed_apps, vec!["Code"]);
+    }
+
+    #[test]
+    fn inactive_pause_request_cannot_keep_stale_blocking_rules() {
+        let state = state();
+        let response = apply_session_payload(
+            &state,
+            SessionPayload {
+                active: false,
+                session_state: Some("paused".to_string()),
+                blocked_apps: vec!["Discord".to_string()],
+                blocked_domains: vec!["reddit.com".to_string()],
+                ..Default::default()
+            },
+            100,
+        );
+
+        let config = state.session.lock().expect("session state");
+        assert!(!response.active);
+        assert_eq!(response.session_state, "inactive");
+        assert!(!config.active);
+        assert!(config.blocked_apps.is_empty());
+        assert!(config.blocked_domains.is_empty());
+    }
+
+    #[test]
     fn app_nap_exemption_is_held_across_active_and_paused_and_released_on_end() {
         let state = state();
         assert!(state.app_nap.lock().unwrap().is_none());
@@ -484,12 +535,13 @@ mod tests {
             "active session must hold the App Nap exemption"
         );
 
-        // Paused (active=false, session_state="paused") must keep holding it —
-        // the session can resume any moment and the camera must stay live.
+        // Paused measurement keeps protection active, so the camera and native
+        // enforcement both remain live.
         apply_session_payload(
             &state,
             SessionPayload {
-                active: false,
+                active: true,
+                end_ts: 200,
                 session_state: Some("paused".to_string()),
                 ..Default::default()
             },

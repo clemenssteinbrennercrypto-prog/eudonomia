@@ -172,7 +172,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
         <AttentionField bins={data.attention} range={periodSelection.range} title={period.title} />
         {!hasAttentionSignal && <p className="attention-empty">Complete a measured session to reveal your attention field.</p>}
         <div className="attention-legend">
-          <span className="is-strong">Strong</span><span className="is-focused">Focused</span><span className="is-drift">Drift</span><span className="is-paused">Paused</span><span className="is-no-signal">No signal</span><span className="is-inactive">Inactive</span><span className="is-future">Future</span>
+          <span className="is-strong">Strong</span><span className="is-focused">Focused</span><span className="is-drift">Drift</span><span className="is-paused">Break</span><span className="is-no-signal">No signal</span><span className="is-inactive">Inactive</span><span className="is-future">Future</span>
         </div>
       </section>
 

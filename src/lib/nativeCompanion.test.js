@@ -117,9 +117,34 @@ describe('native session bridge', () => {
     await expect(pushCompanionSession({ active: true, endTs: 500 })).resolves.toBe(false)
   })
 
+  it('keeps protection active when focus measurement is paused', async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      sessionActive: true,
+      sessionState: 'paused',
+      sessionEndTs: 500,
+    })
+    globalThis.window = { __TAURI__: { core: { invoke } } }
+
+    await expect(pushCompanionSession({
+      active: true,
+      endTs: 500,
+      blockedApps: ['Discord'],
+      sessionState: 'paused',
+    })).resolves.toMatchObject({
+      active: true,
+      sessionActive: true,
+      sessionState: 'paused',
+    })
+  })
+
   it('normalizes malformed state names instead of trusting them', () => {
     expect(normalizeCompanionSession({ active: true, sessionState: 'invented' }))
       .toMatchObject({ active: true, sessionState: 'active' })
+  })
+
+  it('does not treat a contradictory ended state as active protection', () => {
+    expect(normalizeCompanionSession({ active: true, sessionState: 'ended' }))
+      .toMatchObject({ active: false, sessionActive: false, sessionState: 'ended' })
   })
 })
 

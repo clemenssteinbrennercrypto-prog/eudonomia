@@ -28,9 +28,13 @@ export function normalizeCompanionSession(data) {
   if (!data) return null
   const active = data.sessionActive ?? data.active ?? false
   const sessionState = normalizeSessionState(data.sessionState, active)
+  const protectionActive = active === true &&
+    (sessionState === 'active' || sessionState === 'paused')
   return {
-    active: active === true && sessionState === 'active',
-    sessionActive: active === true && sessionState === 'active',
+    // Native `active` means protection is enforced. Measurement state is
+    // independent: a protected session may deliberately be `paused`.
+    active: protectionActive,
+    sessionActive: protectionActive,
     sessionState,
     sessionEndTs: Number(data.sessionEndTs || data.endTs || 0),
     sessionUpdatedTs: Number(data.sessionUpdatedTs || data.receivedAt || 0),

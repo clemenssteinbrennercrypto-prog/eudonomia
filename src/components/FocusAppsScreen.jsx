@@ -136,7 +136,10 @@ function ageLabel(ts, now = Date.now()) {
 
 function getProtectionStatus(debug, connected, now = Date.now()) {
   const sessionState = debug?.sessionState || (debug?.sessionActive ? 'active' : 'inactive')
-  const sessionActive = connected && debug?.sessionActive === true && sessionState === 'active'
+  // `sessionActive` describes native enforcement. Measurement may be paused
+  // while the same app/site protection remains active.
+  const sessionActive = connected && debug?.sessionActive === true &&
+    (sessionState === 'active' || sessionState === 'paused')
   const lastPollTs = debug?.lastPollTs || 0
   const lastActivityTs = debug?.lastActivity?.ts || 0
   const pollFresh = lastPollTs > 0 && now - lastPollTs <= TRACKING_STALE_MS
@@ -171,7 +174,7 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
         : sessionState === 'active'
           ? `Running until ${debug?.sessionEndTs ? new Date(debug.sessionEndTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'unknown end time'}.`
           : sessionState === 'paused'
-            ? 'Paused. Blocking is intentionally off while paused.'
+            ? 'Focus measurement paused. Blocking remains active until the session ends.'
             : 'No active focus session. Blocking is off.',
     },
     {
@@ -276,9 +279,9 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
   if (!sessionActive) {
     return {
       level: 'off',
-      title: sessionState === 'paused' ? 'Off while paused' : 'Off',
+      title: 'Off',
       summary: sessionState === 'paused'
-        ? 'The focus session is paused, so protection is intentionally off.'
+        ? 'The companion reports a pause without active protection.'
         : 'No active focus session. The companion can track, but it is not enforcing blocking.',
       tone: 'yellow',
       dimensions,
@@ -306,7 +309,9 @@ function getProtectionStatus(debug, connected, now = Date.now()) {
     return {
       level: 'fully_protected',
       title: 'Fully protected',
-      summary: 'All configured protection paths are active or have no known native failure.',
+      summary: sessionState === 'paused'
+        ? 'Focus measurement is paused. All configured protection paths remain active.'
+        : 'All configured protection paths are active or have no known native failure.',
       tone: 'green',
       dimensions,
     }
