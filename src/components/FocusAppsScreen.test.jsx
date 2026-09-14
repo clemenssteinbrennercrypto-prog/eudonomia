@@ -193,15 +193,26 @@ describe('FocusAppsScreen readiness', () => {
     expect(screen.queryByText('Ready for focus')).toBeNull()
   })
 
-  it('asks for Automation access before claiming app protection', async () => {
+  it('asks for System Events access before claiming app protection', async () => {
     companion.debug = { helperInstalled: true, permissionMissing: 'System Events' }
     await renderScreen()
 
     fireEvent.click(setupButton('Writing'))
     const banner = within(document.querySelector('.protection-readiness'))
     expect(banner.getByText('Automation permission required')).toBeInTheDocument()
-    expect(banner.getByText(/Automation access for System Events in System Settings/)).toBeInTheDocument()
+    expect(banner.getByText(/Automation access for System Events in System Settings so these rules can be enforced/)).toBeInTheDocument()
     expect(screen.queryByText('Ready for focus')).toBeNull()
+  })
+
+  it('keeps a browser permission gap scoped to setups that block websites', async () => {
+    companion.debug = { helperInstalled: true, permissionMissing: 'Safari', lastActivity: { app: 'Safari', url: null, ts: 1 } }
+    await renderScreen()
+
+    const banner = () => within(document.querySelector('.protection-readiness'))
+    expect(banner().getByText(/Automation access for Safari in System Settings so blocked websites can be closed there/)).toBeInTheDocument()
+
+    fireEvent.click(setupButton('Writing'))
+    expect(banner().getByText('Ready for focus')).toBeInTheDocument()
   })
 
   it('asks for the website helper before claiming website protection', async () => {

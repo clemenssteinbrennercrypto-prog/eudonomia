@@ -1218,7 +1218,7 @@ export default function FocusAppsScreen({
                     empty: 'Add at least one distraction below or choose Strict protection.',
                     checking: 'Rules are set. Verifying that the Companion can enforce them.',
                     disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
-                    permission: `Enable Eudaimonai Companion Automation access for ${readiness.permissionMissing} in System Settings so apps can be hidden.`,
+                    permission: `Enable Eudaimonai Companion Automation access for ${readiness.permissionMissing} in System Settings so ${readiness.permissionScope === 'system' ? 'these rules can be enforced' : 'blocked websites can be closed there'}.`,
                     helper: 'Install the website blocking helper under Advanced so websites can be blocked.',
                   }[readiness.state]}
               </p>

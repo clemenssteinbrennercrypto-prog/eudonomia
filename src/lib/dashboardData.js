@@ -86,7 +86,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     sessions,
   })
   const readiness = getProtectionReadiness({ enabled: focusModeEnabled, setup: focusConfig, nativeStatus })
-  const { appCount, websiteCount } = readiness
+  const { distractionCount, websiteCount } = readiness
   const protection = ({
     off: { state: 'off', label: 'Off', detail: 'Focus mode disabled' },
     empty: { state: 'empty', label: 'Not configured', detail: 'Choose apps and websites' },
@@ -97,7 +97,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     ready: {
       state: 'ready',
       label: 'Ready',
-      detail: `${readiness.strictMode ? 'Strict · ' : ''}${appCount} ${appCount === 1 ? 'app' : 'apps'} · ${websiteCount} ${websiteCount === 1 ? 'website' : 'websites'}`,
+      detail: `${readiness.strictMode ? 'Strict · ' : ''}${distractionCount} ${distractionCount === 1 ? 'distraction' : 'distractions'} · ${websiteCount} ${websiteCount === 1 ? 'website' : 'websites'}`,
     },
   })[readiness.state]
 

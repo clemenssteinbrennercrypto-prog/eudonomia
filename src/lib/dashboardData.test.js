@@ -250,21 +250,21 @@ describe('dashboard data', () => {
       focusConfig: { distractionApps: ['Slack'], distractionDomains: ['youtube.com'] },
       nativeStatus: { checked: true, connected: true, helperInstalled: true },
     }).protection
-    expect(ready).toEqual({ state: 'ready', label: 'Ready', detail: '1 app · 1 website' })
+    expect(ready).toEqual({ state: 'ready', label: 'Ready', detail: '1 distraction · 1 website' })
   })
 
-  it('counts a migrated domain-only rule once instead of as an app and a website', () => {
+  it('counts rules and blocked websites without guessing whether an entry is an app', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),
       sessions: [],
       range: 'day',
       now: NOW,
       focusModeEnabled: true,
-      focusConfig: { distractionApps: ['reddit.com', 'Slack'], distractionDomains: ['reddit.com'] },
+      focusConfig: { distractionApps: ['reddit.com', 'Draw.io', 'Slack'], distractionDomains: ['reddit.com', 'draw.io'] },
       nativeStatus: { checked: true, connected: true, helperInstalled: true },
     }).protection
 
-    expect(result).toEqual({ state: 'ready', label: 'Ready', detail: '1 app · 1 website' })
+    expect(result).toEqual({ state: 'ready', label: 'Ready', detail: '3 distractions · 2 websites' })
   })
 
   it('keeps a domain-only setup configured and asks for the website helper', () => {
@@ -276,13 +276,17 @@ describe('dashboard data', () => {
     expect(buildDashboardData({ ...base, focusConfig, nativeStatus: { checked: true, connected: true, helperInstalled: false } }).protection.state).toBe('helper')
   })
 
-  it('reports missing Automation permission instead of ready when apps are hidden', () => {
+  it('reports the Automation permission that blocks the configured rules', () => {
     const base = { ledger: emptyFocusLedger(), sessions: [], range: 'day', now: NOW, focusModeEnabled: true }
-    const nativeStatus = { checked: true, connected: true, helperInstalled: true, permissionMissing: 'System Events' }
+    const status = missingPermissions => ({ checked: true, connected: true, helperInstalled: true, missingPermissions })
+    const apps = { distractionApps: ['Slack'], distractionDomains: [] }
+    const site = { distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] }
 
-    expect(buildDashboardData({ ...base, nativeStatus, focusConfig: { distractionApps: ['Slack'], distractionDomains: [] } }).protection)
+    expect(buildDashboardData({ ...base, nativeStatus: status([{ name: 'System Events', scope: 'system' }]), focusConfig: site }).protection)
       .toEqual({ state: 'permission', label: 'Permission required', detail: 'Allow Automation access for System Events' })
-    expect(buildDashboardData({ ...base, nativeStatus, focusConfig: { distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] } }).protection.state)
+    expect(buildDashboardData({ ...base, nativeStatus: status([{ name: 'Safari', scope: 'browser' }]), focusConfig: site }).protection)
+      .toEqual({ state: 'permission', label: 'Permission required', detail: 'Allow Automation access for Safari' })
+    expect(buildDashboardData({ ...base, nativeStatus: status([{ name: 'Safari', scope: 'browser' }]), focusConfig: apps }).protection.state)
       .toBe('ready')
   })
 

@@ -90,15 +90,25 @@ describe('SessionIntentScreen', () => {
       expect(appsOnly).toContain('Start protected session')
     })
 
-    it('does not claim protection when the Companion lacks Automation access for hiding apps', () => {
-      const denied = { ...CONNECTED, permissionMissing: 'System Events' }
+    it('does not claim any protection when the Companion lacks System Events access', () => {
+      const denied = { ...CONNECTED, missingPermissions: [{ name: 'System Events', scope: 'system' }] }
       const html = render({ nativeStatus: denied })
       expect(html).toContain('Writing · permission required')
-      expect(html).toContain('Automation access for System Events')
+      expect(html).toContain('Nothing is enforced until the Companion has Automation access for System Events.')
       expect(html).not.toContain('Start protected session')
 
       const websiteOnly = render({ protectionSetup: { ...writing, distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] }, nativeStatus: denied })
-      expect(websiteOnly).toContain('Start protected session')
+      expect(websiteOnly).not.toContain('Start protected session')
+    })
+
+    it('limits a browser permission gap to website protection', () => {
+      const denied = { ...CONNECTED, missingPermissions: [{ name: 'Safari', scope: 'browser' }] }
+      expect(render({ nativeStatus: denied })).toContain('Start protected session')
+
+      const websiteOnly = render({ protectionSetup: { ...writing, distractionApps: ['reddit.com'], distractionDomains: ['reddit.com'] }, nativeStatus: denied })
+      expect(websiteOnly).toContain('Writing · permission required')
+      expect(websiteOnly).toContain('Blocked websites can&#x27;t be closed in Safari until the Companion has Automation access.')
+      expect(websiteOnly).not.toContain('Start protected session')
     })
 
     it('treats strict mode without a blocklist as protection once the Companion is connected', () => {
