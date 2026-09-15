@@ -1784,8 +1784,8 @@ body {
   gap: 20px;
   padding-top: 24px;
 }
-.session-workspace-selector{display:grid;grid-template-columns:1fr minmax(180px,260px) auto;align-items:center;gap:12px;margin:0 0 22px;padding:13px 15px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 60%,transparent);border-radius:12px}.session-workspace-selector>div{display:grid;gap:3px}.session-workspace-selector span{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary)}.session-workspace-selector small{font-size:10px;color:var(--text-muted)}.session-workspace-selector select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px 10px}.session-workspace-selector button{background:transparent;color:var(--accent);border:1px solid var(--line);border-radius:9px;padding:9px 12px;cursor:pointer}
-@media(max-width:650px){.session-workspace-selector{grid-template-columns:1fr auto}.session-workspace-selector select{grid-column:1/-1;grid-row:2}}
+.session-workspace-selector{display:grid;grid-template-columns:1fr minmax(180px,260px) auto;align-items:center;gap:12px;margin:0 0 22px;padding:13px 15px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 60%,transparent);border-radius:12px}.session-workspace-copy{display:grid;gap:3px}.session-workspace-copy span{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary)}.session-workspace-selector small{font-size:10px;color:var(--text-muted)}.session-workspace-selector button{background:transparent;color:var(--accent);border:1px solid var(--line);border-radius:9px;padding:9px 12px;cursor:pointer}
+@media(max-width:650px){.session-workspace-selector{grid-template-columns:1fr auto}.session-workspace-selector>.session-select-control{grid-column:1/-1;grid-row:2}}
 
 .session-intent-form {
   padding: 28px;
@@ -1935,10 +1935,61 @@ body {
 .session-protection-summary strong { display: block; margin-top: 4px; color: var(--text); font-size: 12px; font-weight: 650; }
 .session-protection-summary p { margin-top: 3px; color: var(--text-muted); font-size: 10px; line-height: 1.4; }
 .session-protection-actions { display: flex; align-items: center; gap: 6px; }
-.session-protection-actions select,
-.session-protection-actions button { min-height: 31px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--text-secondary); font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
-.session-protection-actions select { max-width: 148px; color: var(--text); }
+.session-protection-actions button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--text-secondary); font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
+.session-protection-actions .session-select-control { width: min(148px, 38vw); }
 .session-protection-actions button { background: transparent; color: var(--accent); }
+
+.session-select-control {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  color: var(--text-muted);
+  transition: border-color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
+}
+.session-select-control::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.session-select-control:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.session-select-control:focus-within {
+  border-color: var(--ultra-bright);
+  color: var(--ultra-bright);
+}
+.session-select-control select {
+  width: 100%;
+  height: 100%;
+  padding: 0 36px 0 12px;
+  border: 0;
+  border-radius: inherit;
+  outline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-select-control select:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ultra-bright) 14%, transparent);
+}
 
 .session-intent-start {
   width: 100%;
@@ -2039,6 +2090,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .session-intent-tags button,
   .session-intent-options button,
+  .session-select-control,
   .session-recent-setups strong,
   .session-plan-backdrop,
   .session-plan-dialog,

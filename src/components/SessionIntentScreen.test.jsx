@@ -47,6 +47,17 @@ describe('SessionIntentScreen', () => {
     expect(html).toContain('▶')
   })
 
+  it('connects the workspace explanation to its clean select control', () => {
+    const html = renderIntent({
+      workspaces: [{ id: 'desk', name: 'Desk' }],
+      activeWorkspaceId: 'desk',
+    })
+
+    expect(html).toContain('class="session-select-control"')
+    expect(html).toContain('id="session-workspace-help"')
+    expect(html).toContain('aria-describedby="session-workspace-help"')
+  })
+
   it('names the active setup and starts a protected session only when rules can be enforced', () => {
     const html = renderIntent({
       task: 'Current task',

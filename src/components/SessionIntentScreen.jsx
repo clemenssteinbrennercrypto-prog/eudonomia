@@ -115,13 +115,15 @@ export default function SessionIntentScreen({
       </header>
 
       <div className="session-workspace-selector">
-        <div>
+        <div className="session-workspace-copy">
           <span>Active workspace</span>
-          <small>Spatial context used by focus tracking</small>
+          <small id="session-workspace-help">Spatial context used by focus tracking</small>
         </div>
-        <select value={activeWorkspaceId || ''} onChange={event => onWorkspaceChange?.(event.target.value)}>
-          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
-        </select>
+        <span className="session-select-control">
+          <select aria-label="Active workspace" aria-describedby="session-workspace-help" value={activeWorkspaceId || ''} onChange={event => onWorkspaceChange?.(event.target.value)}>
+            {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
+          </select>
+        </span>
         <button type="button" onClick={onEditWorkspaces}>Manage</button>
       </div>
 
@@ -246,13 +248,15 @@ export default function SessionIntentScreen({
             </div>
             <div className="session-protection-actions">
               {protectionSetups.length > 1 && onProtectionSetupChange && (
-                <select
-                  aria-label="Protection setup"
-                  value={protectionSetup?.id || ''}
-                  onChange={event => onProtectionSetupChange(event.target.value)}
-                >
-                  {protectionSetups.map(setup => <option key={setup.id} value={setup.id}>{setup.name}</option>)}
-                </select>
+                <span className="session-select-control">
+                  <select
+                    aria-label="Protection setup"
+                    value={protectionSetup?.id || ''}
+                    onChange={event => onProtectionSetupChange(event.target.value)}
+                  >
+                    {protectionSetups.map(setup => <option key={setup.id} value={setup.id}>{setup.name}</option>)}
+                  </select>
+                </span>
               )}
               {onEditProtection && <button type="button" onClick={onEditProtection}>{protectionConfigured ? 'Edit' : 'Set up'}</button>}
             </div>
