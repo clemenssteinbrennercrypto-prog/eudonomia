@@ -6,6 +6,7 @@ import {
   fetchOutputDelta,
   listenActivityUpdates,
   listenNativeCameraLandmarks,
+  listenProtectionEvents,
   normalizeCompanionSession,
   pushCompanionSession,
   setNativeCameraPreview,
@@ -161,6 +162,22 @@ describe('native events and output', () => {
     await expect(listenActivityUpdates(onUpdate)).resolves.toBe(unlisten)
     expect(listen).toHaveBeenCalledWith('activity-updated', expect.any(Function))
     expect(onUpdate).toHaveBeenCalledWith({ app: 'Orca', ts: 123 })
+  })
+
+  it('accepts only successful local protection event shapes', async () => {
+    const unlisten = vi.fn()
+    const listen = vi.fn(async (_name, handler) => {
+      handler({ payload: { kind: 'app_hidden', label: 'Discord', ts: 123 } })
+      handler({ payload: { kind: 'invented', label: 'Private', ts: 124 } })
+      return unlisten
+    })
+    globalThis.window = { __TAURI__: { event: { listen } } }
+    const onUpdate = vi.fn()
+
+    await expect(listenProtectionEvents(onUpdate)).resolves.toBe(unlisten)
+    expect(listen).toHaveBeenCalledWith('protection-enforced', expect.any(Function))
+    expect(onUpdate).toHaveBeenCalledOnce()
+    expect(onUpdate).toHaveBeenCalledWith({ kind: 'app_hidden', label: 'Discord', ts: 123 })
   })
 
   it('stays silent when no output folder is watched', async () => {

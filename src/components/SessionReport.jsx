@@ -20,12 +20,13 @@ export default function SessionReport({
   onPrimaryAction,
   onSecondaryAction,
   onRepeat,
+  hideTimeline = false,
 }) {
   const showRead = analysis.status !== 'awaiting_outcome'
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <MeasuredFacts session={session} analysis={analysis} />
+      <MeasuredFacts session={session} analysis={analysis} hideTimeline={hideTimeline} />
       <CheckIn session={session} analysis={analysis} onOutcomeChange={onOutcomeChange} />
       {showRead && <SessionRead analysis={analysis} />}
       <SessionDetails session={session} analysis={analysis} />

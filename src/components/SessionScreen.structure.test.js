@@ -11,7 +11,9 @@ describe('SessionScreen accumulation wiring', () => {
 
   it('stores wall-clock pause evidence without feeding it into score accumulation', () => {
     expect(source).toContain('pauseIntervalsRef.current.push({ startedAt: pausedAt, endedAt: resumedAt })')
-    expect(source).toContain('timelineSnapshotsRef.current.push({ ...result.timelineSample, wallSecond })')
+    expect(source).toContain('...result.timelineSample,')
+    expect(source).toContain('wallSecond,')
+    expect(source).toContain('scoreTrace: lastScoreTraceRef.current,')
     expect(source).toContain('pausedSeconds,')
     expect(source).toContain('pauseIntervals,')
     expect(source).not.toMatch(/accumulateMeasurement\(\{[^}]*pausedSeconds/s)

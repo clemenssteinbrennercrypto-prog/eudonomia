@@ -77,7 +77,7 @@ function exportCSV(sessions) {
   URL.revokeObjectURL(url)
 }
 
-// Unlike the CSV, the full backup is always the complete, lossless history —
+// Unlike the CSV, the full archive is always the complete, lossless history —
 // full records, timelines, and the ledger — regardless of the active filters.
 export function buildFullArchive(sessions, focusLedger, exportedAt = new Date().toISOString()) {
   return { schemaVersion: 1, exportedAt, sessions, focusLedger, focusScoreSchedule: loadFocusScoreSchedule() }
@@ -89,7 +89,7 @@ function exportFullArchive(sessions, focusLedger) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `eudaimonai-full-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `eudaimonai-full-archive-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -177,7 +177,7 @@ const ghostBtnStyle = {
  * SessionReport in place (SessionDetailView) — a dedicated route isn't needed
  * since "back" is just clearing the selection.
  */
-export default function Sessions({ sessions, focusLedger, selectedSessionId, onSelectSession, onDeleteSession, onClearAll, onUpdateSession }) {
+export default function Sessions({ sessions, focusLedger, selectedSessionId, onSelectSession, onDeleteSession, onClearAll, onUpdateSession, compact = false }) {
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('all')
   const [outcomeFilter, setOutcomeFilter] = useState('all')
@@ -293,17 +293,19 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {DATE_FILTERS.map(([val, label]) => (
-          <FilterPill key={val} active={dateFilter === val} onClick={() => { setDateFilter(val); setPage(0) }}>{label}</FilterPill>
-        ))}
-      </div>
+      {!compact && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {DATE_FILTERS.map(([val, label]) => (
+            <FilterPill key={val} active={dateFilter === val} onClick={() => { setDateFilter(val); setPage(0) }}>{label}</FilterPill>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {OUTCOME_FILTERS.map(([val, label]) => (
           <FilterPill key={val} active={outcomeFilter === val} onClick={() => { setOutcomeFilter(val); setPage(0) }}>{label}</FilterPill>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      {!compact && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {MEASURED_FILTERS.map(([val, label]) => (
           <FilterPill key={val} active={measuredFilter === val} onClick={() => { setMeasuredFilter(val); setPage(0) }}>{label}</FilterPill>
         ))}
@@ -317,7 +319,7 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
             {workspaceOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
         )}
-      </div>
+      </div>}
       <input
         type="text"
         className="text-input"
@@ -351,11 +353,22 @@ export default function Sessions({ sessions, focusLedger, selectedSessionId, onS
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => exportCSV(filtered)} style={ghostBtnStyle}>Export CSV</button>
-        <button type="button" onClick={() => exportFullArchive(sessions, focusLedger)} style={ghostBtnStyle}>Export full backup (JSON)</button>
-        <button type="button" disabled={Boolean(pendingAction)} onClick={() => { setActionError(null); setConfirmClear(true) }} style={{ ...ghostBtnStyle, opacity: pendingAction ? 0.5 : 1 }}>Clear all history</button>
-      </div>
+      {compact ? (
+        <details className="analytics-data-tools">
+          <summary>Data tools</summary>
+          <div>
+            <button type="button" onClick={() => exportCSV(filtered)} style={ghostBtnStyle}>Export CSV</button>
+            <button type="button" onClick={() => exportFullArchive(sessions, focusLedger)} style={ghostBtnStyle}>Export full archive (JSON)</button>
+            <button type="button" disabled={Boolean(pendingAction)} onClick={() => { setActionError(null); setConfirmClear(true) }} style={{ ...ghostBtnStyle, opacity: pendingAction ? 0.5 : 1 }}>Clear all history</button>
+          </div>
+        </details>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => exportCSV(filtered)} style={ghostBtnStyle}>Export CSV</button>
+          <button type="button" onClick={() => exportFullArchive(sessions, focusLedger)} style={ghostBtnStyle}>Export full archive (JSON)</button>
+          <button type="button" disabled={Boolean(pendingAction)} onClick={() => { setActionError(null); setConfirmClear(true) }} style={{ ...ghostBtnStyle, opacity: pendingAction ? 0.5 : 1 }}>Clear all history</button>
+        </div>
+      )}
 
       {confirmDeleteId && (
         <ConfirmDialog

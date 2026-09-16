@@ -22,7 +22,7 @@ function activityOutputLine(facts) {
  * outcome. Every number here comes straight from `analysis.measurement`/
  * `analysis.facts`, never from a conclusion (there may not be one yet).
  */
-export default function MeasuredFacts({ session, analysis }) {
+export default function MeasuredFacts({ session, analysis, hideTimeline = false }) {
   const { measurement, facts } = analysis
   const belowThresholdSeconds = measurement.scored
     ? Math.max(0, (measurement.measuredSeconds || 0) - (measurement.focusedSeconds || 0))
@@ -111,7 +111,7 @@ export default function MeasuredFacts({ session, analysis }) {
         )
       })()}
 
-      <TimelineBar timeline={session.timeline} session={session} />
+      {!hideTimeline && <TimelineBar timeline={session.timeline} session={session} />}
 
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
         {activityOutputLine(facts)}

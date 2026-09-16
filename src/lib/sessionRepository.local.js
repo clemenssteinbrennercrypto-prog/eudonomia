@@ -20,6 +20,7 @@ import {
 } from './storage'
 import { filterSessions, paginate } from './sessionQuery'
 import { loadFocusScoreSchedule } from './focusScoreSchedule'
+import { analyzeSession } from './sessionAnalysis'
 
 export const ARCHIVE_SCHEMA_VERSION = 1
 
@@ -41,11 +42,20 @@ export function createLocalSessionRepository() {
     },
 
     async saveSession(sessionData) {
-      return saveSessionSync(sessionData)
+      return saveSessionSync({
+        ...sessionData,
+        analysisSnapshot: analyzeSession(sessionData),
+      })
     },
 
     async updateSession(id, patch) {
-      updateSessionSync(id, patch)
+      const existing = loadSessions().find(session => session.id === id)
+      if (!existing) return null
+      const merged = { ...existing, ...patch }
+      updateSessionSync(id, {
+        ...patch,
+        analysisSnapshot: analyzeSession(merged),
+      })
       return loadSessions().find(session => session.id === id) || null
     },
 

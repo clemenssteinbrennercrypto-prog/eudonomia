@@ -11,6 +11,7 @@ import {
   listenCompanionSession,
   listenNativeCameraLandmarks,
   listenNativeCameraStatus,
+  listenProtectionEvents,
   listenWindowLifecycle,
   pushCompanionSession,
   setNativeCameraPreview,
@@ -59,6 +60,12 @@ import {
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
 import {
+  SCORE_TRACE_VERSION,
+  calculateBaseAttentionScore,
+  finalizeAttentionScore,
+  shouldBuildSustainedRamp,
+} from '../lib/attentionScore'
+import {
   PRIMARY_CAMERA_MEASUREMENT,
   nativeCameraFaultFor,
   nativeLandmarksForScoring,
@@ -70,22 +77,17 @@ import {
   BLINK_WIN_MS,
   CONF_UNCERTAIN_MAX,
   DISTRACTION_DOWN_HOLD_MS,
-  EARLY_MICROSLEEP_MS,
   EAR_PROLONGED_CLOSE,
   EAR_RECALIB_INTERVAL,
-  EYES_OFF_HOLD_SECS,
   FACE_ABSENT_HOLD_MS,
-  HEAD_DOWN_HOLD,
   HEAD_DRIFT_THRESH,
   HEAD_DRIFT_WIN_MS,
   HEAD_TURN_HOLD,
   IRIS_OFF_H,
   MAR_YAWN,
   PERCLOS_WIN_MS,
-  PHONE_HOLD_MS,
   PROLONGED_CLOSE_MS,
   UNCERTAIN_HOLD_MS,
-  YAWN_HOLD_MS,
 } from '../lib/cameraScoringConstants'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
@@ -901,6 +903,7 @@ export default function SessionScreen({
   const cameraRecoverTriesRef  = useRef(0)     // consecutive silent rebuild attempts
   const lastRecoverAtRef       = useRef(0)     // cooldown between rebuild attempts
   const rawScoreRef            = useRef(68)
+  const lastScoreTraceRef      = useRef(null)
   const scoreLowSinceRef       = useRef(null)
   const sustainedGoodMsRef     = useRef(0)   // ms of consecutive good focus (for ramp-up bonus)
   const lastFrameTsRef         = useRef(0)
@@ -947,6 +950,7 @@ export default function SessionScreen({
   const timelineSnapshotsRef = useRef([])
   const lastTimelineBucketRef = useRef(0)
   const distractionLogRef    = useRef([]) // [{second, reason}]
+  const protectionEventsRef  = useRef([]) // successful native enforcement only
   const activityAlignmentRef = useRef(emptyActivityAlignmentSummary())
   // Latest output evidence from the companion's watched folder. Polled rather
   // than fetched at the end, because endSession has to build its payload
@@ -1340,7 +1344,27 @@ export default function SessionScreen({
       activityRef.current = activity
       setActivityStatus(activity)
     })
+    let cancelled = false
+    let stopProtectionEvents = () => {}
+    void listenProtectionEvents((event) => {
+      if (sessionEndedRef.current || firstActiveAtRef.current == null) return
+      const last = protectionEventsRef.current.at(-1)
+      // Native polls every three seconds. One stubborn foreground app can be
+      // acted on twice before macOS switches focus; keep one user-visible event
+      // for that enforcement attempt rather than inflating Analytics.
+      if (last && last.kind === event.kind && last.label === event.label && event.ts - last.ts < 8_000) return
+      const ongoingPause = pausedAtRef.current ? Date.now() - pausedAtRef.current : 0
+      const second = Math.max(0, Math.round(
+        (Date.now() - startTimeRef.current - pausedTotalRef.current - ongoingPause) / 1000
+      ))
+      protectionEventsRef.current.push({ ...event, second })
+    }).then(unlisten => {
+      if (cancelled) unlisten()
+      else stopProtectionEvents = unlisten
+    })
     return () => {
+      cancelled = true
+      stopProtectionEvents()
       clearInterval(blockingInterval)
       stopActivityUpdates()
       pushBlockingState(false, sessionEndedRef.current ? 'ended' : 'inactive')
@@ -1415,7 +1439,11 @@ export default function SessionScreen({
       const wallSecond = firstActiveAtRef.current == null
         ? result.timelineSample.second
         : Math.max(0, (now - firstActiveAtRef.current) / 1000)
-      timelineSnapshotsRef.current.push({ ...result.timelineSample, wallSecond })
+      timelineSnapshotsRef.current.push({
+        ...result.timelineSample,
+        wallSecond,
+        scoreTrace: lastScoreTraceRef.current,
+      })
     }
 
     activityAlignmentRef.current = recordActivityAlignment(
@@ -1504,6 +1532,7 @@ export default function SessionScreen({
         detectorModelSha256: cameraMeasurement.detectorModelSha256,
       },
       attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      scoreTraceVersion: SCORE_TRACE_VERSION,
       plannedDuration:      duration,
       energyLevel,
       actualSeconds,
@@ -1523,6 +1552,7 @@ export default function SessionScreen({
       scoreMeasured:        hasMeasurement,
       timeline:             timelineSnapshotsRef.current,
       distractionLog:       distractionLogRef.current,
+      protectionEvents:     [...protectionEventsRef.current],
       sessionIntent:        sessionIntentRef.current,
       outputEvidence:       outputEvidenceRef.current,
       sessionContract:      sessionContractRef.current,
@@ -2096,18 +2126,9 @@ export default function SessionScreen({
     lastFrameTsRef.current = now
 
     // ── Scoring: earned focus, not assumed ──────────────────────────────────
-    // Scientific basis:
-    //  • Base 68: face present = necessary but not sufficient for focus
-    //  • Bonuses reward healthy signals (blink rate, head stability, work-zone gaze)
-    //  • Sustained-focus ramp: up to +15 after ~2 min of continuous good focus
-    //    (mirrors PERCLOS & cognitive-load research: focus must be sustained, not instant)
-    //  • Camera stare (pitch ≈ 0) does NOT earn the work-zone bonus, max ~83 without ramp
-    let score = hasFace ? 68 : 0
-    let primaryReason = 'focused'
-
+    // Hold/debounce state lives here; the arithmetic and its versioned trace
+    // live in attentionScore.js so the exact same rule can be audited in tests.
     if (faceAbsentMs >= FACE_ABSENT_HOLD_MS) {
-      score = 0
-      primaryReason = 'away'
       sustainedGoodMsRef.current = 0  // ramp resets when person is clearly away
       // Activity-based bonus/penalty accumulators must reset here too, otherwise
       // a distraction penalty built up while the user is away from the webcam
@@ -2122,111 +2143,45 @@ export default function SessionScreen({
         preDriftRiskRef.current = { active: false, level: 0, reason: 'stable' }
         setPreDriftRisk(preDriftRiskRef.current)
       }
-    } else if (faceAbsentMs > 0 && faceAbsentMs < FACE_ABSENT_HOLD_MS) {
-      score = focusScoreRef.current * 0.88
-    } else if (hasFace) {
-      // ── Positive signals ───────────────────────────────────────────────────
-      // Blink rate science (Doughty 2001; ergonomics.org.uk; frontiersin 2023):
-      //   • 12–20/min = optimal screen work rate → full bonus
-      //   • 5–11/min = blink SUPPRESSION during deep cognitive focus — this is
-      //     a POSITIVE signal of concentration, not fatigue. Brain inhibits blink
-      //     reflex to prevent perceptual blackout during intense information intake.
-      //     Do NOT penalize moderate suppression; small bonus for focus signal.
-      //   • 8–28/min extended normal range → small bonus
-      //   • <3/min = extreme suppression (likely fatigue or glazing, not focus) → penalized below
-      if (hasBlinkData && blinkRate >= 12 && blinkRate <= 20) score += 7
-      else if (hasBlinkData && blinkRate >= 5 && blinkRate < 12) score += 4  // focus suppression = good
-      else if (hasBlinkData && blinkRate >= 8 && blinkRate <= 28) score += 3
-
-      // Stable head position (not fidgeting)
-      if (fidgetVariance <= HEAD_DRIFT_THRESH * 0.5) score += 5
-      else if (fidgetVariance <= HEAD_DRIFT_THRESH) score += 2
-
-      // Work-zone gaze: pitch range adapts to webcam height.
-      // pitch ≈ 0 means staring at a top camera, but can be normal for low-angle cameras.
-      if (pitchDeg >= workZonePitchMin && pitchDeg < workZonePitchMax) score += 5
-      if (productiveDownward) score += 3
-      // Secondary monitor gaze = same focus value as primary screen gaze.
-      // A second monitor is a work tool, not a distraction — treat it identically.
-      if (productiveHorizontal) score += 5
-
-      // ── Penalties ─────────────────────────────────────────────────────────
-      if ((phoneMs >= PHONE_HOLD_MS && !productiveDownward) || distractionDownward) {
-        score -= 45
-        primaryReason = 'phone'
-      } else if (unknownPhoneDownward) {
-        score -= 18
-        if (primaryReason === 'focused') primaryReason = 'phone'
-      }
-      // Early microsleep signal (800ms): moderate penalty for drowsiness onset
-      // Full prolonged penalty at 1500ms (confirmed microsleep territory)
-      if (eyesClosedMs >= PROLONGED_CLOSE_MS) {
-        score -= 35
-        if (primaryReason === 'focused') primaryReason = 'prolonged'
-      } else if (earlyMicrosleepMs >= EARLY_MICROSLEEP_MS) {
-        // 800ms+ closure: significant drowsiness warning (PMC3836343)
-        score -= 15
-        if (primaryReason === 'focused') primaryReason = 'prolonged'
-      }
-      if (hasPerclos) {
-        if (perclos > 15)     score -= 30
-        else if (perclos > 8) score -= 15
-      }
-      if (yawnMs >= YAWN_HOLD_MS) {
-        score -= 20
-        if (primaryReason === 'focused') primaryReason = 'yawn'
-      }
-      if (lookingUpMs >= 3000 && pitchUpDT <= 15) {
-        score -= 25
-        if (primaryReason === 'focused') primaryReason = 'lookingup'
-      }
-      // Penalize only extreme blink suppression (<3/min) — not moderate focus suppression
-      // and high blink rates (>35/min = likely agitation or eye irritation)
-      if (hasBlinkData && blinkRate > 0 && (blinkRate < 3 || blinkRate > 35)) score -= 15
-      if (pitchDeg >= pitchDT && headDownSecs >= HEAD_DOWN_HOLD) {
-        if (productiveDownward) score -= 3
-        else score -= 25
-      } else if (pitchDeg >= pitchDT * 0.75) {
-        if (productiveDownward) score -= 1
-        else score -= 8
-      }
-      if (!productiveHorizontal) {
-        // unknownHorizontal (|yaw| > 30 with no matching side screen) intentionally
-        // falls through to the same threshold+hold logic below rather than a flat
-        // penalty — otherwise it pre-empts the severe (-25) sustained-turn penalty,
-        // capping ALL large head turns at -8 regardless of duration (dead-code bug:
-        // with default yawLT=30, the >= yawLT severe check becomes unreachable
-        // since anything past 30 was being diverted to the flat -8 branch first).
-        if (adjustedYawSigned >= yawLT && headTurnLeftSecs >= HEAD_TURN_HOLD) score -= 25
-        else if (adjustedYawSigned >= yawLT * 0.6) score -= 8
-        if (-adjustedYawSigned >= yawRT && headTurnRightSecs >= HEAD_TURN_HOLD) score -= 25
-        else if (-adjustedYawSigned >= yawRT * 0.6) score -= 8
-      }
-      // Eyes off the screen (horizontal gaze past neutral). The direction-aware
-      // deadzone above already excludes looking AT a side monitor, so no
-      // productiveHorizontal gate here — this now fires even in the 2-monitor case
-      // when the eyes dart off the monitor being faced. Mild + debounced (gaze is
-      // noisy). Reuses the 'lookingup' reason ("Eyes on the task").
-      if (eyesOffSecs >= EYES_OFF_HOLD_SECS) {
-        score -= 15
-        if (primaryReason === 'focused') primaryReason = 'lookingup'
-      }
-      if (eyesRolledUp) score -= 15
     }
 
-    score = Math.max(0, Math.min(85, score))  // raw capped at 85 — last 15 pts come from ramp
-
-    // Activity scoring is additive to the existing camera-derived score. Apply
-    // it after the raw camera cap so the capped +10 focus-app reward remains
-    // visible, while distraction penalties still stack with other penalties.
-    if (hasFace && activityPenalty) {
-      score = Math.max(0, score - activityPenalty)
-      if (activityDistractionMs >= ACTIVITY_REASON_HOLD_MS && primaryReason === 'focused') {
-        primaryReason = 'distraction_app'
-      }
-    } else if (hasFace && activityBonus) {
-      score = Math.min(100, score + activityBonus)
-    }
+    const baseScore = calculateBaseAttentionScore({
+      hasFace,
+      faceAbsentMs,
+      previousScore: focusScoreRef.current,
+      hasBlinkData,
+      blinkRate,
+      fidgetVariance,
+      pitchDeg,
+      workZonePitchMin,
+      workZonePitchMax,
+      productiveDownward,
+      productiveHorizontal,
+      phoneMs,
+      distractionDownward,
+      unknownPhoneDownward,
+      eyesClosedMs,
+      earlyMicrosleepMs,
+      hasPerclos,
+      perclos,
+      yawnMs,
+      lookingUpMs,
+      pitchUpDT,
+      pitchDT,
+      headDownSecs,
+      adjustedYawSigned,
+      yawLT,
+      yawRT,
+      headTurnLeftSecs,
+      headTurnRightSecs,
+      eyesOffSecs,
+      eyesRolledUp,
+      activityPenalty,
+      activityBonus,
+      activityDistractionMs,
+      activityReasonHoldMs: ACTIVITY_REASON_HOLD_MS,
+    })
+    const primaryReason = baseScore.primaryReason
 
     // ── Sustained-focus ramp (+0 to +15 over ~2 min) ──────────────────────
     // Attention Restoration Theory (Kaplan 1995; Mark et al. 2008):
@@ -2239,21 +2194,22 @@ export default function SessionScreen({
 
     if (trackingUncertain) {
       // signal unreliable — neither earn nor burn the focus ramp
-    } else if (score >= FLOW_SCORE) {
+    } else if (shouldBuildSustainedRamp(baseScore.score)) {
       sustainedGoodMsRef.current = Math.min(120_000, sustainedGoodMsRef.current + frameDelta * rampRate)
     } else {
       sustainedGoodMsRef.current = Math.max(0, sustainedGoodMsRef.current - frameDelta * 3)
     }
     const rampBonus = (sustainedGoodMsRef.current / 120_000) * 15
 
-    const rawFinal = Math.min(100, score + rampBonus)
-    rawScoreRef.current = rawFinal
-    const smoothed = rawFinal * 0.3 + focusScoreRef.current * 0.7
-    // Trust gate: when tracking is uncertain, HOLD the last trusted score rather
-    // than letting a noisy signal drag it down into a false "distracted".
-    if (!trackingUncertain) {
-      focusScoreRef.current = Math.max(0, Math.min(100, smoothed))
-    }
+    const finalizedScore = finalizeAttentionScore({
+      base: baseScore,
+      rampBonus,
+      previousScore: focusScoreRef.current,
+      trackingUncertain,
+    })
+    rawScoreRef.current = finalizedScore.rawFinal
+    focusScoreRef.current = finalizedScore.score
+    lastScoreTraceRef.current = finalizedScore.trace
 
     const newStatus = focusScoreRef.current >= GOOD_STREAK_SCORE
       ? 'focused'

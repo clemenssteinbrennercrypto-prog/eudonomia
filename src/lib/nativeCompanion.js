@@ -73,6 +73,17 @@ export function listenActivityUpdates(onUpdate) {
   return listenNative('activity-updated', onUpdate)
 }
 
+export function listenProtectionEvents(onUpdate) {
+  return listenNative('protection-enforced', payload => {
+    const kind = payload?.kind === 'app_hidden' || payload?.kind === 'domain_redirected'
+      ? payload.kind
+      : null
+    const label = String(payload?.label || '').trim()
+    if (!kind || !label || !Number.isFinite(payload?.ts)) return
+    onUpdate({ kind, label, ts: payload.ts })
+  })
+}
+
 // Debug state contains private activity details. It must only cross Tauri's
 // in-process IPC boundary; never fall back to localhost HTTP.
 export async function fetchCompanionDebug() {

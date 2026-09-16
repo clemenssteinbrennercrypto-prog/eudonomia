@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { analyzeSession } from '../../../lib/sessionAnalysis'
 import SessionReport from '../../SessionReport'
+import SessionTimeline from './SessionTimeline'
+import WhyThisResult from './WhyThisResult'
 
 /**
  * Reopening a session from history renders through the exact same
@@ -14,17 +16,25 @@ export default function SessionDetailView({ session, allSessions, onBack, onUpda
     [allSessions, session.id]
   )
   const analysis = useMemo(
-    () => analyzeSession(session, { priorSessions }),
+    () => session.analysisSnapshot?.version
+      ? session.analysisSnapshot
+      : analyzeSession(session, { priorSessions }),
     [session, priorSessions]
   )
 
   return (
-    <SessionReport
-      session={session}
-      analysis={analysis}
-      mode="history"
-      onOutcomeChange={(patch) => onUpdateSession(session.id, patch)}
-      onPrimaryAction={onBack}
-    />
+    <div className="analytics-session-detail">
+      <button type="button" className="analytics-detail-back" onClick={onBack}>← Session history</button>
+      <SessionTimeline session={session} />
+      <WhyThisResult session={session} analysis={analysis} />
+      <SessionReport
+        session={session}
+        analysis={analysis}
+        mode="history"
+        hideTimeline
+        onOutcomeChange={(patch) => onUpdateSession(session.id, patch)}
+        onPrimaryAction={onBack}
+      />
+    </div>
   )
 }

@@ -20,6 +20,14 @@ pub struct ActivityState {
     pub ts: u64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionEvent {
+    pub kind: String,
+    pub label: String,
+    pub ts: u64,
+}
+
 pub type SharedActivity = Arc<Mutex<ActivityState>>;
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -378,32 +386,36 @@ fn escape_applescript(value: &str) -> String {
 
 /// Hide a blocked app via System Events. Hiding (not quitting) is deliberate:
 /// no unsaved-work loss, and macOS returns focus to the previous app.
-fn hide_app(app: &str, debug: &SharedDebug) {
+fn hide_app(app: &str, debug: &SharedDebug) -> bool {
     let esc = escape_applescript(app);
-    let script =
-        format!(r#"tell application "System Events" to set visible of process "{esc}" to false"#);
-    let _ = run_osascript(&script, debug, Some("System Events"));
+    let script = format!(
+        r#"tell application "System Events" to set visible of process "{esc}" to false
+return "hidden""#
+    );
+    run_osascript(&script, debug, Some("System Events")).as_deref() == Some("hidden")
 }
 
 /// Redirect the front tab of a browser away from a blocked domain. This is what
 /// catches Brave/Chrome when they use DNS-over-HTTPS (Secure DNS), which bypasses
 /// /etc/hosts entirely — so hosts blocking alone would miss them. Works by
 /// reading + rewriting the active tab's URL via AppleScript, independent of DNS.
-fn redirect_browser_tab(app: &str, debug: &SharedDebug) {
+fn redirect_browser_tab(app: &str, debug: &SharedDebug) -> bool {
     let script = match app {
         "Safari" => {
-            r#"tell application "Safari" to set URL of current tab of front window to "about:blank""#
+            r#"tell application "Safari" to set URL of current tab of front window to "about:blank"
+return "redirected""#
                 .to_string()
         }
         "Google Chrome" | "Arc" | "Brave Browser" => {
             let esc = escape_applescript(app);
             format!(
-                r#"tell application "{esc}" to set URL of active tab of front window to "about:blank""#
+                r#"tell application "{esc}" to set URL of active tab of front window to "about:blank"
+return "redirected""#
             )
         }
-        _ => return,
+        _ => return false,
     };
-    let _ = run_osascript(&script, debug, Some(app));
+    run_osascript(&script, debug, Some(app)).as_deref() == Some("redirected")
 }
 
 fn notify_blocked(label: &str, debug: &SharedDebug) {
@@ -450,11 +462,18 @@ enum BlockAction {
 /// Check the frontmost activity against the session's block lists and act.
 /// Decisions happen under the lock; the (slow) osascript calls happen after
 /// it is released.
-fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, domain: Option<&str>) {
+fn enforce_blocking(
+    session: &SharedSession,
+    debug: &SharedDebug,
+    app: &str,
+    domain: Option<&str>,
+) -> Option<ProtectionEvent> {
     let decision = {
-        let Ok(mut cfg) = session.lock() else { return };
+        let Ok(mut cfg) = session.lock() else {
+            return None;
+        };
         if !cfg.active {
-            return;
+            return None;
         }
         let now = now_ms();
         if cfg.end_ts == 0 || now > cfg.end_ts + BLOCK_GRACE_MS {
@@ -469,7 +488,7 @@ fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, dom
                 d.blocked_apps_count = 0;
                 d.blocked_domains_count = 0;
             }
-            return;
+            return None;
         }
 
         let app_lc = app.trim().to_lowercase();
@@ -502,7 +521,7 @@ fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, dom
 
         let (block_action, label) = match action {
             Some(a) => a,
-            None => return,
+            None => return None,
         };
         let notify = now.saturating_sub(cfg.last_notify_ts) >= BLOCK_NOTIFY_COOLDOWN_MS;
         if notify {
@@ -512,13 +531,18 @@ fn enforce_blocking(session: &SharedSession, debug: &SharedDebug, app: &str, dom
     };
 
     let (block_action, label, notify) = decision;
-    match block_action {
-        BlockAction::Hide => hide_app(app, debug),
-        BlockAction::Redirect => redirect_browser_tab(app, debug),
-    }
-    if notify {
+    let (kind, succeeded) = match block_action {
+        BlockAction::Hide => ("app_hidden", hide_app(app, debug)),
+        BlockAction::Redirect => ("domain_redirected", redirect_browser_tab(app, debug)),
+    };
+    if succeeded && notify {
         notify_blocked(&label, debug);
     }
+    succeeded.then(|| ProtectionEvent {
+        kind: kind.to_string(),
+        label,
+        ts: now_ms(),
+    })
 }
 
 /// Bring the /etc/hosts block into agreement with the current session, applying
@@ -624,7 +648,7 @@ fn poll_once(
     state: &SharedActivity,
     session: &SharedSession,
     debug: &SharedDebug,
-) -> Option<ActivityState> {
+) -> Option<(ActivityState, Option<ProtectionEvent>)> {
     let poll_ts = now_ms();
     if let Ok(mut d) = debug.lock() {
         d.last_poll_ts = poll_ts;
@@ -647,7 +671,7 @@ fn poll_once(
     };
     let domain = url.as_deref().and_then(extract_domain);
 
-    enforce_blocking(session, debug, &app, domain.as_deref());
+    let protection_event = enforce_blocking(session, debug, &app, domain.as_deref());
 
     let activity = ActivityState {
         app,
@@ -658,7 +682,7 @@ fn poll_once(
     };
     let mut guard = state.lock().ok()?;
     *guard = activity.clone();
-    Some(activity)
+    Some((activity, protection_event))
 }
 
 /// Spawn the polling loop. AppleScript via `osascript` is blocking, so the
@@ -666,8 +690,13 @@ fn poll_once(
 pub fn start_polling(state: crate::native::NativeState, app: AppHandle) {
     std::thread::spawn(move || loop {
         let session_before_poll = crate::native::session_snapshot(&state);
-        if let Some(activity) = poll_once(&state.activity, &state.session, &state.debug) {
+        if let Some((activity, protection_event)) =
+            poll_once(&state.activity, &state.session, &state.debug)
+        {
             let _ = app.emit(crate::native::ACTIVITY_UPDATED_EVENT, activity);
+            if let Some(event) = protection_event {
+                let _ = app.emit(crate::native::PROTECTION_ENFORCED_EVENT, event);
+            }
         }
         let session_after_poll = crate::native::session_snapshot(&state);
         if session_after_poll != session_before_poll {

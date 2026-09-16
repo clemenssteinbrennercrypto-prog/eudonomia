@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter};
 
 pub const ACTIVITY_UPDATED_EVENT: &str = "activity-updated";
 pub const SESSION_STATE_CHANGED_EVENT: &str = "session-state-changed";
+pub const PROTECTION_ENFORCED_EVENT: &str = "protection-enforced";
 
 #[derive(Clone)]
 pub struct NativeState {
