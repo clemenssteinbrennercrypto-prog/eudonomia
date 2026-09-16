@@ -47,3 +47,54 @@ The production updater manifest is still `0.1.10`, published 16 July 2026, while
 3. On a clean checkout, run `npm ci`, `npm test`, `npm run refresh:companion-webui`, `npm run verify:companion-webui`, `~/.cargo/bin/cargo test --manifest-path companion/src-tauri/Cargo.toml`, and the arm64 release build; inspect the build badge and updater channel before installation.
 4. Before creating a real tag, have the workflow owner add or authorize a non-publishing production validation path, then exercise the current signing/notarization/arm64 packaging flow and inspect its draft plus updater manifest without promoting it.
 5. Only after those gates pass should an authorized release owner create a `release-v*` tag and publish the signed production release.
+
+## Focus Score audit — 15 September 2026
+
+Local changes based on `702225a` clarify measured-day averages, independently
+show today's measurement status, fix calendar refresh, and reject future or
+invalid rollup contributions. The [audit](focus-score-audit-2026-09-15.md) records
+the formula, reproducible examples and remaining V1 design limits, including
+the phase-weight discontinuity. A replacement V2 formula remains a product
+decision; this change does not silently rescore existing V1 days.
+
+- `npm test -- --reporter=dot`: 58 files, 663 tests passed, including rendered
+  Lab/Analytics regressions for the 72 example and midnight rollover.
+- `npm run build`: passed; existing MediaPipe script and large-chunk warnings
+  remain. Build success does not establish native camera behavior.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: 13 library and
+  67 app tests passed (80 total). No native source was changed.
+- Visual browser inspection could not run: the Browser runtime reported no
+  available browser and discovery returned an empty list. Component behavior
+  was verified in jsdom; final layout remains unverified in the native WebView.
+- No installed app was replaced, no live session was started, and no channel
+  was published or checked for freshness. These results describe local code.
+
+## Focus Metric V2 — 16 September 2026
+
+After Clemens chose work time, quality and consistency as the intended composite,
+V2 was implemented locally on top of `fee1da0`. The [updated audit and
+specification](focus-score-audit-2026-09-15.md#v2-specification) records the exact
+formula, product estimates, historical-data policy and remaining limits.
+
+- Lab and Analytics default to explicitly labelled V2. The V1 formula remains
+  selectable. Both use the same qualified raw ledger, without rewriting saved
+  V1 records or mixing camera generations. V1 baselines are excluded from V2.
+- At equal time, higher attention improves the unrounded score. Time has
+  diminishing returns; zero-attention padding cannot improve it. The old phase
+  inversion is reproduced in V1 and eliminated in V2 by dedicated tests.
+- A dated workday plan supplies consistency. The visible Mon–Fri default starts
+  at setup, changes apply tomorrow, and missing past plans are not invented.
+  Tests cover the 72→72 Tuesday morning→63 Wednesday example, weekends, unknown
+  measurement, persistence, failed writes and historical plan preservation.
+- Full JSON exports include the dated plan from both repository adapters and
+  Analytics, verified by pipeline and native-adapter tests.
+- `npm test -- --reporter=dot`: **60 files, 692 tests passed**.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. Native camera/scoring source was unchanged.
+- `npm run build` and `git diff --check`: passed. Existing MediaPipe/non-module,
+  chunk-size and test-environment warnings remain.
+- Browser setup was retried and still reported `No browser is available`;
+  discovery returned `[]`. Visual layout in the native WebView is unverified.
+- No installed app replacement, live camera test, push, updater-channel change
+  or release publication was performed. This is verified local implementation,
+  not evidence that the installed application has received V2.

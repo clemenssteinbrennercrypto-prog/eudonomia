@@ -17,6 +17,7 @@ import {
   withSessionFocusMetric,
 } from './focusMetric'
 import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
+import { classifyFocusPhase } from './attention'
 
 function phaseSeconds(total, phase = 'lock_in') {
   return { arrival: 0, ramp: 0, lock_in: 0, fade: 0, recovery: 0, drift: 0, [phase]: total }
@@ -386,6 +387,46 @@ describe('privacy-safe focus diagnostics', () => {
 })
 
 describe('daily focus formula', () => {
+  it('preserves the documented V1 phase discontinuity instead of silently rewriting history', () => {
+    // Characterization, not a desired V2 invariant: this demonstrates why
+    // phase-derived volume must not be mistaken for concentration quality.
+    const scoreAt = attention => {
+      const phase = classifyFocusPhase({
+        elapsedSecs: 300, score: attention, goodStreakSecs: 0,
+        msSinceDistraction: Infinity, preDriftActive: false, inFlow: false,
+      })
+      return calculateDailyFocus(dailyEntry({ minutes: 120, efficiency: attention, phase })).score
+    }
+    expect(scoreAt(54)).toBe(50)
+    expect(scoreAt(55)).toBe(42)
+  })
+
+  it.each([0, 3, '2', NaN])('refuses an unknown ledger generation %s', generation => {
+    const entry = dailyEntry({ minutes: 120, efficiency: 80 })
+    entry.sessions.x.generation = generation
+    expect(calculateDailyFocus(entry)).toBeNull()
+  })
+
+  it('does not score a rejected contribution even if stale numbers remain', () => {
+    const entry = dailyEntry({ minutes: 120, efficiency: 80 })
+    entry.sessions.x.status = 'unmeasured'
+    expect(calculateDailyFocus(entry)).toBeNull()
+  })
+
+  it('weights sessions by measured seconds before applying the daily formula', () => {
+    const short = dailyEntry({ minutes: 10, efficiency: 20, id: 'short' })
+    const long = dailyEntry({ minutes: 110, efficiency: 80, id: 'long' })
+    const combined = calculateDailyFocus({ sessions: { ...short.sessions, ...long.sessions } })
+    expect(combined.rawScore).toBeCloseTo(calculateDailyFocus(dailyEntry({ minutes: 120, efficiency: 75 })).rawScore)
+  })
+
+  it('does not change when identical qualifying measurements are split into sessions', () => {
+    const first = dailyEntry({ minutes: 60, efficiency: 80, id: 'first' })
+    const second = dailyEntry({ minutes: 60, efficiency: 80, id: 'second' })
+    expect(calculateDailyFocus({ sessions: { ...first.sessions, ...second.sessions } }).rawScore)
+      .toBeCloseTo(calculateDailyFocus(dailyEntry({ minutes: 120, efficiency: 80 })).rawScore)
+  })
+
   it('keeps the estimated constants named and ordered', () => {
     expect(FOCUS_METRIC_V1.efficiencyExponent).toBeGreaterThan(FOCUS_METRIC_V1.volumeExponent)
     expect(FOCUS_METRIC_V1.phaseWeights.lock_in).toBeGreaterThan(FOCUS_METRIC_V1.phaseWeights.ramp)
@@ -616,6 +657,39 @@ describe('backfilling the ledger from already-stored sessions', () => {
 })
 
 describe('daily ledger and calendar periods', () => {
+  it('keeps yesterday’s 72 as the measured-day average while today is explicitly inactive', () => {
+    const monday = measuredSession({ measuredSeconds: 7200, efficiency: 75 })
+    const ledger = addSessionToFocusLedger(emptyFocusLedger(), monday)
+    const week = buildFocusPeriod(ledger, { range: 'week', now: new Date(2026, 7, 18, 10) })
+    const today = buildFocusPeriod(ledger, { range: 'day', now: new Date(2026, 7, 18, 10) })
+    expect(week).toMatchObject({ score: 72, activeDays: 1, elapsedDays: 2, today: { status: 'inactive' } })
+    expect(today).toMatchObject({ score: null, activeDays: 0, today: { status: 'inactive' } })
+  })
+
+  it('does not let future ledger days score or select the comparison ruler', () => {
+    const monday = measuredSession({ id: 'monday' })
+    const future = withSessionFocusMetric({
+      ...rawSession({ id: 'future', startedAt: new Date(2026, 7, 20, 9).getTime() }),
+      attentionScoringVersion: 2,
+    })
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), monday)
+    ledger = addSessionToFocusLedger(ledger, future)
+    for (const sessions of [[], [future, monday]]) {
+      const period = buildFocusPeriod(ledger, { range: 'week', now: new Date(2026, 7, 18, 10), sessions })
+      expect(period).toMatchObject({ generation: 1, activeDays: 1, totalMeasuredDays: 1 })
+      expect(period.days[3]).toMatchObject({ status: 'future' })
+      expect(period.days[3].score).toBeUndefined()
+      expect(period.score).toBe(calculateDailyFocus(ledger.days['2026-08-17']).score)
+    }
+  })
+
+  it('does not manufacture elapsed days for a future explicit window', () => {
+    const period = buildFocusPeriod(emptyFocusLedger(), {
+      range: 'week', periodStart: new Date(2026, 7, 24), now: new Date(2026, 7, 18),
+    })
+    expect(period).toMatchObject({ elapsedDays: 0, activeDays: 0, score: null })
+  })
+
   it('never averages V1 and V2 days into one weekly comparison', () => {
     const v1Start = new Date(2026, 7, 17, 9).getTime()
     const v2Start = new Date(2026, 7, 18, 9).getTime()

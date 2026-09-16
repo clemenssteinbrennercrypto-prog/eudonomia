@@ -598,6 +598,8 @@ export function calculateDailyFocus(dayEntry) {
   const usable = Object.values(dayEntry?.sessions || {})
     .filter(item =>
       item?.version === FOCUS_METRIC_V1.version &&
+      item.status !== 'unmeasured' &&
+      isScoreableGeneration(item.generation ?? ATTENTION_SCORING_VERSION) &&
       finiteNonNegative(item.measuredSeconds) &&
       item.measuredSeconds >= FOCUS_METRIC_V1.minMeasuredSeconds &&
       finiteNonNegative(item.scoreSum) &&
@@ -715,9 +717,12 @@ export function buildFocusPeriod(ledger, options = {}) {
     hasExplicitStart ? requestedStart : safeNow
   )
   const safeLedger = ledger?.schemaVersion === 1 && ledger.days ? ledger : emptyFocusLedger()
+  const todayKey = localDayKey(safeNow)
   const generationCandidates = (Array.isArray(options.sessions) ? options.sessions : [])
-    .filter(session => isScoreableGeneration(session?.attentionScoringVersion))
+    .filter(session => isScoreableGeneration(session?.attentionScoringVersion) &&
+      new Date(session.timestamp ?? session.startedAt) <= safeNow)
   const ledgerGeneration = Object.entries(safeLedger.days)
+    .filter(([key]) => key <= todayKey)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([, entry]) => calculateDailyFocus(entry)?.generation)
     .find(isScoreableGeneration)
@@ -728,18 +733,19 @@ export function buildFocusPeriod(ledger, options = {}) {
     .map(session => localDayKey(session?.startedAt ?? session?.timestamp))
     .filter(Boolean))
   const days = []
-  const todayKey = localDayKey(safeNow)
   for (let cursor = new Date(start); cursor < endExclusive; cursor = addDays(cursor, 1)) {
     const key = localDayKey(cursor)
     const entry = safeLedger.days[key]
     const storedCalculation = calculateDailyFocus(entry)
-    const calculated = storedCalculation?.generation === activeGeneration ? storedCalculation : null
     const isFuture = key > todayKey
+    const calculated = !isFuture && storedCalculation?.generation === activeGeneration ? storedCalculation : null
     const noActivity = !entry && !sessionDays.has(key) && !isFuture
     days.push({
       key,
       date: new Date(cursor),
       label: cursor.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3),
+      status: isFuture ? 'future' : calculated ? 'measured' : noActivity ? 'inactive'
+        : storedCalculation ? 'different_generation' : 'unmeasured',
       ...(calculated || (noActivity ? {
         score: 0,
         rawScore: 0,
@@ -765,13 +771,11 @@ export function buildFocusPeriod(ledger, options = {}) {
     : null
   const measuredSeconds = scoredDays.reduce((sum, day) => sum + day.measuredSeconds, 0)
   const scoreSum = scoredDays.reduce((sum, day) => sum + day.scoreSum, 0)
-  const periodEndForCoverage = safeOffset === 0 && safeNow < endExclusive
-    ? addDays(startOfDay(safeNow), 1)
-    : endExclusive
-  const elapsedDays = Math.max(1, dayDiff(start, periodEndForCoverage))
+  const periodEndForCoverage = new Date(Math.min(endExclusive.getTime(), addDays(startOfDay(safeNow), 1).getTime()))
+  const elapsedDays = Math.max(0, dayDiff(start, periodEndForCoverage))
 
   const priorScores = Object.entries(safeLedger.days)
-    .filter(([key]) => key < localDayKey(start))
+    .filter(([key]) => key < localDayKey(start) && key <= todayKey)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([, entry]) => calculateDailyFocus(entry))
     .filter(day => day?.generation === activeGeneration)
@@ -780,7 +784,7 @@ export function buildFocusPeriod(ledger, options = {}) {
     .slice(0, 28)
   const baseline = priorScores.length >= 8 ? Math.round(median(priorScores)) : null
 
-  const allDays = Object.entries(safeLedger.days).map(([key, entry]) => {
+  const allDays = Object.entries(safeLedger.days).filter(([key]) => key <= todayKey).map(([key, entry]) => {
     const calculated = calculateDailyFocus(entry)
     return {
       key,
@@ -790,12 +794,14 @@ export function buildFocusPeriod(ledger, options = {}) {
 
   return {
     range,
+    metricVersion: 1,
     offset: safeOffset,
     title: formatPeriodTitle(range, start),
     generation: activeGeneration,
     start,
     endExclusive,
     days,
+    today: days.find(day => day.key === todayKey) ?? null,
     score: rawScore == null ? null : Math.round(rawScore),
     rawScore,
     efficiency: measuredSeconds > 0 ? Math.round(scoreSum / measuredSeconds) : null,

@@ -3,6 +3,10 @@ import { loadFocusAppsConfig } from '../lib/storage'
 import { emptyFocusLedger, getFocusPeriodWindow } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
+import { useCurrentTime } from '../lib/useCurrentTime'
+import FocusScoreExplanation, { focusScoreLabel } from './FocusScoreExplanation'
+import FocusScoreControls from './FocusScoreControls'
+import { useFocusScoreSchedule } from '../lib/useFocusScoreSchedule'
 
 const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
@@ -80,6 +84,8 @@ function AttentionField({ bins, range, title }) {
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
   const [periodSelection, setPeriodSelection] = useState({ range: 'day', periodStart: null })
+  const [metricVersion, setMetricVersion] = useState(2)
+  const scheduleState = useFocusScoreSchedule()
   const nativeStatus = useCompanionStatus()
   // Sessions and the ledger arrive as props — App owns loading them and
   // re-reads after every completed session, so this stays a pure render of
@@ -90,7 +96,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     sessions,
     focusConfig: loadFocusAppsConfig(),
   }), [ledger, sessions])
-  const dashboardNow = Date.now()
+  const dashboardNow = useCurrentTime()
   const data = useMemo(() => buildDashboardData({
     ...source,
     focusModeEnabled,
@@ -98,7 +104,9 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     periodStart: periodSelection.periodStart,
     now: dashboardNow,
     nativeStatus,
-  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus])
+    metricVersion,
+    schedule: scheduleState.schedule,
+  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, metricVersion, scheduleState.schedule])
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
@@ -144,15 +152,19 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
           </div>
           <div className={`lab-score${period.score == null ? ' is-empty' : ''}`}>
             <strong>{period.score ?? '—'}</strong>
-            <span>{period.score == null ? 'Not measured' : `${PERIOD_RANGES.find(([id]) => id === periodSelection.range)?.[1]} · v1`}</span>
+            <span>{focusScoreLabel(period)}</span>
           </div>
         </div>
 
         <div className="lab-metric-rail">
           <Metric label="Measured time" value={period.score == null ? null : measuredMinutes} suffix="min" />
-          <Metric label="Deep focus" value={period.score == null ? null : Math.round(period.deepFocusMinutes)} suffix="min" />
-          <Metric label="Efficiency" value={period.efficiency} suffix="%" />
-          <Metric label="Consistency" value={period.score == null ? null : `${period.activeDays}/${period.elapsedDays}`} suffix="active days" />
+          {metricVersion === 2
+            ? <Metric label="Time credit" value={period.timeCredit == null ? null : Math.round(period.timeCredit * 100)} suffix="%" />
+            : <Metric label="Weighted focus time" value={period.score == null ? null : Math.round(period.deepFocusMinutes)} suffix="min" />}
+          <Metric label="Average attention" value={period.efficiency} suffix="/100" />
+          {metricVersion === 2 && period.range !== 'day'
+            ? <Metric label="Consistency" value={period.consistency.percent} suffix="%" />
+            : <Metric label="Measured days" value={`${period.activeDays}/${period.elapsedDays}`} suffix="days" />}
         </div>
 
         <button className="lab-session-orb" type="button" onClick={onSession} aria-label="Open session setup">
@@ -160,6 +172,9 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
           <span className="lab-session-orb-copy"><small>Session</small><b>Start</b><i aria-hidden="true">↗</i></span>
         </button>
       </section>
+
+      <FocusScoreExplanation period={period} />
+      <FocusScoreControls metricVersion={metricVersion} onVersionChange={setMetricVersion} scheduleState={scheduleState} now={dashboardNow} />
 
       <section className="lab-attention-section">
         <div className="lab-section-head">
@@ -196,7 +211,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
                 <div className="lab-session-row" key={session.id}>
                   <strong>{session.task}</strong>
                   <span>{session.durationMinutes} min</span>
-                  <span>{session.efficiency == null ? 'Not measured' : `${Math.round(session.efficiency)}% efficiency`}</span>
+                  <span>{session.efficiency == null ? 'Not measured' : `${Math.round(session.efficiency)}/100 attention`}</span>
                   <em className={`is-${session.outcome.toLowerCase()}`}>{session.outcome}</em>
                 </div>
               ))}

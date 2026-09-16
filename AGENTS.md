@@ -195,6 +195,15 @@ scoring or detection.**
    rather than being guessed. Review V1 after 30 valid measured days and create
    V2 for changed parameters instead of rewriting stored V1 days.
 
+   As of 16 Sep 2026, Focus Metric V2 is a separate, labelled view in
+   `focusMetricV2.js`: continuous measured-time credit × mean attention, plus
+   a period consistency factor from dated workday plans. It reads the exact
+   qualified ledger accumulators without changing saved V1 session/ledger
+   fields; the UI retains an explicit V1 formula selector. This derived metric
+   version is independent of the native V2 camera generation. Do not mix a V1
+   baseline into V2, or apply new workday plans to past dates. See
+   `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
+
 ---
 
 ## 5. Design principles — the expensive ones

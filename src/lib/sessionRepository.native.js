@@ -33,6 +33,7 @@ import { buildSessionSummary } from './sessionSummary'
 import { analyzeSession } from './sessionAnalysis'
 import { DEFAULT_PAGE_SIZE, dateRangeCutoff } from './sessionQuery'
 import { createLocalSessionRepository } from './sessionRepository.local'
+import { loadFocusScoreSchedule } from './focusScoreSchedule'
 
 export const ARCHIVE_SCHEMA_VERSION = 1
 
@@ -360,7 +361,7 @@ export function createNativeSessionRepository({ legacy = createLocalSessionRepos
 
     async exportArchive() {
       const archive = await invoke('db_export_archive')
-      return { ...archive, exportedAt: new Date().toISOString() }
+      return { ...archive, exportedAt: new Date().toISOString(), focusScoreSchedule: loadFocusScoreSchedule() }
     },
 
     /**

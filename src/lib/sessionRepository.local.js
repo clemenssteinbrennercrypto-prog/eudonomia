@@ -19,6 +19,7 @@ import {
   backfillFocusLedgerFromSessions,
 } from './storage'
 import { filterSessions, paginate } from './sessionQuery'
+import { loadFocusScoreSchedule } from './focusScoreSchedule'
 
 export const ARCHIVE_SCHEMA_VERSION = 1
 
@@ -70,6 +71,7 @@ export function createLocalSessionRepository() {
         exportedAt: new Date().toISOString(),
         sessions: loadSessions(),
         focusLedger: loadFocusLedger(),
+        focusScoreSchedule: loadFocusScoreSchedule(),
       }
     },
 

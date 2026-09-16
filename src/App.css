@@ -1290,6 +1290,23 @@ body {
 }
 
 .lab-score.is-empty strong { color: var(--text-muted); }
+.focus-score-explanation {
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.focus-score-explanation p { margin: 6px 0; }
+.focus-score-explanation summary { cursor: pointer; }
+.focus-score-explanation details { margin-top: 8px; max-width: 680px; }
+.focus-score-controls { margin-top: 14px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.focus-score-controls .lab-segments { flex-wrap: wrap; }
+.focus-workdays { margin-top: 10px; }
+.focus-workdays summary { cursor: pointer; }
+.focus-workdays fieldset { display: flex; flex-wrap: wrap; gap: 12px; border: 0; padding: 6px 0; margin: 0; }
+.focus-workdays label { display: flex; align-items: center; gap: 5px; }
+.focus-workdays input { accent-color: var(--ultra-bright); }
+.focus-score-controls button:disabled { opacity: .5; cursor: default; }
 .lab-score > span {
   padding-bottom: 4px;
   color: var(--text-muted);

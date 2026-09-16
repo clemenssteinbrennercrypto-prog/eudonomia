@@ -3,6 +3,7 @@ import { createNativeSessionRepository } from './sessionRepository.native'
 import { createLocalSessionRepository } from './sessionRepository.local'
 import { buildSessionSummary } from './sessionSummary'
 import { ATTENTION_SCORING_VERSION } from './focusMetric'
+import { saveFocusScoreSchedule } from './focusScoreSchedule'
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -59,6 +60,14 @@ const sent = (command) => invoked.find(call => call.command === command)?.args
 const called = (command) => invoked.some(call => call.command === command)
 
 describe('interface parity with the local adapter', () => {
+  it('exports dated workdays alongside the native archive so V2 can be reproduced', async () => {
+    const schedule = saveFocusScoreSchedule({ version: 1, plans: [{ effectiveFrom: '2026-09-16', workdays: [1, 2, 3, 4, 5] }] })
+    const nativeArchive = { schemaVersion: 1, sessions: [{ id: 'preserved' }], focusLedger: { schemaVersion: 1, days: {} } }
+    window.__TAURI__.core.invoke = fakeInvoke({ db_export_archive: () => nativeArchive })
+    const exported = await repo.exportArchive()
+    expect(exported).toMatchObject({ ...nativeArchive, focusScoreSchedule: schedule })
+  })
+
   it('exposes exactly the same methods', () => {
     const local = createLocalSessionRepository()
     const localMethods = Object.keys(local).filter(key => typeof local[key] === 'function').sort()

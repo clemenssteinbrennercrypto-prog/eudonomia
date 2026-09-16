@@ -15,6 +15,7 @@ import { analyzeSession } from './sessionAnalysis'
 import { buildSessionSummary } from './sessionSummary'
 import { createLocalSessionRepository } from './sessionRepository.local'
 import { buildFullArchive, buildSessionsCSV } from '../components/analytics/Sessions'
+import { saveFocusScoreSchedule } from './focusScoreSchedule'
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -72,6 +73,7 @@ beforeEach(() => {
 
 describe('native V2 metric pipeline', () => {
   it('keeps every metric connected from persistence through Lab, Analytics and exports', async () => {
+    const schedule = saveFocusScoreSchedule({ version: 1, plans: [{ effectiveFrom: '2026-09-01', workdays: [1, 2, 3, 4, 5] }] })
     const repository = createLocalSessionRepository()
     const source = Array.from({ length: MIN_SESSIONS }, (_, index) => nativeV2Session(index))
     for (const session of [...source].reverse()) await repository.saveSession(session)
@@ -138,9 +140,11 @@ describe('native V2 metric pipeline', () => {
     const repositoryArchive = await repository.exportArchive()
     expect(repositoryArchive.sessions).toHaveLength(MIN_SESSIONS)
     expect(repositoryArchive.focusLedger).toEqual(ledger)
+    expect(repositoryArchive.focusScoreSchedule).toEqual(schedule)
     const archive = buildFullArchive(sessions, ledger, '2026-09-01T16:00:00.000Z')
     expect(archive.sessions[0].timeline).toEqual(newest.timeline)
     expect(archive.focusLedger).toEqual(ledger)
+    expect(archive.focusScoreSchedule).toEqual(schedule)
 
     const csv = buildSessionsCSV([newest])
     const [header, row] = csv.split('\n').map(line => line.split(','))

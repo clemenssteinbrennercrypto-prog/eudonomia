@@ -4,6 +4,7 @@ import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import ConfirmDialog from '../ConfirmDialog'
 import SessionDetailView from './sessions/SessionDetailView'
 import { sessionEndedAt, sessionPausedSeconds, sessionStartedAt, sessionWallSeconds } from '../../lib/sessionTiming'
+import { loadFocusScoreSchedule } from '../../lib/focusScoreSchedule'
 
 const PAGE_SIZE = 10
 const DATE_FILTERS = [['all', 'All time'], ['week', 'This week'], ['month', 'This month']]
@@ -79,7 +80,7 @@ function exportCSV(sessions) {
 // Unlike the CSV, the full backup is always the complete, lossless history —
 // full records, timelines, and the ledger — regardless of the active filters.
 export function buildFullArchive(sessions, focusLedger, exportedAt = new Date().toISOString()) {
-  return { schemaVersion: 1, exportedAt, sessions, focusLedger }
+  return { schemaVersion: 1, exportedAt, sessions, focusLedger, focusScoreSchedule: loadFocusScoreSchedule() }
 }
 
 function exportFullArchive(sessions, focusLedger) {

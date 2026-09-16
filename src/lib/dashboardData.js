@@ -1,5 +1,6 @@
 import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
-import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, buildFocusPeriod, getFocusPeriodWindow } from './focusMetric'
+import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, getFocusPeriodWindow } from './focusMetric'
+import { buildVersionedFocusPeriod } from './focusMetricV2'
 import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
 import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
 import { getProtectionReadiness } from './protectionReadiness'
@@ -23,7 +24,8 @@ export function buildAttentionField(sessions, { range = 'day', offset = 0, perio
   const safeBins = Math.max(12, Math.min(160, Math.trunc(bins) || 96))
   const buckets = Array.from({ length: safeBins }, () => ({ scores: [], active: false, paused: false }))
   const scoreableSessions = (Array.isArray(sessions) ? sessions : []).filter(session =>
-    SCOREABLE_SCORING_VERSIONS.includes(session?.attentionScoringVersion))
+    SCOREABLE_SCORING_VERSIONS.includes(session?.attentionScoringVersion) &&
+    new Date(session.timestamp ?? session.startedAt) <= windowNow)
   const activeGeneration = activeFocusGeneration(scoreableSessions)
 
   for (const session of scoreableSessions) {
@@ -77,13 +79,15 @@ function outcomeLabel(session) {
   return 'Unset'
 }
 
-export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, range = 'day', offset = 0, periodStart = null, now = Date.now() }) {
-  const period = buildFocusPeriod(ledger, {
+export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEnabled, nativeStatus, range = 'day', offset = 0, periodStart = null, now = Date.now(), metricVersion = 2, schedule }) {
+  const period = buildVersionedFocusPeriod(ledger, {
     range: ['day', 'week', 'month'].includes(range) ? range : 'day',
     offset,
     periodStart,
     now,
     sessions,
+    metricVersion,
+    schedule,
   })
   const readiness = getProtectionReadiness({ enabled: focusModeEnabled, setup: focusConfig, nativeStatus })
   const { distractionCount, websiteCount } = readiness

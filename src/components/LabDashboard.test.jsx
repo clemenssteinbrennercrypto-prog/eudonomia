@@ -3,11 +3,15 @@ import React from 'react'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import LabDashboard from './LabDashboard'
 import { FOCUS_METRIC_V1 } from '../lib/focusMetric'
 import { NATIVE_CAMERA_MEASUREMENT_V2 } from '../lib/cameraMeasurement'
 import { loadFocusLedger, saveSession } from '../lib/storage'
+import FocusScorePanel from './analytics/FocusScorePanel'
+import { loadFocusScoreSchedule, saveFocusScoreSchedule } from '../lib/focusScoreSchedule'
+
+const SCORE_VIEWS = [['Lab', LabDashboard], ['Analytics', FocusScorePanel]]
 
 class MemoryStorage {
   constructor() { this.values = new Map() }
@@ -25,9 +29,108 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
 describe('LabDashboard metric labels', () => {
+  it.each(SCORE_VIEWS)('shows V2 time, attention and consistency and preserves V1 in %s', (_, Component) => {
+    vi.setSystemTime(new Date(2026, 8, 16, 10))
+    saveFocusScoreSchedule({ version: 1, plans: [{ effectiveFrom: '2026-09-14', workdays: [1, 2, 3, 4, 5] }] })
+    const startedAt = new Date(2026, 8, 14, 9).getTime()
+    const saved = saveSession({
+      startedAt, timestamp: startedAt + 7220_000,
+      actualSeconds: 7220, measuredSeconds: 7200, scoreSum: 576000,
+      attentionScoringVersion: 2, focusMetricVersion: 1, focusMetricRejection: null,
+      sessionEfficiency: 80, deepFocusSeconds: 7200,
+    })
+    const originalLedger = loadFocusLedger()
+    render(React.createElement(Component, { sessions: [saved], ledger: originalLedger }))
+    expect(screen.getByRole('button', { name: 'V2 · Current' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
+    expect(screen.getByText('63')).toBeInTheDocument()
+    expect(screen.getByText(/Consistency: 1\/2 eligible workdays measured \(50%\)/)).toBeInTheDocument()
+    expect(screen.getByText('No session today.')).toBeInTheDocument()
+    expect(screen.getByText('Average attention')).toBeInTheDocument()
+    expect(screen.getByText('Time credit')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'V1 · Previous formula' }))
+    expect(screen.getByText('75')).toBeInTheDocument()
+    expect(loadFocusLedger()).toEqual(originalLedger)
+  })
+
+  it('saves workday changes for tomorrow and reloads them without rewriting today', () => {
+    const props = { sessions: [], ledger: loadFocusLedger() }
+    const view = render(React.createElement(LabDashboard, props))
+    expect(loadFocusScoreSchedule().plans[0]).toEqual({ effectiveFrom: '2026-08-26', workdays: [1, 2, 3, 4, 5] })
+    fireEvent.click(screen.getByText('Workdays: Mon, Tue, Wed, Thu, Fri'))
+    fireEvent.click(screen.getByLabelText('Tue'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save from tomorrow' }))
+    expect(loadFocusScoreSchedule().plans).toEqual([
+      { effectiveFrom: '2026-08-26', workdays: [1, 2, 3, 4, 5] },
+      { effectiveFrom: '2026-08-27', workdays: [1, 3, 4, 5] },
+    ])
+    view.unmount()
+    render(React.createElement(FocusScorePanel, props))
+    expect(screen.getByText('From 2026-08-27: Mon, Wed, Thu, Fri.')).toBeInTheDocument()
+    expect(screen.getByText('Workdays: Mon, Tue, Wed, Thu, Fri')).toBeInTheDocument()
+  })
+
+  it('reports a failed schedule write and keeps the saved plan authoritative', () => {
+    render(React.createElement(LabDashboard, { sessions: [], ledger: loadFocusLedger() }))
+    const before = loadFocusScoreSchedule()
+    fireEvent.click(screen.getByText('Workdays: Mon, Tue, Wed, Thu, Fri'))
+    fireEvent.click(screen.getByLabelText('Tue'))
+    vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => { throw new Error('Storage full') })
+    fireEvent.click(screen.getByRole('button', { name: 'Save from tomorrow' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Storage full')
+    expect(loadFocusScoreSchedule()).toEqual(before)
+  })
+
+  it.each(SCORE_VIEWS)('keeps the original V1 weekly explanation in %s', (_, Component) => {
+    const startedAt = new Date(2026, 7, 25, 9).getTime()
+    const saved = saveSession({
+      startedAt, timestamp: startedAt + 7220_000,
+      actualSeconds: 7220, measuredSeconds: 7200, scoreSum: 540000,
+      attentionScoringVersion: 2, focusMetricVersion: 1, focusMetricRejection: null,
+      sessionEfficiency: 75, deepFocusSeconds: 7200,
+    })
+    render(React.createElement(Component, { sessions: [saved], ledger: loadFocusLedger() }))
+    fireEvent.click(screen.getByRole('button', { name: 'V1 · Previous formula' }))
+    expect(screen.getByText('No session today.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
+    expect(screen.getByText('72')).toBeInTheDocument()
+    expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
+    expect(screen.getByText('No session today.')).toBeInTheDocument()
+    expect(screen.getByText('Only measured days enter this average. Days without sessions do not lower it.')).toBeInTheDocument()
+  })
+
+  it.each(SCORE_VIEWS)('refreshes the V2 day after midnight without changed props in %s', (_, Component) => {
+    vi.setSystemTime(new Date(2026, 7, 26, 23, 59, 50))
+    const startedAt = new Date(2026, 7, 26, 9).getTime()
+    const saved = saveSession({
+      startedAt, timestamp: startedAt + 7220_000,
+      actualSeconds: 7220, measuredSeconds: 7200, scoreSum: 540000,
+      attentionScoringVersion: 2, focusMetricVersion: 1, focusMetricRejection: null,
+      sessionEfficiency: 75, deepFocusSeconds: 7200,
+    })
+    render(React.createElement(Component, { sessions: [saved], ledger: loadFocusLedger() }))
+    expect(screen.getByText('68')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(30_000))
+    expect(screen.queryByText('68')).not.toBeInTheDocument()
+    expect(screen.getByText('No session today.')).toBeInTheDocument()
+  })
+
+  it('keeps the analytics historical day fixed across the midnight refresh', () => {
+    vi.setSystemTime(new Date(2026, 7, 26, 23, 59, 50))
+    render(React.createElement(FocusScorePanel, { sessions: [], ledger: loadFocusLedger() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    expect(screen.getByText('Tuesday, Aug 25, 2026')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(30_000))
+    expect(screen.getByText('Tuesday, Aug 25, 2026')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next day' }))
+    expect(screen.getByText('Wednesday, Aug 26, 2026')).toBeInTheDocument()
+    expect(screen.getByText('No session this day.')).toBeInTheDocument()
+  })
+
   it('navigates one shared day, week, or month across both dashboard signals', () => {
     render(React.createElement(LabDashboard, {
       focusModeEnabled: false,
@@ -146,7 +249,8 @@ describe('LabDashboard metric labels', () => {
     expect(screen.getByRole('img', { name: 'Attention field for July 2026' })).toBeInTheDocument()
     expect(view.container.querySelector('.lab-score > strong')).not.toHaveTextContent('—')
     expect(view.container.querySelector('.attention-field .is-strong')).toHaveAttribute('title', 'Focus 82')
-    expect(screen.getByText('Consistency').parentElement).toHaveTextContent('1/31active days')
+    // No workday plan existed in July: do not invent historical consistency.
+    expect(screen.getByText('Consistency').parentElement).toHaveTextContent('—')
   })
 
   it('labels a DST fallback day by local wall-clock quarters', () => {
@@ -206,7 +310,10 @@ describe('LabDashboard metric labels', () => {
     })).replaceAll('<!-- -->', '')
 
     expect(html).toContain('Measured time')
-    expect(html).toContain('78% efficiency')
+    expect(html).toContain('78/100 attention')
+    expect(html).toContain('Average attention')
+    expect(html).toContain('Time credit')
+    expect(html).not.toContain('78% efficiency')
     expect(html).toContain('title="Focus 53"')
     expect(html).not.toContain('Complete a measured session to reveal your attention field.')
     expect(html).not.toContain('Measured focus')
