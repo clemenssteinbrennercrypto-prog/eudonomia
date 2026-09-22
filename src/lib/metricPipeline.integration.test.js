@@ -148,7 +148,7 @@ describe('native V2 metric pipeline', () => {
 
     const csv = buildSessionsCSV([newest])
     const [header, row] = csv.split('\n').map(line => line.split(','))
-    expect(row[header.indexOf('averageFocus')]).toBe('78')
+    expect(row[header.indexOf('averageAttention')]).toBe('78')
     expect(row[header.indexOf('timeAboveThresholdPct')]).toBe('80')
     expect(row[header.indexOf('measuredSeconds')]).toBe('600')
   })

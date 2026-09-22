@@ -1,4 +1,5 @@
 import { WEBVIEW_CAMERA_MEASUREMENT } from './cameraMeasurement'
+import { DEEP_FOCUS_TIME_VERSION } from './attentionSampling'
 
 export const HISTORY_TREND_RANGES = [
   { value: 'week', label: 'Week' },
@@ -93,15 +94,48 @@ export function sessionFocusPct(session) {
     : null
 }
 
+/** Exact time earned only after the live Flow gate has been held. Older
+ * sessions have no such accumulator; they return null instead of borrowing
+ * the much looser `focusedSeconds` threshold or V1's weighted phase estimate. */
+export function sessionDeepFocusSeconds(session) {
+  const measurement = sessionFocusMeasurement(session)
+  if (!measurement || session?.deepFocusTimeVersion !== DEEP_FOCUS_TIME_VERSION) return null
+  if (!Number.isFinite(session.flowSeconds) || session.flowSeconds < 0) return null
+  if (session.flowSeconds > measurement.measuredSeconds) return null
+  return session.flowSeconds
+}
+
+export function aggregateDeepFocusTime(sessions) {
+  const safeSessions = comparableSessions(sessions)
+  let knownSeconds = 0
+  let measuredSessions = 0
+  let trackedSessions = 0
+  for (const session of safeSessions) {
+    if (!sessionFocusMeasurement(session)) continue
+    measuredSessions += 1
+    const seconds = sessionDeepFocusSeconds(session)
+    if (seconds == null) continue
+    trackedSessions += 1
+    knownSeconds += seconds
+  }
+  const complete = measuredSessions > 0 && trackedSessions === measuredSessions
+  return {
+    seconds: complete ? knownSeconds : null,
+    knownSeconds,
+    trackedSessions,
+    measuredSessions,
+    complete,
+  }
+}
+
 /**
  * The session's mean attention score, 0-100 — "how focused was I", as opposed
  * to `sessionFocusPct`, which answers the narrower "what share of the time was
  * I over the threshold".
  *
- * Both are honest, but a mean is the number people actually expect from a
- * focus tracker, and it is the same quantity the daily Focus Score already
- * reports as its efficiency term, so using it here makes one figure mean one
- * thing across the app.
+ * Both are valid diagnostics, but neither is literal Deep Focus time. The mean
+ * remains available for detailed analysis on its native 0–100 signal scale;
+ * primary product surfaces use the separate exact Flow-time accumulator.
  *
  * Gated on the same measurement validity as everything else: a session with no
  * usable measurement returns null rather than a misleading zero. `scoreSum` is

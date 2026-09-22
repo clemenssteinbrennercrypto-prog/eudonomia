@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { sessionAverageFocus, sessionFocusPct, hasMeasuredFocus } from '../../lib/historyTrend'
+import { sessionAverageFocus, sessionDeepFocusSeconds, sessionFocusPct, hasMeasuredFocus } from '../../lib/historyTrend'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import ConfirmDialog from '../ConfirmDialog'
 import SessionDetailView from './sessions/SessionDetailView'
@@ -35,7 +35,7 @@ function focusColor(pct) {
 // exported everything regardless of what was on screen, which read as a bug
 // once Sessions became a filterable view.
 export function buildSessionsCSV(sessions) {
-  const header = ['timestamp', 'startedAt', 'endedAt', 'wallDurationSeconds', 'activeDurationSeconds', 'pausedSeconds', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'measuredSeconds', 'averageFocus', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
+  const header = ['timestamp', 'startedAt', 'endedAt', 'wallDurationSeconds', 'activeDurationSeconds', 'pausedSeconds', 'task', 'workspace', 'workspaceRevision', 'goal', 'energyLevel', 'goalOutcome', 'completedText', 'blockerText', 'measuredSeconds', 'deepFocusSeconds', 'averageAttention', 'timeAboveThresholdPct', 'distractionEvents', 'longestStreakSeconds']
   const rows = sessions.map(s => {
     const pct = sessionAverageFocus(s)
     const startedAt = sessionStartedAt(s)
@@ -57,6 +57,7 @@ export function buildSessionsCSV(sessions) {
       `"${(s.completedText || '').replace(/"/g, '""')}"`,
       `"${(s.blockerText || '').replace(/"/g, '""')}"`,
       s.measuredSeconds ?? '',
+      sessionDeepFocusSeconds(s) ?? '',
       pct ?? '',
       sessionFocusPct(s) ?? '',
       s.distractionEvents ?? 0,
@@ -112,7 +113,8 @@ function FilterPill({ active, onClick, children }) {
 
 function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
   const pct = sessionAverageFocus(session)
-  const color = focusColor(pct)
+  const deepFocusSeconds = sessionDeepFocusSeconds(session)
+  const color = deepFocusSeconds == null ? 'var(--text-muted)' : deepFocusSeconds > 0 ? 'var(--good)' : focusColor(pct)
   const outcome = normalizedOutcome(session)
   const outcomeLabel = outcome === 'yes' ? 'Goal reached' : outcome === 'partly' ? 'Partly reached' : outcome === 'no' ? 'Goal missed' : null
   const startedAt = sessionStartedAt(session)
@@ -143,7 +145,7 @@ function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         {outcomeLabel && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{outcomeLabel}</span>}
         <span style={{ background: color + '18', border: `1px solid ${color}40`, borderRadius: 100, padding: '4px 10px', fontSize: 12, fontWeight: 700, color }}>
-          {pct == null ? 'Not measured' : `${pct}%`}
+          {deepFocusSeconds == null ? 'Deep focus —' : `${fmtDuration(deepFocusSeconds)} deep focus`}
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete() }}

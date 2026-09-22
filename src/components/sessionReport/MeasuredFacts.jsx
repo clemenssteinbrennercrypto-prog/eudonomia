@@ -24,9 +24,6 @@ function activityOutputLine(facts) {
  */
 export default function MeasuredFacts({ session, analysis, hideTimeline = false }) {
   const { measurement, facts } = analysis
-  const belowThresholdSeconds = measurement.scored
-    ? Math.max(0, (measurement.measuredSeconds || 0) - (measurement.focusedSeconds || 0))
-    : null
   const startedAt = sessionStartedAt(session)
   const endedAt = sessionEndedAt(session)
   const pausedSeconds = sessionPausedSeconds(session)
@@ -66,11 +63,11 @@ export default function MeasuredFacts({ session, analysis, hideTimeline = false 
         <div className="stat">
           <span
             className="stat-value stat-value-large"
-            style={{ fontSize: 72, color: measurement.averageFocus == null ? 'var(--text-muted)' : measurement.averageFocus >= 60 ? 'var(--good)' : measurement.averageFocus >= 40 ? 'var(--warn)' : 'var(--bad)' }}
+            style={{ fontSize: 56, color: measurement.deepFocusSeconds == null ? 'var(--text-muted)' : 'var(--good)' }}
           >
-            {measurement.averageFocus == null ? '--' : `${measurement.averageFocus}%`}
+            {measurement.deepFocusSeconds == null ? '--' : fmtDuration(measurement.deepFocusSeconds)}
           </span>
-          <span className="stat-label">{measurement.averageFocus == null ? 'focus not measured' : 'average focus'}</span>
+          <span className="stat-label">{measurement.deepFocusSeconds == null ? 'deep focus available for new sessions' : 'deep focus'}</span>
           {/* Which ruler produced this number. V2 is a different measurement
               generation held out of cross-session comparison, so the figure is
               labelled rather than silently mixed in with V1 history. */}
@@ -87,10 +84,10 @@ export default function MeasuredFacts({ session, analysis, hideTimeline = false 
         </div>
         <div className="stat-divider" />
         <div className="stat">
-          <span className="stat-value" style={{ color: belowThresholdSeconds == null ? 'var(--text-muted)' : 'var(--bad)' }}>
-            {belowThresholdSeconds == null ? '--' : `${Math.round(belowThresholdSeconds / 60)}m`}
+          <span className="stat-value" style={{ color: measurement.averageFocus == null ? 'var(--text-muted)' : 'var(--text)' }}>
+            {measurement.averageFocus == null ? '--' : `${measurement.averageFocus}/100`}
           </span>
-          <span className="stat-label">{belowThresholdSeconds == null ? 'distraction not measured' : 'time below threshold'}</span>
+          <span className="stat-label">{measurement.averageFocus == null ? 'attention not measured' : 'average attention'}</span>
         </div>
       </div>
 

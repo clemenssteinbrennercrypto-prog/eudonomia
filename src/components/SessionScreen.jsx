@@ -56,6 +56,7 @@ import {
 } from '../lib/sessionDuration'
 import {
   ATTENTION_ACCUMULATION_VERSION,
+  DEEP_FOCUS_TIME_VERSION,
   accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
@@ -939,6 +940,7 @@ export default function SessionScreen({
 
   // ── Session stats refs ────────────────────────────────────────────────────
   const focusedSecondsRef    = useRef(0)
+  const flowSecondsRef       = useRef(0)
   const measuredSecondsRef   = useRef(0)
   const scoreSumRef          = useRef(0)
   const statsSampleAtRef     = useRef(startTimeRef.current)
@@ -1396,6 +1398,7 @@ export default function SessionScreen({
       measuredSeconds: measuredSecondsRef.current,
       scoreSum: scoreSumRef.current,
       focusedSeconds: focusedSecondsRef.current,
+      flowSeconds: flowSecondsRef.current,
       preDriftSeconds: preDriftSecondsRef.current,
       currentStreak: currentStreakRef.current,
       longestStreak: longestStreakRef.current,
@@ -1423,6 +1426,7 @@ export default function SessionScreen({
     measuredSecondsRef.current = result.measuredSeconds
     scoreSumRef.current = result.scoreSum
     focusedSecondsRef.current = result.focusedSeconds
+    flowSecondsRef.current = result.flowSeconds
     preDriftSecondsRef.current = result.preDriftSeconds
     currentStreakRef.current = result.currentStreak
     longestStreakRef.current = result.longestStreak
@@ -1532,6 +1536,7 @@ export default function SessionScreen({
         detectorModelSha256: cameraMeasurement.detectorModelSha256,
       },
       attentionAccumulationVersion: ATTENTION_ACCUMULATION_VERSION,
+      deepFocusTimeVersion: DEEP_FOCUS_TIME_VERSION,
       scoreTraceVersion: SCORE_TRACE_VERSION,
       plannedDuration:      duration,
       energyLevel,
@@ -1544,6 +1549,7 @@ export default function SessionScreen({
       measuredSeconds,
       scoreSum:             scoreSumRef.current,
       focusedSeconds:       focusedSecondsRef.current,
+      flowSeconds:          flowSecondsRef.current,
       longestFocusedStreak: longestStreakRef.current,
       peakFocusStreak:      longestStreakRef.current,
       avgFocusScore,

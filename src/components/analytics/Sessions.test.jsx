@@ -114,6 +114,7 @@ describe('Sessions — wall-clock timing', () => {
     } })])
 
     expect(csv.split('\n')[0]).toContain('wallDurationSeconds,activeDurationSeconds,pausedSeconds')
+    expect(csv.split('\n')[0]).toContain('measuredSeconds,deepFocusSeconds,averageAttention')
     expect(csv.split('\n')[1]).toContain(',14400,3600,10800,')
   })
 })

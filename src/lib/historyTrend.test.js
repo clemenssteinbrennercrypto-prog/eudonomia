@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  aggregateDeepFocusTime,
   aggregateFocusMeasurements,
   buildHistoryTrend,
   hasMeasuredFocus,
   measuredSessionDayStreak,
   outcomeDistribution,
   sessionFocusPct,
+  sessionDeepFocusSeconds,
 } from './historyTrend'
 
 const NOW = new Date(2026, 7, 10, 12, 0, 0)
@@ -68,6 +70,43 @@ describe('session focus measurement', () => {
       sessionCount: 2,
       focusPct: 5,
     })
+  })
+
+  it('reports only exact forward-recorded Flow time as deep focus', () => {
+    const exact = sessionAt(NOW, 80, {
+      measuredSeconds: 3600,
+      deepFocusTimeVersion: 1,
+      flowSeconds: 900,
+    })
+    const historical = sessionAt(NOW, 80, {
+      measuredSeconds: 3600,
+      deepFocusSeconds: 3000,
+    })
+    expect(sessionDeepFocusSeconds(exact)).toBe(900)
+    expect(sessionDeepFocusSeconds(historical)).toBeNull()
+    expect(aggregateDeepFocusTime([exact])).toEqual({
+      seconds: 900,
+      knownSeconds: 900,
+      trackedSessions: 1,
+      measuredSessions: 1,
+      complete: true,
+    })
+    expect(aggregateDeepFocusTime([exact, historical])).toMatchObject({
+      seconds: null,
+      knownSeconds: 900,
+      trackedSessions: 1,
+      measuredSessions: 2,
+      complete: false,
+    })
+  })
+
+  it('refuses malformed exact Flow time', () => {
+    const malformed = sessionAt(NOW, 80, {
+      measuredSeconds: 600,
+      deepFocusTimeVersion: 1,
+      flowSeconds: 601,
+    })
+    expect(sessionDeepFocusSeconds(malformed)).toBeNull()
   })
 
   // Superseded on 31 August: the native ruler becomes the primary one, so

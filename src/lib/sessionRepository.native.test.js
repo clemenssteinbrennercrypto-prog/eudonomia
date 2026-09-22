@@ -116,7 +116,7 @@ describe('saving', () => {
   it('stores a versioned analysis snapshot with the record', async () => {
     await repo.saveSession(sessionData({ goalOutcome: 'yes' }))
     const analysis = sent('db_save_session').analysis
-    expect(analysis.version).toBe(1)
+    expect(analysis.version).toBe(2)
     expect(analysis.status).toBe('ready')
   })
 })

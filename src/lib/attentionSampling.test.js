@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ATTENTION_ACCUMULATION_VERSION,
+  DEEP_FOCUS_TIME_VERSION,
   accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from './attentionSampling'
@@ -47,6 +48,7 @@ describe('shared measured-span accumulation', () => {
     measuredSeconds: 239,
     scoreSum: 19_120,
     focusedSeconds: 239,
+    flowSeconds: 20,
     preDriftSeconds: 0,
     currentStreak: 239,
     longestStreak: 239,
@@ -71,6 +73,7 @@ describe('shared measured-span accumulation', () => {
       measuredSeconds: 241,
       scoreSum: 19_280,
       focusedSeconds: 241,
+      flowSeconds: 20,
       currentStreak: 241,
       longestStreak: 241,
       goodStreakSeconds: 241,
@@ -79,6 +82,26 @@ describe('shared measured-span accumulation', () => {
       timelineSample: { second: 241, score: 80, focused: true, phase: 'lock_in' },
     })
     expect(next.phaseSeconds.lock_in).toBe(2)
+  })
+
+  it('counts deep focus only inside the strict Flow state and above its threshold', () => {
+    const inFlow = accumulateMeasuredSpan(current, {
+      sampleSeconds: 2,
+      elapsedSecs: 241,
+      score: 80,
+      msSinceDistraction: Infinity,
+      inFlow: true,
+    })
+    const belowFlowThreshold = accumulateMeasuredSpan(current, {
+      sampleSeconds: 2,
+      elapsedSecs: 241,
+      score: 71,
+      msSinceDistraction: Infinity,
+      inFlow: true,
+    })
+    expect(DEEP_FOCUS_TIME_VERSION).toBe(1)
+    expect(inFlow.flowSeconds).toBe(22)
+    expect(belowFlowThreshold.flowSeconds).toBe(20)
   })
 
   it('forces a final timeline sample even inside the current snapshot bucket', () => {

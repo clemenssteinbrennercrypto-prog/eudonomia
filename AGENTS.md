@@ -195,14 +195,25 @@ scoring or detection.**
    rather than being guessed. Review V1 after 30 valid measured days and create
    V2 for changed parameters instead of rewriting stored V1 days.
 
-   As of 16 Sep 2026, Focus Metric V2 is a separate, labelled view in
+   Focus Metric V2, introduced 16 Sep 2026, remains a separate version in
    `focusMetricV2.js`: continuous measured-time credit × mean attention, plus
    a period consistency factor from dated workday plans. It reads the exact
    qualified ledger accumulators without changing saved V1 session/ledger
-   fields; the UI retains an explicit V1 formula selector. This derived metric
-   version is independent of the native V2 camera generation. Do not mix a V1
-   baseline into V2, or apply new workday plans to past dates. See
+   fields. The historical analysis component retains its V1/V2 selector, while
+   the active Lab stopped presenting either composite on 22 Sep 2026. This
+   derived metric version is independent of the native V2 camera generation.
+   Do not mix a V1 baseline into V2, or apply new workday plans to past dates. See
    `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
+10. **Deep Focus is exact Flow time, not a renamed percentage.** The primary
+    metric records `flowSeconds` only while the live Flow state is active and
+    the score is still at least `FLOW_SCORE` (72). Entering Flow already
+    requires 90 seconds of stable, distraction-free attention; that warm-up
+    does not count. `focusedSeconds` starts at 40 and the old
+    `deepFocusSeconds` field is a weighted V1 estimate, so neither may be shown
+    as literal Deep Focus time. Sessions without `deepFocusTimeVersion: 1`
+    remain unknown instead of being backfilled from those looser fields. As of
+    22 Sep 2026 this is the active Lab headline; V1/V2 composites are retained
+    only for historical inspection.
 
 ---
 

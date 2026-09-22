@@ -17,6 +17,8 @@ function session({ actualSeconds = 1000, pct = 70, goalOutcome, extra = {} } = {
     scoreMeasured: true,
     attentionScoringVersion: ATTENTION_SCORING_VERSION,
     attentionAccumulationVersion: 2,
+    deepFocusTimeVersion: 1,
+    flowSeconds: 300,
     plannedDuration: 30,
     goal: 'Draft the intro chapter',
     task: 'Thesis',
@@ -45,6 +47,7 @@ describe('status transitions', () => {
     expect(a.nextAction).toBeNull()
     // Facts are still computed so Measured Facts can render immediately.
     expect(a.measurement.aboveThresholdPct).toBe(85)
+    expect(a.measurement.deepFocusSeconds).toBe(300)
   })
 
   it('stays facts_only below the conclusion floor even once an outcome is given', () => {

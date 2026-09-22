@@ -3,9 +3,14 @@
 // can represent more than one real second. Count the elapsed wall time only
 // while a recent camera frame proves that the signal is still alive.
 
-import { GOOD_STREAK_SCORE, classifyFocusPhase, isFocusedSecond } from './attention'
+import { FLOW_SCORE, GOOD_STREAK_SCORE, classifyFocusPhase, isFocusedSecond } from './attention'
 
 export const ATTENTION_ACCUMULATION_VERSION = 2
+// Exact, forward-only time in the live Flow state. This is deliberately a
+// separate ruler from `focusedSeconds` (score >= 40) and the V1 weighted
+// `deepFocusSeconds` estimate. Historical sessions without this accumulator
+// stay unknown rather than being relabelled after the fact.
+export const DEEP_FOCUS_TIME_VERSION = 1
 export const MAX_MEASUREMENT_SPAN_MS = 3_000
 
 export function measuredSpanSeconds({
@@ -49,6 +54,7 @@ export function accumulateMeasuredSpan(current = {}, sample = {}) {
   ) return null
 
   const focused = isFocusedSecond(roundedScore)
+  const deepFocused = sample.inFlow === true && roundedScore >= FLOW_SCORE
   const goodStreakSeconds = roundedScore >= GOOD_STREAK_SCORE
     ? nonNegative(current.goodStreakSeconds) + sampleSeconds
     : 0
@@ -83,6 +89,7 @@ export function accumulateMeasuredSpan(current = {}, sample = {}) {
     measuredSeconds: nonNegative(current.measuredSeconds) + sampleSeconds,
     scoreSum: nonNegative(current.scoreSum) + roundedScore * sampleSeconds,
     focusedSeconds: nonNegative(current.focusedSeconds) + (focused ? sampleSeconds : 0),
+    flowSeconds: nonNegative(current.flowSeconds) + (deepFocused ? sampleSeconds : 0),
     preDriftSeconds: nonNegative(current.preDriftSeconds) + (sample.preDriftActive === true ? sampleSeconds : 0),
     currentStreak,
     longestStreak,

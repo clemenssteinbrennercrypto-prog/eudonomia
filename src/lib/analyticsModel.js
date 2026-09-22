@@ -1,6 +1,7 @@
 import { isUsable, calibrate, outcomeFit } from './calibration'
 import {
   aggregateAverageFocus,
+  aggregateDeepFocusTime,
   aggregateFocusMeasurements,
   sessionAverageFocus,
 } from './historyTrend'
@@ -45,6 +46,7 @@ function cohortStats(sessions) {
   for (const session of sessions) outcomes[normalizedOutcome(session) || 'unrated'] += 1
   const ratedCount = outcomes.yes + outcomes.partly + outcomes.no
   const measurement = aggregateFocusMeasurements(sessions)
+  const deepFocus = aggregateDeepFocusTime(sessions)
   return {
     sessionCount: sessions.length,
     measuredCount: measurement.sessionCount,
@@ -52,6 +54,8 @@ function cohortStats(sessions) {
     outcomes,
     hitRate: ratedCount >= 3 ? Math.round((outcomes.yes / ratedCount) * 100) : null,
     averageFocus: aggregateAverageFocus(sessions),
+    deepFocusSeconds: deepFocus.seconds,
+    deepFocusTrackedSessions: deepFocus.trackedSessions,
     measuredSeconds: measurement.measuredSeconds,
     focusedSeconds: measurement.focusedSeconds,
   }
@@ -73,6 +77,9 @@ export function buildCohortProgress(sessions = []) {
     comparisonReady,
     focusDelta: comparisonReady && current.averageFocus != null && previous.averageFocus != null
       ? current.averageFocus - previous.averageFocus
+      : null,
+    deepFocusDeltaSeconds: comparisonReady && current.deepFocusSeconds != null && previous.deepFocusSeconds != null
+      ? current.deepFocusSeconds - previous.deepFocusSeconds
       : null,
     outcomeDelta: comparisonReady && current.hitRate != null && previous.hitRate != null
       ? current.hitRate - previous.hitRate

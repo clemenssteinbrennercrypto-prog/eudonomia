@@ -47,7 +47,7 @@ function TrendPlot({ rows }) {
   const y = value => 230 - value * 2
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(point.averageFocus)}`).join(' ')
   return (
-    <svg className="analytics-plot" viewBox="0 0 1000 260" role="img" aria-label={`Average focus across ${points.length} sessions`}>
+    <svg className="analytics-plot" viewBox="0 0 1000 260" role="img" aria-label={`Average attention across ${points.length} sessions`}>
       {[20, 40, 60, 80, 100].map(value => (
         <g key={value}>
           <line x1="30" x2="970" y1={y(value)} y2={y(value)} />
@@ -57,7 +57,7 @@ function TrendPlot({ rows }) {
       <path d={path} />
       {points.map((point, index) => (
         <circle key={point.id} cx={x(index)} cy={y(point.averageFocus)} r="5" fill={outcomeColor(point.outcome)}>
-          <title>{new Date(point.timestamp).toLocaleDateString()} · {point.averageFocus}% · {point.outcome || 'unrated'}</title>
+          <title>{new Date(point.timestamp).toLocaleDateString()} · {point.averageFocus}/100 attention · {point.outcome || 'unrated'}</title>
         </circle>
       ))}
     </svg>
@@ -71,11 +71,11 @@ function DurationScatter({ rows }) {
   const x = value => 30 + (value / maxDuration) * 940
   const y = value => 230 - value * 2
   return (
-    <svg className="analytics-plot" viewBox="0 0 1000 260" role="img" aria-label={`Duration and average focus for ${points.length} sessions`}>
+    <svg className="analytics-plot" viewBox="0 0 1000 260" role="img" aria-label={`Duration and average attention for ${points.length} sessions`}>
       {[20, 40, 60, 80, 100].map(value => <line key={value} x1="30" x2="970" y1={y(value)} y2={y(value)} />)}
       {points.map(point => (
         <circle key={point.id} cx={x(point.durationMinutes)} cy={y(point.averageFocus)} r="6" fill={outcomeColor(point.outcome)}>
-          <title>{point.durationMinutes} min · {point.averageFocus}% · {point.outcome || 'unrated'}</title>
+          <title>{point.durationMinutes} min · {point.averageFocus}/100 attention · {point.outcome || 'unrated'}</title>
         </circle>
       ))}
       <text x="30" y="252">0 min</text>
@@ -112,11 +112,11 @@ function FacetTable({ title, rows }) {
       <div className="analytics-section-heading"><h2>{title}</h2><b>{rows.length} groups</b></div>
       {rows.length === 0 ? <p className="analytics-copy">No stored data for this dimension.</p> : (
         <div className="analytics-data-table">
-          <div role="row" className="is-head"><span>Condition</span><span>Focus</span><span>Reached</span><span>n</span></div>
+          <div role="row" className="is-head"><span>Condition</span><span>Attention</span><span>Reached</span><span>n</span></div>
           {rows.map(row => (
             <div role="row" key={row.id}>
               <span>{row.label}</span>
-              <strong>{row.averageFocus == null ? '—' : `${row.averageFocus}%`}</strong>
+              <strong>{row.averageFocus == null ? '—' : `${row.averageFocus}/100`}</strong>
               <strong>{row.outcomeRate == null ? '—' : `${row.outcomeRate}%`}</strong>
               <strong>{row.sessions}</strong>
             </div>
@@ -239,7 +239,7 @@ export default function DataExplorer({ sessions }) {
         <div className="analytics-section-heading">
           <div>
             <span className="analytics-kicker">Distribution</span>
-            <h2 id="distribution-heading">Session average focus</h2>
+            <h2 id="distribution-heading">Session average attention</h2>
           </div>
           <b>n={distribution.count}</b>
         </div>
@@ -249,9 +249,9 @@ export default function DataExplorer({ sessions }) {
           <>
             <Histogram distribution={distribution} />
             <div className="analytics-stat-strip">
-              <div><span>Mean</span><strong>{distribution.mean}%</strong></div>
-              <div><span>Median</span><strong>{distribution.median}%</strong></div>
-              <div><span>Middle 50%</span><strong>{distribution.q1}–{distribution.q3}%</strong></div>
+              <div><span>Mean attention</span><strong>{distribution.mean}/100</strong></div>
+              <div><span>Median attention</span><strong>{distribution.median}/100</strong></div>
+              <div><span>Middle 50%</span><strong>{distribution.q1}–{distribution.q3}/100</strong></div>
               <div><span>Sample</span><strong>{distribution.count}</strong></div>
             </div>
           </>
@@ -345,7 +345,7 @@ export default function DataExplorer({ sessions }) {
           <div role="row" className="is-head"><span role="columnheader">Metric</span><span role="columnheader">Latest</span><span role="columnheader">Previous</span></div>
           <div role="row"><span role="cell">Sessions</span><strong role="cell">{progress.current.sessionCount}</strong><strong role="cell">{progress.previous.sessionCount}</strong></div>
           <div role="row"><span role="cell">Goal reached</span><strong role="cell">{progress.current.hitRate == null ? '—' : `${progress.current.hitRate}%`}</strong><strong role="cell">{progress.previous.hitRate == null ? '—' : `${progress.previous.hitRate}%`}</strong></div>
-          <div role="row"><span role="cell">Average focus</span><strong role="cell">{progress.current.averageFocus == null ? '—' : `${progress.current.averageFocus}%`}</strong><strong role="cell">{progress.previous.averageFocus == null ? '—' : `${progress.previous.averageFocus}%`}</strong></div>
+          <div role="row"><span role="cell">Average attention</span><strong role="cell">{progress.current.averageFocus == null ? '—' : `${progress.current.averageFocus}/100`}</strong><strong role="cell">{progress.previous.averageFocus == null ? '—' : `${progress.previous.averageFocus}/100`}</strong></div>
           <div role="row"><span role="cell">Measured time</span><strong role="cell">{fmtDuration(progress.current.measuredSeconds)}</strong><strong role="cell">{fmtDuration(progress.previous.measuredSeconds)}</strong></div>
         </div>
         {!progress.comparisonReady && <p className="analytics-footnote">A delta is withheld until both cohorts contain 8 compatible usable sessions.</p>}

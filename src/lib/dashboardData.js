@@ -1,7 +1,7 @@
 import { FOCUSED_SCORE, FLOW_SCORE } from './attention'
 import { FOCUS_METRIC_V1, SCOREABLE_SCORING_VERSIONS, getFocusPeriodWindow } from './focusMetric'
 import { buildVersionedFocusPeriod } from './focusMetricV2'
-import { activeFocusGeneration, focusGenerationOf } from './historyTrend'
+import { activeFocusGeneration, aggregateDeepFocusTime, focusGenerationOf } from './historyTrend'
 import { sessionEndedAt, sessionPauseIntervals, sessionStartedAt, timelineWallSecond } from './sessionTiming'
 import { getProtectionReadiness } from './protectionReadiness'
 
@@ -90,6 +90,11 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
     schedule,
   })
   const readiness = getProtectionReadiness({ enabled: focusModeEnabled, setup: focusConfig, nativeStatus })
+  const periodSessions = (Array.isArray(sessions) ? sessions : []).filter(session => {
+    const startedAt = sessionStartedAt(session)
+    return Number.isFinite(startedAt) && startedAt >= period.start.getTime() && startedAt < period.endExclusive.getTime()
+  })
+  const deepFocus = aggregateDeepFocusTime(periodSessions)
   const { distractionCount, websiteCount } = readiness
   const protection = ({
     off: { state: 'off', label: 'Off', detail: 'Focus mode disabled' },
@@ -119,6 +124,7 @@ export function buildDashboardData({ ledger, sessions, focusConfig, focusModeEna
 
   return {
     period,
+    deepFocus,
     attention: buildAttentionField(sessions, { range, offset, periodStart, now }),
     protection,
     recentSessions,

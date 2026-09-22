@@ -20,6 +20,8 @@ function fixtureSession() {
     focusedSeconds: 1500,
     avgFocusScore: 83,
     scoreMeasured: true,
+    deepFocusTimeVersion: 1,
+    flowSeconds: 300,
     attentionScoringVersion: 1,
     attentionAccumulationVersion: 2,
     plannedDuration: 30,
@@ -76,8 +78,9 @@ describe('SessionReport contract', () => {
       const html = renderReport(mode)
       expect(html).toContain('Quick check-in')
       expect(html).toContain('Session read')
-      // time above threshold stat is part of Measured facts
-      expect(html).toContain('83%')
+      expect(html).toContain('5m')
+      expect(html).toContain('deep focus')
+      expect(html).toContain('83/100')
     }
   })
 })

@@ -22,6 +22,8 @@ function session(index, extra = {}) {
     scoreSum: average * actualSeconds,
     avgFocusScore: average,
     scoreMeasured: true,
+    deepFocusTimeVersion: 1,
+    flowSeconds: 300,
     attentionScoringVersion: 2,
     goalOutcome: 'yes',
     plannedDuration: 30,
@@ -44,6 +46,7 @@ describe('Analytics model — rolling cohort progress', () => {
   it('compares exactly the latest eight compatible sessions with the previous eight', () => {
     const rows = Array.from({ length: 16 }, (_, index) => session(index, {
       avgFocusScore: index >= 8 ? 80 : 60,
+      flowSeconds: index >= 8 ? 600 : 300,
       goalOutcome: index >= 8 ? 'yes' : 'no',
     }))
     const result = buildCohortProgress(rows)
@@ -51,6 +54,9 @@ describe('Analytics model — rolling cohort progress', () => {
     expect(result.current.averageFocus).toBe(80)
     expect(result.previous.averageFocus).toBe(60)
     expect(result.focusDelta).toBe(20)
+    expect(result.current.deepFocusSeconds).toBe(4800)
+    expect(result.previous.deepFocusSeconds).toBe(2400)
+    expect(result.deepFocusDeltaSeconds).toBe(2400)
     expect(result.outcomeDelta).toBe(100)
   })
 
@@ -58,6 +64,7 @@ describe('Analytics model — rolling cohort progress', () => {
     const result = buildCohortProgress(Array.from({ length: 12 }, (_, index) => session(index)))
     expect(result.comparisonReady).toBe(false)
     expect(result.focusDelta).toBeNull()
+    expect(result.deepFocusDeltaSeconds).toBeNull()
     expect(result.outcomeDelta).toBeNull()
   })
 })

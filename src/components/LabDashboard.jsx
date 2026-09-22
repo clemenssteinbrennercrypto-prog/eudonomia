@@ -4,9 +4,9 @@ import { emptyFocusLedger, getFocusPeriodWindow } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
 import { useCurrentTime } from '../lib/useCurrentTime'
-import FocusScoreExplanation, { focusScoreLabel } from './FocusScoreExplanation'
 import FocusScoreControls from './FocusScoreControls'
 import { useFocusScoreSchedule } from '../lib/useFocusScoreSchedule'
+import { fmtDuration } from '../lib/sessionAnalysisPresentation'
 
 const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
@@ -84,7 +84,6 @@ function AttentionField({ bins, range, title }) {
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
   const [periodSelection, setPeriodSelection] = useState({ range: 'day', periodStart: null })
-  const [metricVersion, setMetricVersion] = useState(2)
   const scheduleState = useFocusScoreSchedule()
   const nativeStatus = useCompanionStatus()
   // Sessions and the ledger arrive as props — App owns loading them and
@@ -104,11 +103,12 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     periodStart: periodSelection.periodStart,
     now: dashboardNow,
     nativeStatus,
-    metricVersion,
+    metricVersion: 2,
     schedule: scheduleState.schedule,
-  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, metricVersion, scheduleState.schedule])
+  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, scheduleState.schedule])
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
+  const displayedDeepFocusSeconds = data.deepFocus.trackedSessions > 0 ? data.deepFocus.knownSeconds : null
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
   const selectRange = range => setPeriodSelection({ range, periodStart: null })
   const movePeriod = delta => setPeriodSelection(current => {
@@ -147,24 +147,26 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
           <div className="lab-section-head">
             <div>
               <span className="lab-eyebrow">Command / Lab</span>
-              <h1 id="lab-title">Focus Score</h1>
+              <h1 id="lab-title">Deep Focus</h1>
             </div>
           </div>
-          <div className={`lab-score${period.score == null ? ' is-empty' : ''}`}>
-            <strong>{period.score ?? '—'}</strong>
-            <span>{focusScoreLabel(period)}</span>
+          <div className={`lab-score${displayedDeepFocusSeconds == null ? ' is-empty' : ''}`}>
+            <strong>{displayedDeepFocusSeconds == null ? '—' : fmtDuration(displayedDeepFocusSeconds)}</strong>
+            <span>{displayedDeepFocusSeconds == null
+              ? 'Available for newly measured sessions'
+              : data.deepFocus.complete
+                ? 'Strict Flow time'
+                : 'Tracked Flow time · older sessions unavailable'}</span>
           </div>
         </div>
 
         <div className="lab-metric-rail">
-          <Metric label="Measured time" value={period.score == null ? null : measuredMinutes} suffix="min" />
-          {metricVersion === 2
-            ? <Metric label="Time credit" value={period.timeCredit == null ? null : Math.round(period.timeCredit * 100)} suffix="%" />
-            : <Metric label="Weighted focus time" value={period.score == null ? null : Math.round(period.deepFocusMinutes)} suffix="min" />}
+          <Metric label="Measured work" value={period.measuredSeconds > 0 ? measuredMinutes : null} suffix="min" />
           <Metric label="Average attention" value={period.efficiency} suffix="/100" />
-          {metricVersion === 2 && period.range !== 'day'
-            ? <Metric label="Consistency" value={period.consistency.percent} suffix="%" />
-            : <Metric label="Measured days" value={`${period.activeDays}/${period.elapsedDays}`} suffix="days" />}
+          {period.range !== 'day'
+            ? <Metric label="Consistency" value={period.consistency.fraction == null ? null : `${period.consistency.completedDays}/${period.consistency.eligibleDays}`} suffix="days" />
+            : <Metric label="Flow gate" value="90" suffix="sec" />}
+          <Metric label="Deep focus coverage" value={data.deepFocus.measuredSessions > 0 ? `${data.deepFocus.trackedSessions}/${data.deepFocus.measuredSessions}` : null} suffix="sessions" />
         </div>
 
         <button className="lab-session-orb" type="button" onClick={onSession} aria-label="Open session setup">
@@ -173,8 +175,11 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
         </button>
       </section>
 
-      <FocusScoreExplanation period={period} />
-      <FocusScoreControls metricVersion={metricVersion} onVersionChange={setMetricVersion} scheduleState={scheduleState} now={dashboardNow} />
+      <div className="focus-score-explanation">
+        <p>Deep Focus is actual time after attention stays at 72 or higher, gaze remains stable, no distraction is active, and the Flow gate has held for 90 seconds. The warm-up does not count.</p>
+        <p>Measured work, attention quality and fulfilled planned days stay visible separately. They are no longer blended into an easy-looking percentage.</p>
+      </div>
+      <FocusScoreControls metricVersion={2} onVersionChange={() => {}} scheduleState={scheduleState} now={dashboardNow} showMetricVersions={false} />
 
       <section className="lab-attention-section">
         <div className="lab-section-head">

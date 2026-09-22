@@ -16,12 +16,12 @@
 // verdict feature is a separate, still-isolated concern for future AI
 // Companion work.
 
-import { focusGenerationOf, sessionAverageFocus, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
+import { focusGenerationOf, sessionAverageFocus, sessionDeepFocusSeconds, sessionFocusMeasurement, sessionFocusPct } from './historyTrend'
 import { SCOREABLE_SCORING_VERSIONS } from './focusMetric'
 import { summarizeSessionAlignment } from './sessionIntent'
 import { calibrate } from './calibration'
 
-export const SESSION_ANALYSIS_VERSION = 1
+export const SESSION_ANALYSIS_VERSION = 2
 
 /** Below this a session is noise, not evidence — same bar as calibration.js's
  *  `isUsable` and sessionVerdict.js's MIN_SESSION_SECONDS. Below it we still
@@ -125,7 +125,10 @@ function buildMeasurement(session) {
     measuredSeconds,
     coveragePct,
     focusedSeconds: measurement?.focusedSeconds ?? null,
-    // The headline figure: mean attention over the measured time.
+    deepFocusSeconds: sessionDeepFocusSeconds(session),
+    // Secondary diagnostic: mean attention over the measured time. Literal
+    // Deep Focus time is the user-facing result when its exact accumulator is
+    // available.
     averageFocus: sessionAverageFocus(session),
     // Kept alongside it as a secondary detail rather than dropped — it is a
     // genuinely different question and Details still reports it.

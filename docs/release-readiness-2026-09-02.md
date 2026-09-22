@@ -98,3 +98,33 @@ formula, product estimates, historical-data policy and remaining limits.
 - No installed app replacement, live camera test, push, updater-channel change
   or release publication was performed. This is verified local implementation,
   not evidence that the installed application has received V2.
+
+## Deep Focus time — 22 September 2026
+
+Clemens rejected the V2 composite after real use because it awarded an
+easy-looking 72 to two hours at attention 80 and preferred absolute Deep Focus
+time to a percentage-like score. The active Lab and session report now use a
+new exact `flowSeconds` accumulator as their primary result. Work duration,
+attention quality and consistency remain separate supporting facts instead of
+being collapsed into one number.
+
+- Deep Focus grows only while the existing live Flow state is active and the
+  score remains at least 72. The 90-second entry gate is not counted.
+- `deepFocusTimeVersion: 1` distinguishes the exact accumulator from the loose
+  threshold in `focusedSeconds` and V1's weighted `deepFocusSeconds` estimate.
+- Historical sessions without that field remain unavailable; no percentage or
+  phase estimate is relabelled as literal time.
+- The active Lab no longer offers V1/V2 score switching. The old score module
+  and historical analysis component remain intact so saved history is not
+  silently reinterpreted.
+- `npm test -- --run`: **64 files, 717 tests passed**. New boundaries cover the
+  Flow gate, invalid/legacy time, partial history coverage, the Lab headline,
+  post-session report, Analytics cohort comparison and CSV export.
+- `npm run build`, `npm run refresh:companion-webui`,
+  `npm run verify:companion-webui`, and `git diff --check`: passed. Generated
+  local-identity WebView output was not committed; CI refreshes it with the
+  release build identity.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. No Rust source changed.
+- Browser discovery returned no available browser, so native WebView layout is
+  still a manual check. No installed app or live camera session was touched.

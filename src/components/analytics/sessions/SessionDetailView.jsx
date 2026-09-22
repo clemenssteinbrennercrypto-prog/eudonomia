@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { analyzeSession } from '../../../lib/sessionAnalysis'
+import { analyzeSession, SESSION_ANALYSIS_VERSION } from '../../../lib/sessionAnalysis'
 import SessionReport from '../../SessionReport'
 import SessionTimeline from './SessionTimeline'
 import WhyThisResult from './WhyThisResult'
@@ -16,7 +16,7 @@ export default function SessionDetailView({ session, allSessions, onBack, onUpda
     [allSessions, session.id]
   )
   const analysis = useMemo(
-    () => session.analysisSnapshot?.version
+    () => session.analysisSnapshot?.version === SESSION_ANALYSIS_VERSION
       ? session.analysisSnapshot
       : analyzeSession(session, { priorSessions }),
     [session, priorSessions]

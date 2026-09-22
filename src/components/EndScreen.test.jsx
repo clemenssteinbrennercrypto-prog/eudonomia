@@ -18,7 +18,7 @@ beforeEach(() => {
 
 function render(sessionData) {
   return renderToString(React.createElement(EndScreen, {
-    sessionData: { id: 'sess-1', ...sessionData },
+    sessionData: { id: 'sess-1', deepFocusTimeVersion: 1, flowSeconds: 300, attentionScoringVersion: 1, scoreMeasured: true, ...sessionData },
     onOutcomeChange() {},
     onRestart() {},
     onPrimaryAction() {},
@@ -34,8 +34,8 @@ describe('EndScreen focus measurement', () => {
       scoreMeasured: true,
       trackingFaulted: true,
     })
-    expect(html).toContain('focus not measured')
-    expect(html).toContain('distraction not measured')
+    expect(html).toContain('attention not measured')
+    expect(html).toContain('deep focus available for new sessions')
   })
 
   it('keeps valid partial measurement when the session ends with a camera fault', () => {
@@ -47,16 +47,18 @@ describe('EndScreen focus measurement', () => {
       scoreMeasured: true,
       trackingFaulted: true,
     })
-    expect(html).toContain('75%')
-    expect(html).toContain('8m')
-    expect(html).toContain('time below threshold')
+    expect(html).toContain('75/100')
+    expect(html).toContain('5m')
+    expect(html).not.toContain('time below threshold')
   })
 })
 
 describe('EndScreen post-session flow', () => {
   it('shows measured facts immediately, before any outcome is chosen', () => {
     const html = render({ actualSeconds: 1800, measuredSeconds: 1800, focusedSeconds: 1500, avgFocusScore: 83 })
-    expect(html).toContain('83%')
+    expect(html).toContain('5m')
+    expect(html).toContain('83/100')
+    expect(html).not.toContain('83%')
     expect(html).toContain('Quick check-in')
     expect(html).not.toContain('Session read')
   })
@@ -110,7 +112,7 @@ describe('EndScreen post-session flow', () => {
     expect(html).toContain('60m')
     expect(html).toContain('180m')
     expect(html).toContain('Break')
-    expect(html).toContain('83%')
+    expect(html).toContain('83/100')
   })
 })
 

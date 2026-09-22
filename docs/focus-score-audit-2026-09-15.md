@@ -180,3 +180,32 @@ records, unknown generations, midnight rollover and pinned historical views.
 
 Full suite/build results and native/manual limits are recorded in the linked
 [release evidence](release-readiness-2026-09-02.md#focus-score-audit--15-september-2026).
+
+## Product correction — 22 September 2026
+
+Real use showed that V2's composite is too easy to read as a grade. A typical
+two-hour day at average attention 80 receives `80 × 0.9 = 72`, even though the
+camera signal's neutral face-present base is already 68. The arithmetic is
+monotonic, but the product meaning is weak: an arbitrary time-credit curve turns
+ordinary measured presence into a confident-looking 1–100 result.
+
+The active product therefore no longer presents V2 as its headline. The Lab
+shows four separate facts instead: literal Deep Focus time, measured work time,
+average attention on its 0–100 signal scale, and fulfilled/eligible planned
+workdays. Historical V1/V2 calculations remain versioned and inspectable in the
+old analysis component; no stored day is rewritten.
+
+Literal Deep Focus is a new forward-only accumulator:
+
+```text
+deep-focused second = live Flow state AND attention score >= 72
+```
+
+The live Flow state already requires 90 continuous seconds of score >= 72,
+stable gaze/head movement and no active distraction reason. Those first 90
+seconds are warm-up and do not count. A dip exits Flow and stops the accumulator.
+This is intentionally stricter than `focusedSeconds` (threshold 40), the
+`lock_in` phase (which can follow four minutes at 65), and V1's weighted
+`deepFocusSeconds`; none of those fields is relabelled. Old sessions lacking
+`deepFocusTimeVersion: 1` report Deep Focus as unavailable rather than receiving
+an estimate from a looser ruler.
