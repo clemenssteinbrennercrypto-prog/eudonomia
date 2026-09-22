@@ -128,3 +128,8 @@ being collapsed into one number.
   67 app tests passed**. No Rust source changed.
 - Browser discovery returned no available browser, so native WebView layout is
   still a manual check. No installed app or live camera session was touched.
+- Internal `Test Companion` run **#144** completed successfully for app commit
+  `1ae052a`. The `internal-test` tag resolves to that exact commit; its refreshed
+  manifest is version `0.1.2609221913`, notes build 144 / `1ae052a`, contains
+  only `darwin-aarch64`, and carries a non-empty updater signature. This moves
+  the internal channel only; no public release was created.
