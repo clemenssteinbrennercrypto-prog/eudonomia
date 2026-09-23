@@ -222,3 +222,10 @@ supporting time value when available; measured work, average attention and
 measured days remain visible. Old sessions therefore show their existing V1
 score immediately without receiving invented Deep Focus minutes. The workday
 plan remains editable context but explicitly does not alter V1.
+
+The first restoration rendered unavailable Deep Focus as a bare dash. That was
+mathematically honest but operationally ambiguous: it looked as if the metric
+had disappeared. The Lab now always labels `Deep Focus time` and states whether
+the selected period has no measured session, contains sessions that did not
+record exact Flow time, has partial exact coverage, or has complete exact
+coverage. A recorded zero remains `0s`; unavailable history remains `—`.

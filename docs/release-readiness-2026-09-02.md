@@ -159,3 +159,18 @@ does not alter V1.
   manifest is version `0.1.2609231659`, notes build 145 / `eb11525`, contains
   only `darwin-aarch64`, and carries a non-empty updater signature. This moves
   the internal channel only; no public release was created.
+
+## Explain unavailable Deep Focus — 23 September 2026
+
+The Lab's Deep Focus metric now distinguishes exact `0s` from unavailable
+history and explains the unavailable state instead of showing an unexplained
+dash. It continues to refuse estimates from the looser historical counters.
+
+- `npm test -- --run`: **64 files, 718 tests passed**.
+- `npm run build`, `npm run refresh:companion-webui`,
+  `npm run verify:companion-webui`, and `git diff --check`: passed. Generated
+  local-identity WebView output was not committed.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. No Rust source changed.
+- Browser discovery returned no available browser, so native WebView layout is
+  still a manual check. No installed app or live camera session was touched.

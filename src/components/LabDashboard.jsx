@@ -21,11 +21,12 @@ function SegmentedControl({ items, value, onChange, label }) {
   )
 }
 
-function Metric({ label, value, suffix }) {
+function Metric({ label, value, suffix, detail }) {
   return (
     <div className="lab-metric">
       <span>{label}</span>
       <strong>{value ?? '—'}{value != null && suffix ? <small>{suffix}</small> : null}</strong>
+      {detail ? <small className="lab-metric-detail">{detail}</small> : null}
     </div>
   )
 }
@@ -110,6 +111,13 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
   const displayedDeepFocusSeconds = data.deepFocus.trackedSessions > 0 ? data.deepFocus.knownSeconds : null
+  const deepFocusDetail = data.deepFocus.trackedSessions === 0
+    ? data.deepFocus.measuredSessions > 0
+      ? 'These sessions did not record exact Flow time'
+      : 'No measured session in this period'
+    : data.deepFocus.complete
+      ? 'Exact Flow time'
+      : `${data.deepFocus.trackedSessions}/${data.deepFocus.measuredSessions} measured sessions tracked`
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
   const selectRange = range => setPeriodSelection({ range, periodStart: null })
   const movePeriod = delta => setPeriodSelection(current => {
@@ -158,7 +166,11 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
         </div>
 
         <div className="lab-metric-rail">
-          <Metric label="Deep focus" value={displayedDeepFocusSeconds == null ? null : fmtDuration(displayedDeepFocusSeconds)} />
+          <Metric
+            label="Deep Focus time"
+            value={displayedDeepFocusSeconds == null ? null : fmtDuration(displayedDeepFocusSeconds)}
+            detail={deepFocusDetail}
+          />
           <Metric label="Measured work" value={period.measuredSeconds > 0 ? measuredMinutes : null} suffix="min" />
           <Metric label="Average attention" value={period.efficiency} suffix="/100" />
           <Metric label="Measured days" value={`${period.activeDays}/${period.elapsedDays}`} suffix="days" />

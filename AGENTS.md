@@ -216,7 +216,9 @@ scoring or detection.**
     as literal Deep Focus time. Sessions without `deepFocusTimeVersion: 1`
     remain unknown instead of being backfilled from those looser fields. Deep
     Focus is a supporting duration beside the V1 headline, never a replacement
-    that leaves existing history blank.
+    that leaves existing history blank. The Lab must distinguish an exact `0s`
+    from unavailable history and explain why an unavailable value is absent;
+    a bare dash makes correct refusal look like a broken counter.
 
 ---
 

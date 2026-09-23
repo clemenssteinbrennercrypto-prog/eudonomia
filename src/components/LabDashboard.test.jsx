@@ -50,11 +50,30 @@ describe('LabDashboard metric labels', () => {
     expect(screen.getByText('75')).toBeInTheDocument()
     expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
     expect(screen.getByText('30m')).toBeInTheDocument()
+    expect(screen.getByText('Deep Focus time').parentElement).toHaveTextContent('30mExact Flow time')
     expect(screen.getByText('Measured days').parentElement).toHaveTextContent('1/3days')
     expect(screen.getByText('Average attention')).toBeInTheDocument()
     expect(screen.queryByText('Time credit')).not.toBeInTheDocument()
     expect(screen.getByText(/does not alter the V1 score/i)).toBeInTheDocument()
     expect(loadFocusLedger()).toEqual(originalLedger)
+  })
+
+  it('explains why exact Deep Focus is unavailable without turning unknown history into zero', () => {
+    vi.setSystemTime(new Date(2026, 7, 25, 12))
+    const startedAt = new Date(2026, 7, 25, 9).getTime()
+    const saved = saveSession({
+      startedAt, timestamp: startedAt + 7220_000,
+      actualSeconds: 7220, measuredSeconds: 7200, scoreSum: 540000, focusedSeconds: 6000,
+      avgFocusScore: 75, attentionScoringVersion: 2, focusMetricVersion: 1,
+      focusMetricRejection: null, sessionEfficiency: 75, deepFocusSeconds: 7200,
+    })
+
+    render(React.createElement(LabDashboard, { sessions: [saved], ledger: loadFocusLedger() }))
+
+    const metric = screen.getByText('Deep Focus time').parentElement
+    expect(metric).toHaveTextContent('—')
+    expect(metric).toHaveTextContent('These sessions did not record exact Flow time')
+    expect(metric).not.toHaveTextContent('0s')
   })
 
   it('keeps the retired score formulas inspectable in the historical analytics panel', () => {
@@ -332,7 +351,7 @@ describe('LabDashboard metric labels', () => {
     expect(html).toContain('Measured work')
     expect(html).toContain('78/100 attention')
     expect(html).toContain('Average attention')
-    expect(html).toContain('Deep focus')
+    expect(html).toContain('Deep Focus time')
     expect(html).toContain('4m')
     expect(html).not.toContain('Time credit')
     expect(html).not.toContain('78% efficiency')

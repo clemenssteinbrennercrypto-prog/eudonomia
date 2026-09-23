@@ -1383,6 +1383,15 @@ body {
   text-transform: uppercase;
 }
 
+.lab-metric .lab-metric-detail {
+  margin: 8px 0 0;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .lab-session-orb {
   position: relative;
   align-self: center;
