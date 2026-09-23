@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 describe('LabDashboard metric labels', () => {
-  it('uses strict Deep Focus time as the Lab headline and keeps the inputs separate', () => {
+  it('restores V1 as the Lab headline and keeps exact Deep Focus as a supporting fact', () => {
     vi.setSystemTime(new Date(2026, 8, 16, 10))
     saveFocusScoreSchedule({ version: 1, plans: [{ effectiveFrom: '2026-09-14', workdays: [1, 2, 3, 4, 5] }] })
     const startedAt = new Date(2026, 8, 14, 9).getTime()
@@ -44,14 +44,16 @@ describe('LabDashboard metric labels', () => {
     })
     const originalLedger = loadFocusLedger()
     render(React.createElement(LabDashboard, { sessions: [saved], ledger: originalLedger }))
-    expect(screen.getByRole('heading', { name: 'Deep Focus' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Focus Score' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'V2 · Current' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
+    expect(screen.getByText('75')).toBeInTheDocument()
+    expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
     expect(screen.getByText('30m')).toBeInTheDocument()
-    expect(screen.getByText('Consistency').parentElement).toHaveTextContent('1/2days')
+    expect(screen.getByText('Measured days').parentElement).toHaveTextContent('1/3days')
     expect(screen.getByText('Average attention')).toBeInTheDocument()
     expect(screen.queryByText('Time credit')).not.toBeInTheDocument()
-    expect(screen.getByText(/no longer blended into an easy-looking percentage/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not alter the V1 score/i)).toBeInTheDocument()
     expect(loadFocusLedger()).toEqual(originalLedger)
   })
 
@@ -266,8 +268,7 @@ describe('LabDashboard metric labels', () => {
     expect(screen.getByRole('img', { name: 'Attention field for July 2026' })).toBeInTheDocument()
     expect(view.container.querySelector('.lab-score > strong')).not.toHaveTextContent('—')
     expect(view.container.querySelector('.attention-field .is-strong')).toHaveAttribute('title', 'Focus 82')
-    // No workday plan existed in July: do not invent historical consistency.
-    expect(screen.getByText('Consistency').parentElement).toHaveTextContent('—')
+    expect(screen.getByText('Measured days').parentElement).toHaveTextContent('1/31days')
   })
 
   it('labels a DST fallback day by local wall-clock quarters', () => {
@@ -331,7 +332,7 @@ describe('LabDashboard metric labels', () => {
     expect(html).toContain('Measured work')
     expect(html).toContain('78/100 attention')
     expect(html).toContain('Average attention')
-    expect(html).toContain('Deep Focus')
+    expect(html).toContain('Deep focus')
     expect(html).toContain('4m')
     expect(html).not.toContain('Time credit')
     expect(html).not.toContain('78% efficiency')

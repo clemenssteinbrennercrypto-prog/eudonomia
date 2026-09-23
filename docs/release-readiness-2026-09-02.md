@@ -133,3 +133,24 @@ being collapsed into one number.
   manifest is version `0.1.2609221913`, notes build 144 / `1ae052a`, contains
   only `darwin-aarch64`, and carries a non-empty updater signature. This moves
   the internal channel only; no public release was created.
+
+## Restore V1 headline — 23 September 2026
+
+Real use rejected the Deep-Focus-only Lab because existing history correctly
+had no forward-recorded `flowSeconds`, leaving the main readout blank. V1 is
+restored as the primary Focus Score. Exact Deep Focus remains a secondary time
+value, and historical sessions are still not backfilled from looser counters.
+Average attention is used as the numeric fallback in session lists when exact
+Deep Focus is unavailable. The stored workday plan remains editable context but
+does not alter V1.
+
+- `npm test -- --run`: **64 files, 717 tests passed**. Focused dashboard,
+  history-row, cohort, ledger and both metric-generation suites also passed.
+- `npm run build`, `npm run refresh:companion-webui`,
+  `npm run verify:companion-webui`, and `git diff --check`: passed. Generated
+  local-identity WebView output was not committed; CI refreshes it with the
+  release build identity.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. No Rust source changed.
+- Browser discovery returned no available browser, so native WebView layout is
+  still a manual check. No installed app or live camera session was touched.

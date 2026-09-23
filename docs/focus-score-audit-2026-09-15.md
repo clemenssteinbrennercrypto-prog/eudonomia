@@ -209,3 +209,16 @@ This is intentionally stricter than `focusedSeconds` (threshold 40), the
 `deepFocusSeconds`; none of those fields is relabelled. Old sessions lacking
 `deepFocusTimeVersion: 1` report Deep Focus as unavailable rather than receiving
 an estimate from a looser ruler.
+
+## Real-use reversal — 23 September 2026
+
+The Deep-Focus-only Lab was rejected after one day because existing sessions do
+not carry the new forward-only accumulator and therefore left the primary view
+blank. That refusal was mathematically honest but a worse product: the user lost
+the useful number they already understood.
+
+V1 is restored as the active Lab headline. Literal Deep Focus remains as a
+supporting time value when available; measured work, average attention and
+measured days remain visible. Old sessions therefore show their existing V1
+score immediately without receiving invented Deep Focus minutes. The workday
+plan remains editable context but explicitly does not alter V1.

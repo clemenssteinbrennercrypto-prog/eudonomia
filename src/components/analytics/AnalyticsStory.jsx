@@ -18,11 +18,6 @@ function signed(value, suffix = '') {
   return `${value > 0 ? '+' : ''}${value}${suffix}`
 }
 
-function signedDuration(seconds) {
-  if (seconds == null) return '—'
-  return `${seconds > 0 ? '+' : seconds < 0 ? '−' : ''}${fmtDuration(Math.abs(seconds))}`
-}
-
 function OutcomeInbox({ sessions, onRate }) {
   if (sessions.length === 0) return null
   const visible = sessions.slice(0, 3)
@@ -135,9 +130,9 @@ function Progress({ progress, learning }) {
           <small>{signed(progress.outcomeDelta, ' pts')} · previous {progress.previous.hitRate == null ? '—' : `${progress.previous.hitRate}%`}</small>
         </div>
         <div className="analytics-comparison-metric">
-          <span>Deep focus</span>
-          <strong>{progress.current.deepFocusSeconds == null ? '—' : fmtDuration(progress.current.deepFocusSeconds)}</strong>
-          <small>{signedDuration(progress.deepFocusDeltaSeconds)} · previous {progress.previous.deepFocusSeconds == null ? '—' : fmtDuration(progress.previous.deepFocusSeconds)}</small>
+          <span>Average attention</span>
+          <strong>{progress.current.averageFocus == null ? '—' : `${progress.current.averageFocus}/100`}</strong>
+          <small>{signed(progress.focusDelta, ' pts')} · previous {progress.previous.averageFocus == null ? '—' : `${progress.previous.averageFocus}/100`}</small>
         </div>
         <div className="analytics-comparison-metric">
           <span>Measured time</span>

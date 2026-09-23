@@ -46,7 +46,8 @@ describe('Analytics Story', () => {
   it('uses the agreed 8-vs-8 comparison and does not restore Focus Score', () => {
     const html = render(Array.from({ length: 16 }, (_, index) => session(index)))
     expect(html).toContain('Latest 8 vs previous 8')
-    expect(html).toContain('Deep focus')
+    expect(html).toContain('Average attention')
+    expect(html).toContain('70/100')
     expect(html).not.toContain('Average focus')
     expect(html).not.toContain('Focus Score')
   })

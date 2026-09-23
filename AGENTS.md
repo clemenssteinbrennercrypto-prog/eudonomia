@@ -199,8 +199,11 @@ scoring or detection.**
    `focusMetricV2.js`: continuous measured-time credit × mean attention, plus
    a period consistency factor from dated workday plans. It reads the exact
    qualified ledger accumulators without changing saved V1 session/ledger
-   fields. The historical analysis component retains its V1/V2 selector, while
-   the active Lab stopped presenting either composite on 22 Sep 2026. This
+   fields. The historical analysis component retains its V1/V2 selector. The
+   active Lab briefly stopped presenting either composite on 22 Sep 2026, but
+   Clemens reversed that decision after real use: as of 23 Sep, V1 is again
+   the primary Lab score because it gives existing history an immediately
+   useful number. This
    derived metric version is independent of the native V2 camera generation.
    Do not mix a V1 baseline into V2, or apply new workday plans to past dates. See
    `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
@@ -211,9 +214,9 @@ scoring or detection.**
     does not count. `focusedSeconds` starts at 40 and the old
     `deepFocusSeconds` field is a weighted V1 estimate, so neither may be shown
     as literal Deep Focus time. Sessions without `deepFocusTimeVersion: 1`
-    remain unknown instead of being backfilled from those looser fields. As of
-    22 Sep 2026 this is the active Lab headline; V1/V2 composites are retained
-    only for historical inspection.
+    remain unknown instead of being backfilled from those looser fields. Deep
+    Focus is a supporting duration beside the V1 headline, never a replacement
+    that leaves existing history blank.
 
 ---
 

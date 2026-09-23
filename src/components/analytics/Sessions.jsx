@@ -145,7 +145,9 @@ function SessionRow({ session, onSelect, onDelete, deleteDisabled }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         {outcomeLabel && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{outcomeLabel}</span>}
         <span style={{ background: color + '18', border: `1px solid ${color}40`, borderRadius: 100, padding: '4px 10px', fontSize: 12, fontWeight: 700, color }}>
-          {deepFocusSeconds == null ? 'Deep focus —' : `${fmtDuration(deepFocusSeconds)} deep focus`}
+          {deepFocusSeconds == null
+            ? pct == null ? 'Not measured' : `${pct}/100 attention`
+            : `${fmtDuration(deepFocusSeconds)} deep focus`}
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete() }}

@@ -4,9 +4,10 @@ import { emptyFocusLedger, getFocusPeriodWindow } from '../lib/focusMetric'
 import { buildDashboardData } from '../lib/dashboardData'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
 import { useCurrentTime } from '../lib/useCurrentTime'
+import FocusScoreExplanation, { focusScoreLabel } from './FocusScoreExplanation'
+import { fmtDuration } from '../lib/sessionAnalysisPresentation'
 import FocusScoreControls from './FocusScoreControls'
 import { useFocusScoreSchedule } from '../lib/useFocusScoreSchedule'
-import { fmtDuration } from '../lib/sessionAnalysisPresentation'
 
 const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
@@ -103,7 +104,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     periodStart: periodSelection.periodStart,
     now: dashboardNow,
     nativeStatus,
-    metricVersion: 2,
+    metricVersion: 1,
     schedule: scheduleState.schedule,
   }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, scheduleState.schedule])
   const { period } = data
@@ -147,26 +148,20 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
           <div className="lab-section-head">
             <div>
               <span className="lab-eyebrow">Command / Lab</span>
-              <h1 id="lab-title">Deep Focus</h1>
+              <h1 id="lab-title">Focus Score</h1>
             </div>
           </div>
-          <div className={`lab-score${displayedDeepFocusSeconds == null ? ' is-empty' : ''}`}>
-            <strong>{displayedDeepFocusSeconds == null ? '—' : fmtDuration(displayedDeepFocusSeconds)}</strong>
-            <span>{displayedDeepFocusSeconds == null
-              ? 'Available for newly measured sessions'
-              : data.deepFocus.complete
-                ? 'Strict Flow time'
-                : 'Tracked Flow time · older sessions unavailable'}</span>
+          <div className={`lab-score${period.score == null ? ' is-empty' : ''}`}>
+            <strong>{period.score ?? '—'}</strong>
+            <span>{focusScoreLabel(period)}</span>
           </div>
         </div>
 
         <div className="lab-metric-rail">
+          <Metric label="Deep focus" value={displayedDeepFocusSeconds == null ? null : fmtDuration(displayedDeepFocusSeconds)} />
           <Metric label="Measured work" value={period.measuredSeconds > 0 ? measuredMinutes : null} suffix="min" />
           <Metric label="Average attention" value={period.efficiency} suffix="/100" />
-          {period.range !== 'day'
-            ? <Metric label="Consistency" value={period.consistency.fraction == null ? null : `${period.consistency.completedDays}/${period.consistency.eligibleDays}`} suffix="days" />
-            : <Metric label="Flow gate" value="90" suffix="sec" />}
-          <Metric label="Deep focus coverage" value={data.deepFocus.measuredSessions > 0 ? `${data.deepFocus.trackedSessions}/${data.deepFocus.measuredSessions}` : null} suffix="sessions" />
+          <Metric label="Measured days" value={`${period.activeDays}/${period.elapsedDays}`} suffix="days" />
         </div>
 
         <button className="lab-session-orb" type="button" onClick={onSession} aria-label="Open session setup">
@@ -175,10 +170,8 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
         </button>
       </section>
 
-      <div className="focus-score-explanation">
-        <p>Deep Focus is actual time after attention stays at 72 or higher, gaze remains stable, no distraction is active, and the Flow gate has held for 90 seconds. The warm-up does not count.</p>
-        <p>Measured work, attention quality and fulfilled planned days stay visible separately. They are no longer blended into an easy-looking percentage.</p>
-      </div>
+      <FocusScoreExplanation period={period} />
+      <p className="focus-score-explanation">Your workday plan stays available as context, but it does not alter the V1 score.</p>
       <FocusScoreControls metricVersion={2} onVersionChange={() => {}} scheduleState={scheduleState} now={dashboardNow} showMetricVersions={false} />
 
       <section className="lab-attention-section">
