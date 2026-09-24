@@ -199,3 +199,8 @@ warm-up progress and accumulated Deep Focus time.
 - Browser discovery returned no available browser. The installed Eudaimonai
   app was not running on the camera-less build machine, so the real native
   Flow timer remains a manual MacBook test; no app or session was interrupted.
+- Internal `Test Companion` run **#147** completed successfully for app commit
+  `ea7b10d`. The `internal-test` tag resolves to that exact commit; its updater
+  manifest is version `0.1.2609241553`, notes build 147 / `ea7b10d`, contains
+  only `darwin-aarch64`, and carries the expected 440-byte signature. This
+  moves the internal channel only; no public release was created.
