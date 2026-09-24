@@ -105,9 +105,8 @@ describe('SessionScreen accumulation wiring', () => {
   // A camera blackout must not be able to *satisfy* a hold. The first recovered
   // frame is scored before markReady(), with an empty nose history, every
   // detection hold cleared and the frozen pre-fault score — so any duration
-  // timer still holding a pre-fault timestamp is met instantly by time nothing
-  // measured. flowGoodSince did exactly that: it granted flow, and with it the
-  // 'lock_in' phase, straight out of a >90 s outage.
+  // timer or accumulated gate still holding pre-fault evidence can mature on
+  // the first recovered frame and grant flow straight out of an outage.
   it('clears every duration hold on a camera fault, not just the accumulators', () => {
     const resetStart = source.indexOf('const resetCameraEvidence = useCallback')
     const restartStart = source.indexOf('const restartCamera = useCallback', resetStart)
@@ -120,7 +119,9 @@ describe('SessionScreen accumulation wiring', () => {
       'sustainedGoodMsRef.current = 0',
       'lastFrameTsRef.current = 0',
       'scoreLowSinceRef.current = null',
-      'flowGoodSinceRef.current = null',
+      'flowGateRef.current = { qualifiedMs: 0, interruptionMs: 0, inFlow: false }',
+      'flowSampleObservedRef.current = false',
+      'flowSampleQualifiedRef.current = false',
       'distractedSinceRef.current = null',
       'preDriftChargeMsRef.current = 0',
       'preDriftRiskRef.current = { active: false, level: 0, reason: \'stable\' }',
@@ -171,6 +172,13 @@ describe('SessionScreen accumulation wiring', () => {
     expect(source).toContain('{ multiFaceLandmarks: landmarks.length ? [landmarks] : [] },')
     expect(source).toContain('payload.capturedAtMs')
     expect(source).toContain('attentionMeasurementSource: cameraMeasurement.id')
+  })
+
+  it('shows the exact Deep Focus timer throughout the measured session', () => {
+    expect(source).toContain('Deep Focus · {formatTime(deepFocusSeconds)}')
+    expect(source).toContain('warm-up ${formatTime(flowWarmupSeconds)} / ${formatTime(FLOW_ENTRY_MS / 1000)}')
+    expect(source).toContain('setDeepFocusSeconds(result.flowSeconds)')
+    expect(source).toContain('setFlowWarmupSeconds(flowGateRef.current.qualifiedMs / 1000)')
   })
 
   // Revised 31 Aug 2026: V2 is a deliberate ruler migration, not an internal

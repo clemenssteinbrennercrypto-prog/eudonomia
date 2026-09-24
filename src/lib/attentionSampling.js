@@ -12,6 +12,33 @@ export const ATTENTION_ACCUMULATION_VERSION = 2
 // stay unknown rather than being relabelled after the fact.
 export const DEEP_FOCUS_TIME_VERSION = 1
 export const MAX_MEASUREMENT_SPAN_MS = 3_000
+export const FLOW_ENTRY_MS = 90_000
+// A single noisy landmark frame must not erase almost 90 seconds of valid
+// focus. Brief failures are withheld from Deep Focus time, then the gate resets
+// only when the interruption itself is sustained.
+export const FLOW_INTERRUPTION_HOLD_MS = 1_500
+
+export function advanceFlowGate(current = {}, sample = {}) {
+  const sampleMs = Number.isFinite(sample.sampleMs) && sample.sampleMs > 0 ? sample.sampleMs : 0
+  const qualifiedMs = nonNegative(current.qualifiedMs)
+  const interruptionMs = nonNegative(current.interruptionMs)
+  const inFlow = current.inFlow === true
+
+  if (sample.qualified === true) {
+    const nextQualifiedMs = Math.min(FLOW_ENTRY_MS, qualifiedMs + sampleMs)
+    return {
+      qualifiedMs: nextQualifiedMs,
+      interruptionMs: 0,
+      inFlow: inFlow || nextQualifiedMs >= FLOW_ENTRY_MS,
+    }
+  }
+
+  const nextInterruptionMs = interruptionMs + sampleMs
+  if (nextInterruptionMs >= FLOW_INTERRUPTION_HOLD_MS) {
+    return { qualifiedMs: 0, interruptionMs: FLOW_INTERRUPTION_HOLD_MS, inFlow: false }
+  }
+  return { qualifiedMs, interruptionMs: nextInterruptionMs, inFlow }
+}
 
 export function measuredSpanSeconds({
   previousAt,
@@ -54,7 +81,7 @@ export function accumulateMeasuredSpan(current = {}, sample = {}) {
   ) return null
 
   const focused = isFocusedSecond(roundedScore)
-  const deepFocused = sample.inFlow === true && roundedScore >= FLOW_SCORE
+  const deepFocused = sample.inFlow === true && sample.flowQualified === true && roundedScore >= FLOW_SCORE
   const goodStreakSeconds = roundedScore >= GOOD_STREAK_SCORE
     ? nonNegative(current.goodStreakSeconds) + sampleSeconds
     : 0
@@ -104,6 +131,8 @@ export function accumulateMeasuredSpan(current = {}, sample = {}) {
       second: elapsedSecs,
       score: roundedScore,
       focused,
+      inFlow: sample.inFlow === true,
+      deepFocused,
       preDrift: sample.preDriftActive === true,
       phase: nextPhase,
       activity: sample.activity || null,

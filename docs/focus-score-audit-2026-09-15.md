@@ -201,9 +201,12 @@ Literal Deep Focus is a new forward-only accumulator:
 deep-focused second = live Flow state AND attention score >= 72
 ```
 
-The live Flow state already requires 90 continuous seconds of score >= 72,
-stable gaze/head movement and no active distraction reason. Those first 90
-seconds are warm-up and do not count. A dip exits Flow and stops the accumulator.
+The live Flow state requires 90 qualified seconds of score >= 72, stable
+gaze/head movement and no active distraction reason. Those first 90 seconds are
+warm-up and do not count. A 1.5-second interruption debounce prevents a single
+noisy landmark frame from erasing the entire warm-up. Unqualified samples are
+still withheld from Deep Focus, and a sustained interruption exits Flow and
+resets the gate.
 This is intentionally stricter than `focusedSeconds` (threshold 40), the
 `lock_in` phase (which can follow four minutes at 65), and V1's weighted
 `deepFocusSeconds`; none of those fields is relabelled. Old sessions lacking
@@ -229,3 +232,19 @@ had disappeared. The Lab now always labels `Deep Focus time` and states whether
 the selected period has no measured session, contains sessions that did not
 record exact Flow time, has partial exact coverage, or has complete exact
 coverage. A recorded zero remains `0s`; unavailable history remains `—`.
+
+## Flow-gate correction — 24 September 2026
+
+Real use showed that the first exact accumulator could remain at zero even
+during an attentive session. The cause was frame-level brittleness: every
+single unqualified camera frame immediately erased up to 89.9 seconds of valid
+warm-up. At native frame rates, ordinary landmark jitter made entry into Flow
+improbably strict even though the intended rule was sustained attention, not
+thousands of flawless individual frames.
+
+The gate now accumulates qualified frame time, withholds every unqualified
+measurement span, and resets only after 1.5 seconds of sustained interruption.
+Camera faults, pauses and hard transitions still reset it immediately. The live
+session now always shows the Deep Focus timer and its 90-second warm-up progress,
+so a stuck gate is visible before the session ends. Timeline samples record the
+Flow/deep-focus state for future diagnosis.

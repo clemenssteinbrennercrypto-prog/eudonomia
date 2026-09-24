@@ -208,9 +208,12 @@ scoring or detection.**
    Do not mix a V1 baseline into V2, or apply new workday plans to past dates. See
    `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
 10. **Deep Focus is exact Flow time, not a renamed percentage.** The primary
-    metric records `flowSeconds` only while the live Flow state is active and
-    the score is still at least `FLOW_SCORE` (72). Entering Flow already
-    requires 90 seconds of stable, distraction-free attention; that warm-up
+    metric records `flowSeconds` only while the live Flow state is active, the
+    current span remains Flow-qualified and the score is still at least
+    `FLOW_SCORE` (72). Entering Flow requires 90 seconds of qualified,
+    distraction-free attention. A 1.5-second interruption debounce prevents a
+    noisy landmark frame from erasing the warm-up, while those unqualified
+    spans do not count; a sustained interruption resets the gate. The warm-up
     does not count. `focusedSeconds` starts at 40 and the old
     `deepFocusSeconds` field is a weighted V1 estimate, so neither may be shown
     as literal Deep Focus time. Sessions without `deepFocusTimeVersion: 1`

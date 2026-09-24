@@ -2,9 +2,37 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTENTION_ACCUMULATION_VERSION,
   DEEP_FOCUS_TIME_VERSION,
+  FLOW_ENTRY_MS,
+  FLOW_INTERRUPTION_HOLD_MS,
+  advanceFlowGate,
   accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from './attentionSampling'
+
+describe('Deep Focus flow gate', () => {
+  it('enters only after 90 seconds of qualified focus', () => {
+    const almost = advanceFlowGate({}, { qualified: true, sampleMs: FLOW_ENTRY_MS - 100 })
+    expect(almost).toMatchObject({ qualifiedMs: FLOW_ENTRY_MS - 100, inFlow: false })
+    expect(advanceFlowGate(almost, { qualified: true, sampleMs: 100 }))
+      .toMatchObject({ qualifiedMs: FLOW_ENTRY_MS, interruptionMs: 0, inFlow: true })
+  })
+
+  it('survives a brief noisy frame without counting it or erasing the warm-up', () => {
+    const almost = { qualifiedMs: FLOW_ENTRY_MS - 100, interruptionMs: 0, inFlow: false }
+    const noise = advanceFlowGate(almost, { qualified: false, sampleMs: 100 })
+    expect(noise).toEqual({ qualifiedMs: FLOW_ENTRY_MS - 100, interruptionMs: 100, inFlow: false })
+    expect(advanceFlowGate(noise, { qualified: true, sampleMs: 100 }))
+      .toEqual({ qualifiedMs: FLOW_ENTRY_MS, interruptionMs: 0, inFlow: true })
+  })
+
+  it('exits and erases the warm-up after a sustained interruption', () => {
+    const active = { qualifiedMs: FLOW_ENTRY_MS, interruptionMs: 0, inFlow: true }
+    const brief = advanceFlowGate(active, { qualified: false, sampleMs: FLOW_INTERRUPTION_HOLD_MS - 100 })
+    expect(brief.inFlow).toBe(true)
+    expect(advanceFlowGate(brief, { qualified: false, sampleMs: 100 }))
+      .toEqual({ qualifiedMs: 0, interruptionMs: FLOW_INTERRUPTION_HOLD_MS, inFlow: false })
+  })
+})
 
 describe('wall-clock attention accumulation', () => {
   it('counts the real span when a background timer arrives late', () => {
@@ -91,6 +119,7 @@ describe('shared measured-span accumulation', () => {
       score: 80,
       msSinceDistraction: Infinity,
       inFlow: true,
+      flowQualified: true,
     })
     const belowFlowThreshold = accumulateMeasuredSpan(current, {
       sampleSeconds: 2,
@@ -98,10 +127,21 @@ describe('shared measured-span accumulation', () => {
       score: 71,
       msSinceDistraction: Infinity,
       inFlow: true,
+      flowQualified: true,
+    })
+    const noisyFrame = accumulateMeasuredSpan(current, {
+      sampleSeconds: 2,
+      elapsedSecs: 241,
+      score: 80,
+      msSinceDistraction: Infinity,
+      inFlow: true,
+      flowQualified: false,
     })
     expect(DEEP_FOCUS_TIME_VERSION).toBe(1)
     expect(inFlow.flowSeconds).toBe(22)
     expect(belowFlowThreshold.flowSeconds).toBe(20)
+    expect(noisyFrame.flowSeconds).toBe(20)
+    expect(noisyFrame.timelineSample).toMatchObject({ inFlow: true, deepFocused: false })
   })
 
   it('forces a final timeline sample even inside the current snapshot bucket', () => {

@@ -179,3 +179,23 @@ dash. It continues to refuse estimates from the looser historical counters.
   manifest is version `0.1.2609231718`, notes build 146 / `a5dd314`, contains
   only `darwin-aarch64`, and carries a non-empty updater signature. This moves
   the internal channel only; no public release was created.
+
+## Make the Deep Focus gate attainable — 24 September 2026
+
+The original 90-second gate reset on a single unqualified landmark frame, so
+ordinary native-camera jitter could keep Deep Focus at zero indefinitely. The
+gate now tolerates up to 1.5 seconds of interruption without counting that time,
+then resets on a sustained interruption. The live session exposes both the
+warm-up progress and accumulated Deep Focus time.
+
+- `npm test -- --run`: **64 files, 722 tests passed**. New tests pin the
+  90-second entry gate, brief-noise tolerance, sustained-interruption reset,
+  strict accumulation and live timer wiring.
+- `npm run build`, `npm run refresh:companion-webui`,
+  `npm run verify:companion-webui`, and `git diff --check`: passed. Generated
+  local-identity WebView output was not committed.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. No Rust source changed.
+- Browser discovery returned no available browser. The installed Eudaimonai
+  app was not running on the camera-less build machine, so the real native
+  Flow timer remains a manual MacBook test; no app or session was interrupted.

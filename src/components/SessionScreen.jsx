@@ -57,6 +57,8 @@ import {
 import {
   ATTENTION_ACCUMULATION_VERSION,
   DEEP_FOCUS_TIME_VERSION,
+  FLOW_ENTRY_MS,
+  advanceFlowGate,
   accumulateMeasuredSpan,
   measuredSpanSeconds,
 } from '../lib/attentionSampling'
@@ -141,7 +143,6 @@ const CAMERA_FAULT_COPY = {
     hint: 'The camera was allowed, but the local tracking engine never began analysing. Try again; if it persists, reinstall or rebuild the app bundle.',
   },
 }
-const FLOW_STABLE_MS         = 90_000   // 90s of good signals → flow state
 const ACTIVITY_DISTRACTION_HOLD_MS = 10_000
 const ACTIVITY_REASON_HOLD_MS      = 30_000
 const ACTIVITY_FOCUS_BONUS_PER_TICK = 2
@@ -849,6 +850,8 @@ export default function SessionScreen({
   const [milestone,       setMilestone]       = useState(null) // {msg}
   const [phaseCue,        setPhaseCue]        = useState(null) // {msg, phase}
   const [inFlowState,     setInFlowState]     = useState(false)
+  const [deepFocusSeconds, setDeepFocusSeconds] = useState(0)
+  const [flowWarmupSeconds, setFlowWarmupSeconds] = useState(0)
   const [preDriftRisk,    setPreDriftRisk]    = useState({ active: false, level: 0, reason: 'stable' })
   const [focusPhase,      setFocusPhase]      = useState('arrival')
   const [distractionCount, setDistractionCount] = useState(0)
@@ -990,7 +993,9 @@ export default function SessionScreen({
   const gazeSignalRef       = useRef({ hasFace: false, pitchDeg: 0, yawSigned: 0 })
 
   // ── Flow state refs ───────────────────────────────────────────────────────
-  const flowGoodSinceRef    = useRef(null) // when flow conditions first met
+  const flowGateRef         = useRef({ qualifiedMs: 0, interruptionMs: 0, inFlow: false })
+  const flowSampleObservedRef = useRef(false)
+  const flowSampleQualifiedRef = useRef(false)
   const inFlowRef           = useRef(false)
 
   // ── 3-frame deadzone refs ─────────────────────────────────────────────────
@@ -1119,7 +1124,9 @@ export default function SessionScreen({
     sustainedGoodMsRef.current = 0
     lastFrameTsRef.current = 0
     scoreLowSinceRef.current = null
-    flowGoodSinceRef.current = null
+    flowGateRef.current = { qualifiedMs: 0, interruptionMs: 0, inFlow: false }
+    flowSampleObservedRef.current = false
+    flowSampleQualifiedRef.current = false
     distractedSinceRef.current = null
     preDriftChargeMsRef.current = 0
     headDownStartRef.current = null
@@ -1413,6 +1420,7 @@ export default function SessionScreen({
       msSinceDistraction: lastDistractionRef.current ? now - lastDistractionRef.current : Infinity,
       preDriftActive: preDriftRiskRef.current.active,
       inFlow: inFlowRef.current,
+      flowQualified: flowSampleObservedRef.current && flowSampleQualifiedRef.current,
       timelineIntervalSeconds: SCORE_UPDATE_SECS,
       forceTimelineSample,
       activity: {
@@ -1427,6 +1435,10 @@ export default function SessionScreen({
     scoreSumRef.current = result.scoreSum
     focusedSecondsRef.current = result.focusedSeconds
     flowSecondsRef.current = result.flowSeconds
+    setDeepFocusSeconds(result.flowSeconds)
+    setFlowWarmupSeconds(flowGateRef.current.qualifiedMs / 1000)
+    flowSampleObservedRef.current = false
+    flowSampleQualifiedRef.current = false
     preDriftSecondsRef.current = result.preDriftSeconds
     currentStreakRef.current = result.currentStreak
     longestStreakRef.current = result.longestStreak
@@ -2303,24 +2315,24 @@ export default function SessionScreen({
     //   • Score ≥ 72 (good, not just OK)
     //   • Low head fidget (stable gaze)
     //   • No active distraction reason
-    //   • Maintained for FLOW_STABLE_MS (90s)
+    //   • 90s of qualified frames, with brief landmark noise withheld rather
+    //     than letting one frame erase the entire warm-up
     const flowConditions = !trackingUncertain &&
       focusScoreRef.current >= FLOW_SCORE &&
       fidgetVariance <= HEAD_DRIFT_THRESH * 0.5 &&
       primaryReason === 'focused'
-    if (flowConditions) {
-      if (!flowGoodSinceRef.current) flowGoodSinceRef.current = now
-      const flowFor = now - flowGoodSinceRef.current
-      if (flowFor >= FLOW_STABLE_MS && !inFlowRef.current) {
-        inFlowRef.current = true
-        setInFlowState(true)
-      }
-    } else {
-      flowGoodSinceRef.current = null
-      if (inFlowRef.current) {
-        inFlowRef.current = false
-        setInFlowState(false)
-      }
+    const nextFlowGate = advanceFlowGate(flowGateRef.current, {
+      qualified: flowConditions,
+      sampleMs: frameDelta,
+    })
+    flowGateRef.current = nextFlowGate
+    flowSampleQualifiedRef.current = flowSampleObservedRef.current
+      ? flowSampleQualifiedRef.current && flowConditions
+      : flowConditions
+    flowSampleObservedRef.current = true
+    if (nextFlowGate.inFlow !== inFlowRef.current) {
+      inFlowRef.current = nextFlowGate.inFlow
+      setInFlowState(nextFlowGate.inFlow)
     }
 
     // ── Circadian-adjusted alert delay ────────────────────────────────────
@@ -2999,20 +3011,24 @@ export default function SessionScreen({
           </div>
         )}
 
-        {/* Flow state indicator */}
-        {inFlowState && !isCalibrating && (
+        {/* Literal Deep Focus time stays visible so the user can verify that
+            the strict Flow gate is actually earning seconds. */}
+        {!isCalibrating && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             marginTop: 8,
             animation: 'none',
           }}>
             <div style={{
-              width: 6, height: 6, borderRadius: '50%', background: '#B79CFF',
-              boxShadow: '0 0 0 3px #B79CFF28',
-              animation: 'flowPulse 2s ease-in-out infinite',
+              width: 6, height: 6, borderRadius: '50%',
+              background: inFlowState ? '#B79CFF' : 'var(--line-strong)',
+              boxShadow: inFlowState ? '0 0 0 3px #B79CFF28' : 'none',
+              animation: inFlowState ? 'flowPulse 2s ease-in-out infinite' : 'none',
             }} />
-            <span style={{ fontSize: 12, color: '#B79CFF', fontWeight: 600, letterSpacing: '0.05em' }}>
-              Flow state
+            <span style={{ fontSize: 12, color: inFlowState ? '#B79CFF' : 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+              Deep Focus · {formatTime(deepFocusSeconds)}{inFlowState
+                ? ' · recording'
+                : ` · warm-up ${formatTime(flowWarmupSeconds)} / ${formatTime(FLOW_ENTRY_MS / 1000)}`}
             </span>
           </div>
         )}
