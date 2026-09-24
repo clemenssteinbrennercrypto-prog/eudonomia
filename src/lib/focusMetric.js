@@ -729,6 +729,15 @@ export function buildFocusPeriod(ledger, options = {}) {
   const activeGeneration = generationCandidates.length > 0
     ? activeFocusGeneration(generationCandidates)
     : ledgerGeneration ?? ATTENTION_SCORING_VERSION
+  // A single selected day is not a cross-generation comparison. Read that
+  // day's own versioned ruler so V1 history remains visible after the product
+  // moves to V2. Multi-day periods still stay on the active generation and
+  // therefore never average two camera rulers together.
+  const selectedDayKey = localDayKey(start)
+  const selectedDayCalculation = range === 'day' && selectedDayKey <= todayKey
+    ? calculateDailyFocus(safeLedger.days[selectedDayKey])
+    : null
+  const periodGeneration = selectedDayCalculation?.generation ?? activeGeneration
   const sessionDays = new Set((options.sessions || [])
     .map(session => localDayKey(session?.startedAt ?? session?.timestamp))
     .filter(Boolean))
@@ -738,7 +747,7 @@ export function buildFocusPeriod(ledger, options = {}) {
     const entry = safeLedger.days[key]
     const storedCalculation = calculateDailyFocus(entry)
     const isFuture = key > todayKey
-    const calculated = !isFuture && storedCalculation?.generation === activeGeneration ? storedCalculation : null
+    const calculated = !isFuture && storedCalculation?.generation === periodGeneration ? storedCalculation : null
     const noActivity = !entry && !sessionDays.has(key) && !isFuture
     days.push({
       key,
@@ -778,7 +787,7 @@ export function buildFocusPeriod(ledger, options = {}) {
     .filter(([key]) => key < localDayKey(start) && key <= todayKey)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([, entry]) => calculateDailyFocus(entry))
-    .filter(day => day?.generation === activeGeneration)
+    .filter(day => day?.generation === periodGeneration)
     .map(day => day.rawScore)
     .filter(Number.isFinite)
     .slice(0, 28)
@@ -788,7 +797,7 @@ export function buildFocusPeriod(ledger, options = {}) {
     const calculated = calculateDailyFocus(entry)
     return {
       key,
-      score: calculated?.generation === activeGeneration ? calculated.score : null,
+      score: calculated?.generation === periodGeneration ? calculated.score : null,
     }
   })
 
@@ -797,7 +806,7 @@ export function buildFocusPeriod(ledger, options = {}) {
     metricVersion: 1,
     offset: safeOffset,
     title: formatPeriodTitle(range, start),
-    generation: activeGeneration,
+    generation: periodGeneration,
     start,
     endExclusive,
     days,

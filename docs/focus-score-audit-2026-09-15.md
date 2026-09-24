@@ -248,3 +248,18 @@ Camera faults, pauses and hard transitions still reset it immediately. The live
 session now always shows the Deep Focus timer and its 90-second warm-up progress,
 so a stuck gate is visible before the session ends. Timeline samples record the
 Flow/deep-focus state for future diagnosis.
+
+## Period-total correction — 24 September 2026
+
+Real use exposed a separate aggregation error: the exact-Flow aggregator
+correctly marked a period incomplete when older sessions lacked `flowSeconds`,
+but the Lab ignored that refusal and displayed `knownSeconds` anyway. A week
+therefore appeared to contain only the two exact minutes recorded today.
+
+That partial subtotal is no longer presented as a period total. The Lab period
+rail now shows V1's versioned, phase-weighted `deepFocusSeconds` as `Focus time`.
+It is available for qualifying historical sessions and is explicitly labelled
+as phase-weighted; it is not relabelled as literal Flow. Exact `flowSeconds`
+remains available in individual session analysis. A selected historical day is
+read on the camera generation that actually measured that day, while weekly and
+monthly calculations still refuse to combine camera generations.

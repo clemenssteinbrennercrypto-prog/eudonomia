@@ -204,3 +204,22 @@ warm-up progress and accumulated Deep Focus time.
   manifest is version `0.1.2609241553`, notes build 147 / `ea7b10d`, contains
   only `darwin-aarch64`, and carries the expected 440-byte signature. This
   moves the internal channel only; no public release was created.
+
+## Correct partial historical focus time — 24 September 2026
+
+The Lab previously showed the known exact-Flow subset even when the selected
+period also contained older sessions without `flowSeconds`. That made a whole
+week look like today's two minutes. Period surfaces now use the complete,
+versioned V1 phase-weighted Focus time already stored in the ledger. Exact Flow
+remains a per-session diagnostic and is not guessed for old records. A selected
+historical day can render on its own camera generation; multi-day periods still
+use one generation.
+
+- `npm test -- --run`: **64 files, 723 tests passed**. Regression coverage pins
+  a two-day period containing only two minutes of exact Flow to the full stored
+  period Focus time, and proves a V1 day remains readable after V2 becomes the
+  active ruler.
+- `npm run build`: passed with the existing MediaPipe/non-module and chunk-size
+  warnings.
+- `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
+  67 app tests passed**. No Rust source changed.

@@ -713,6 +713,33 @@ describe('daily ledger and calendar periods', () => {
     expect(period.days.find(day => day.key === '2026-08-18')?.score).toBeGreaterThan(0)
   })
 
+  it('keeps a historical day readable on its own ruler after the active ruler changes', () => {
+    const v1Start = new Date(2026, 7, 17, 9).getTime()
+    const v2Start = new Date(2026, 7, 18, 9).getTime()
+    const v1 = measuredSession({ id: 'v1-day', startedAt: v1Start, measuredSeconds: 3600, efficiency: 90 })
+    const v2 = measuredSession({ id: 'v2-day', startedAt: v2Start, measuredSeconds: 3600, efficiency: 40 })
+    v2.attentionScoringVersion = ATTENTION_SCORING_VERSION + 1
+
+    let ledger = addSessionToFocusLedger(emptyFocusLedger(), withSessionFocusMetric(v1))
+    ledger = addSessionToFocusLedger(ledger, withSessionFocusMetric(v2))
+    const historicalDay = buildFocusPeriod(ledger, {
+      range: 'day',
+      periodStart: new Date(2026, 7, 17),
+      now: new Date(2026, 7, 19, 18),
+      sessions: [v1, v2],
+    })
+
+    expect(historicalDay).toMatchObject({
+      generation: ATTENTION_SCORING_VERSION,
+      activeDays: 1,
+      efficiency: 90,
+      measuredSeconds: 3600,
+      deepFocusMinutes: 60,
+    })
+    expect(historicalDay.score).toBeGreaterThan(0)
+    expect(historicalDay.days[0]).toMatchObject({ status: 'measured', generation: ATTENTION_SCORING_VERSION })
+  })
+
   it('includes the stored 103-minute session and rounds the combined day normally', () => {
     const day = {
       sessions: {

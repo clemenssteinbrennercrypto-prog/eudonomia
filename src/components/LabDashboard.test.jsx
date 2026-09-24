@@ -31,34 +31,43 @@ afterEach(() => {
 })
 
 describe('LabDashboard metric labels', () => {
-  it('restores V1 as the Lab headline and keeps exact Deep Focus as a supporting fact', () => {
+  it('uses complete V1 focus time instead of presenting a partial exact-Flow subtotal', () => {
     vi.setSystemTime(new Date(2026, 8, 16, 10))
     saveFocusScoreSchedule({ version: 1, plans: [{ effectiveFrom: '2026-09-14', workdays: [1, 2, 3, 4, 5] }] })
-    const startedAt = new Date(2026, 8, 14, 9).getTime()
-    const saved = saveSession({
-      startedAt, timestamp: startedAt + 7220_000,
-      actualSeconds: 7220, measuredSeconds: 7200, scoreSum: 576000, focusedSeconds: 6900, avgFocusScore: 80,
+    const historicalStart = new Date(2026, 8, 14, 9).getTime()
+    const historical = saveSession({
+      startedAt: historicalStart, timestamp: historicalStart + 3620_000,
+      actualSeconds: 3620, measuredSeconds: 3600, scoreSum: 288000, focusedSeconds: 3450, avgFocusScore: 80,
       attentionScoringVersion: 2, focusMetricVersion: 1, focusMetricRejection: null,
-      sessionEfficiency: 80, deepFocusSeconds: 7200,
-      deepFocusTimeVersion: 1, flowSeconds: 1800,
+      sessionEfficiency: 80, deepFocusSeconds: 3600,
+    })
+    const currentStart = new Date(2026, 8, 16, 9).getTime()
+    const current = saveSession({
+      startedAt: currentStart, timestamp: currentStart + 3620_000,
+      actualSeconds: 3620, measuredSeconds: 3600, scoreSum: 288000, focusedSeconds: 3450, avgFocusScore: 80,
+      attentionScoringVersion: 2, focusMetricVersion: 1, focusMetricRejection: null,
+      sessionEfficiency: 80, deepFocusSeconds: 3600,
+      deepFocusTimeVersion: 1, flowSeconds: 120,
     })
     const originalLedger = loadFocusLedger()
-    render(React.createElement(LabDashboard, { sessions: [saved], ledger: originalLedger }))
+    render(React.createElement(LabDashboard, { sessions: [current, historical], ledger: originalLedger }))
     expect(screen.getByRole('heading', { name: 'Focus Score' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'V2 · Current' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
-    expect(screen.getByText('75')).toBeInTheDocument()
-    expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
-    expect(screen.getByText('30m')).toBeInTheDocument()
-    expect(screen.getByText('Deep Focus time').parentElement).toHaveTextContent('30mExact Flow time')
-    expect(screen.getByText('Measured days').parentElement).toHaveTextContent('1/3days')
+    expect(screen.getByText('47')).toBeInTheDocument()
+    expect(screen.getByText('Average of 2 measured days · v1')).toBeInTheDocument()
+    const focusTime = screen.getByText('Focus time').parentElement
+    expect(focusTime).toHaveTextContent('120m')
+    expect(focusTime).toHaveTextContent('Across 2 measured days · V1')
+    expect(focusTime).not.toHaveTextContent('2m')
+    expect(screen.getByText('Measured days').parentElement).toHaveTextContent('2/3days')
     expect(screen.getByText('Average attention')).toBeInTheDocument()
     expect(screen.queryByText('Time credit')).not.toBeInTheDocument()
     expect(screen.getByText(/does not alter the V1 score/i)).toBeInTheDocument()
     expect(loadFocusLedger()).toEqual(originalLedger)
   })
 
-  it('explains why exact Deep Focus is unavailable without turning unknown history into zero', () => {
+  it('shows versioned historical focus time even before exact Flow recording existed', () => {
     vi.setSystemTime(new Date(2026, 7, 25, 12))
     const startedAt = new Date(2026, 7, 25, 9).getTime()
     const saved = saveSession({
@@ -70,10 +79,10 @@ describe('LabDashboard metric labels', () => {
 
     render(React.createElement(LabDashboard, { sessions: [saved], ledger: loadFocusLedger() }))
 
-    const metric = screen.getByText('Deep Focus time').parentElement
-    expect(metric).toHaveTextContent('—')
-    expect(metric).toHaveTextContent('These sessions did not record exact Flow time')
-    expect(metric).not.toHaveTextContent('0s')
+    const metric = screen.getByText('Focus time').parentElement
+    expect(metric).toHaveTextContent('120m')
+    expect(metric).toHaveTextContent('Phase-weighted V1 time')
+    expect(metric).not.toHaveTextContent('—')
   })
 
   it('keeps the retired score formulas inspectable in the historical analytics panel', () => {
@@ -351,8 +360,9 @@ describe('LabDashboard metric labels', () => {
     expect(html).toContain('Measured work')
     expect(html).toContain('78/100 attention')
     expect(html).toContain('Average attention')
-    expect(html).toContain('Deep Focus time')
-    expect(html).toContain('4m')
+    expect(html).toContain('Focus time')
+    expect(html).toContain('10m')
+    expect(html).toContain('Phase-weighted V1 time')
     expect(html).not.toContain('Time credit')
     expect(html).not.toContain('78% efficiency')
     expect(html).toContain('title="Focus 53"')

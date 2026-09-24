@@ -207,8 +207,8 @@ scoring or detection.**
    derived metric version is independent of the native V2 camera generation.
    Do not mix a V1 baseline into V2, or apply new workday plans to past dates. See
    `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
-10. **Deep Focus is exact Flow time, not a renamed percentage.** The primary
-    metric records `flowSeconds` only while the live Flow state is active, the
+10. **Exact Flow and historical focus time are two different rulers.** The
+    per-session exact metric records `flowSeconds` only while the live Flow state is active, the
     current span remains Flow-qualified and the score is still at least
     `FLOW_SCORE` (72). Entering Flow requires 90 seconds of qualified,
     distraction-free attention. A 1.5-second interruption debounce prevents a
@@ -216,12 +216,14 @@ scoring or detection.**
     spans do not count; a sustained interruption resets the gate. The warm-up
     does not count. `focusedSeconds` starts at 40 and the old
     `deepFocusSeconds` field is a weighted V1 estimate, so neither may be shown
-    as literal Deep Focus time. Sessions without `deepFocusTimeVersion: 1`
-    remain unknown instead of being backfilled from those looser fields. Deep
-    Focus is a supporting duration beside the V1 headline, never a replacement
-    that leaves existing history blank. The Lab must distinguish an exact `0s`
-    from unavailable history and explain why an unavailable value is absent;
-    a bare dash makes correct refusal look like a broken counter.
+    as literal Flow time. Sessions without `deepFocusTimeVersion: 1` remain
+    unknown instead of being backfilled from those looser fields. The Lab does
+    not aggregate this forward-only subset: doing so made a week containing old
+    sessions look like it held only today's minutes. Its period rail instead
+    shows V1's complete phase-weighted `deepFocusSeconds` as `Focus time`, with
+    that estimate named explicitly. Exact Flow remains a per-session diagnostic.
+    A selected single historical day may render on its own camera generation;
+    multi-day periods still use one generation and never blend V1/V2 rulers.
 
 ---
 

@@ -110,14 +110,18 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
   }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, scheduleState.schedule])
   const { period } = data
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
-  const displayedDeepFocusSeconds = data.deepFocus.trackedSessions > 0 ? data.deepFocus.knownSeconds : null
-  const deepFocusDetail = data.deepFocus.trackedSessions === 0
-    ? data.deepFocus.measuredSessions > 0
-      ? 'These sessions did not record exact Flow time'
-      : 'No measured session in this period'
-    : data.deepFocus.complete
-      ? 'Exact Flow time'
-      : `${data.deepFocus.trackedSessions}/${data.deepFocus.measuredSessions} measured sessions tracked`
+  // V1 already stores one versioned, phase-weighted time contribution for
+  // every qualifying historical session. The newer exact Flow accumulator is
+  // forward-only; summing its known subset made a week containing old sessions
+  // look like it contained only today's couple of minutes. Period surfaces use
+  // the complete V1 time ruler, while session details may still show exact
+  // forward-recorded Flow time.
+  const displayedFocusSeconds = period.score == null
+    ? null
+    : Math.round(period.deepFocusMinutes * 60)
+  const focusTimeDetail = period.range === 'day'
+    ? 'Phase-weighted V1 time'
+    : `Across ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'} · V1`
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
   const selectRange = range => setPeriodSelection({ range, periodStart: null })
   const movePeriod = delta => setPeriodSelection(current => {
@@ -167,9 +171,9 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
 
         <div className="lab-metric-rail">
           <Metric
-            label="Deep Focus time"
-            value={displayedDeepFocusSeconds == null ? null : fmtDuration(displayedDeepFocusSeconds)}
-            detail={deepFocusDetail}
+            label="Focus time"
+            value={displayedFocusSeconds == null ? null : fmtDuration(displayedFocusSeconds)}
+            detail={focusTimeDetail}
           />
           <Metric label="Measured work" value={period.measuredSeconds > 0 ? measuredMinutes : null} suffix="min" />
           <Metric label="Average attention" value={period.efficiency} suffix="/100" />
