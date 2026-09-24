@@ -223,3 +223,8 @@ use one generation.
   warnings.
 - `cargo test --manifest-path companion/src-tauri/Cargo.toml`: **13 library +
   67 app tests passed**. No Rust source changed.
+- Internal `Test Companion` run **#148** completed successfully for app commit
+  `0bbaee1`. The `internal-test` tag resolves to that exact commit; its updater
+  manifest is version `0.1.2609242019`, notes build 148 / `0bbaee1`, contains
+  only `darwin-aarch64`, and carries the expected 440-byte signature. This
+  moves the internal channel only; no public release was created.
