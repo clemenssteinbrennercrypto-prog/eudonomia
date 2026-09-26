@@ -4,24 +4,20 @@ import { buildVersionedFocusPeriod } from '../../lib/focusMetricV2'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import { useCurrentTime } from '../../lib/useCurrentTime'
 import FocusScoreExplanation, { focusScoreLabel } from '../FocusScoreExplanation'
-import FocusScoreControls from '../FocusScoreControls'
-import { useFocusScoreSchedule } from '../../lib/useFocusScoreSchedule'
 import { formatMinutes } from '../../lib/durationFormat'
 
 /**
- * The versioned daily Focus Score — distinct from a single session's "time
- * above threshold" (see MeasuredFacts.jsx). Both explicit metric versions use
- * the same qualified raw ledger, with V1 retained for historical comparison.
+ * The product's daily Focus Score — distinct from a single session's "time
+ * above threshold" (see MeasuredFacts.jsx). Stored metric versions remain an
+ * internal history boundary and are not separate user-selectable products.
  */
 export default function FocusScorePanel({ ledger, sessions }) {
   const [range, setRange] = useState('day')
   const [periodStart, setPeriodStart] = useState(null)
-  const [metricVersion, setMetricVersion] = useState(2)
-  const scheduleState = useFocusScoreSchedule()
   const now = useCurrentTime()
   const period = useMemo(
-    () => buildVersionedFocusPeriod(ledger, { range, periodStart, sessions, now, metricVersion, schedule: scheduleState.schedule }),
-    [ledger, sessions, range, periodStart, now, metricVersion, scheduleState.schedule]
+    () => buildVersionedFocusPeriod(ledger, { range, periodStart, sessions, now, metricVersion: FOCUS_METRIC_V1.version }),
+    [ledger, sessions, range, periodStart, now]
   )
   const dayView = range === 'day'
   const measuredMinutes = Math.round(period.measuredSeconds / 60)
@@ -91,7 +87,6 @@ export default function FocusScorePanel({ ledger, sessions }) {
       </div>
 
       <FocusScoreExplanation period={period} />
-      <FocusScoreControls metricVersion={metricVersion} onVersionChange={setMetricVersion} scheduleState={scheduleState} now={now} />
 
       {period.score != null && (
         <>
@@ -99,12 +94,8 @@ export default function FocusScorePanel({ ledger, sessions }) {
             {[
               { label: 'Average attention', value: period.efficiency == null ? '--' : `${period.efficiency}/100` },
               { label: 'Measured', value: fmtDuration(period.measuredSeconds) },
-              metricVersion === 2
-                ? { label: 'Time credit', value: `${Math.round(period.timeCredit * 100)}%` }
-                : { label: 'Weighted focus time', value: fmtDuration(Math.round(period.deepFocusMinutes * 60)) },
-              metricVersion === 2 && !dayView
-                ? { label: 'Consistency', value: period.consistency.percent == null ? '--' : `${period.consistency.percent}%` }
-                : { label: 'Measured days', value: `${period.activeDays}/${period.elapsedDays}` },
+              { label: 'Focus time', value: fmtDuration(Math.round(period.deepFocusMinutes * 60)) },
+              { label: 'Measured days', value: `${period.activeDays}/${period.elapsedDays}` },
             ].map(item => (
               <div key={item.label} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '13px 8px', textAlign: 'center' }}>
                 <p style={{ fontSize: 21, fontWeight: 300, color: 'var(--text)', margin: 0 }}>{item.value}</p>
@@ -113,7 +104,7 @@ export default function FocusScorePanel({ ledger, sessions }) {
             ))}
           </div>
 
-          {dayView && metricVersion === 1 && (
+          {dayView && (
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 7 }}>
                 <span>Duration adjustment</span>
@@ -148,11 +139,11 @@ export default function FocusScorePanel({ ledger, sessions }) {
           <div style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 11, color: 'var(--text-muted)' }}>
             <span>{period.streak}d current streak</span>
             {period.baseline != null && <span>{period.score - period.baseline >= 0 ? '+' : ''}{period.score - period.baseline} vs your own baseline</span>}
-            {metricVersion === 1 && <span>
+            <span>
               {period.totalMeasuredDays >= FOCUS_METRIC_V1.calibrationReviewDays
                 ? 'Focus Score calibration review due'
                 : `${period.totalMeasuredDays}/${FOCUS_METRIC_V1.calibrationReviewDays} days until calibration review`}
-            </span>}
+            </span>
           </div>
         </>
       )}

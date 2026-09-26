@@ -199,11 +199,13 @@ scoring or detection.**
    `focusMetricV2.js`: continuous measured-time credit × mean attention, plus
    a period consistency factor from dated workday plans. It reads the exact
    qualified ledger accumulators without changing saved V1 session/ledger
-   fields. The historical analysis component retains its descriptive formula selector. The
-   active Lab briefly stopped presenting either composite on 22 Sep 2026, but
-   Clemens reversed that decision after real use: as of 23 Sep, V1 is again
-   the primary Lab score because it gives existing history an immediately
-   useful number. This
+   fields. The active Lab briefly stopped presenting either composite on 22
+   Sep 2026, but Clemens reversed that decision after real use: as of 23 Sep,
+   V1 is again the primary Lab score because it gives existing history an
+   immediately useful number. As of 26 Sep, that same score is the only
+   user-visible Focus Score throughout Lab and Analytics; the alternative
+   formula and its selector remain internal rather than appearing as a second
+   product system. This
    derived metric version is independent of the native V2 camera generation.
    Do not mix a V1 baseline into V2, or apply new workday plans to past dates. See
    `docs/focus-score-audit-2026-09-15.md` for the formula, estimates and limits.
@@ -221,7 +223,8 @@ scoring or detection.**
     not aggregate this forward-only subset: doing so made a week containing old
     sessions look like it held only today's minutes. Its period rail instead
     shows V1's complete phase-weighted `deepFocusSeconds` as `Focus time`, with
-    that estimate named explicitly. Exact Flow remains a per-session diagnostic.
+    the value marked as estimated and its weighting explained in the score
+    details. Exact Flow remains a per-session diagnostic.
     A selected single historical day may render on its own camera generation;
     multi-day periods still use one generation and never blend camera measurement methods.
 

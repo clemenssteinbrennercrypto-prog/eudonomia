@@ -1,19 +1,12 @@
 import { FOCUS_METRIC_V1 } from '../lib/focusMetric'
-import { FOCUS_METRIC_V2 } from '../lib/focusMetricV2'
 import { formatMinutes } from '../lib/durationFormat'
 
 export function focusScoreLabel(period) {
   if (period.score == null) return 'Not measured'
-  if (period.metricVersion === 2) return period.range === 'day'
-    ? 'Time + attention calculation'
-    : 'Time + attention + consistency calculation'
-  return period.range === 'day'
-    ? 'Phase-weighted calculation'
-    : `Phase-weighted average of ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'}`
+  return 'Focus Score'
 }
 
 export default function FocusScoreExplanation({ period }) {
-  const v2 = period.metricVersion === 2
   const today = period.today
   const selectedDay = period.range === 'day' ? period.days[0] : null
   const statusDay = selectedDay || today
@@ -29,36 +22,16 @@ export default function FocusScoreExplanation({ period }) {
   return (
     <div className="focus-score-explanation">
       {status && <p>{status}</p>}
-      {!v2 && period.range !== 'day' && period.score != null && (
+      {period.range !== 'day' && period.score != null && (
         <p>Only measured days enter this average. Days without sessions do not lower it.</p>
       )}
-      {v2 && period.range !== 'day' && period.score != null && (
-        <p>
-          {period.activeDays} measured {period.activeDays === 1 ? 'day' : 'days'} · Daily average {Math.round(period.dailyAverage)}
-          {period.consistency.percent != null
-            ? ` × ${Math.round(period.consistency.factor * 1000) / 10}% consistency factor ≈ ${period.score}.`
-            : '. No eligible planned days yet; consistency has no effect.'}
-        </p>
-      )}
-      {v2 && period.range !== 'day' && period.consistency.eligibleDays > 0 && (
-        <p>Consistency: {period.consistency.completedDays}/{period.consistency.eligibleDays} eligible workdays measured ({period.consistency.percent}%). Today counts once measured; rest days are excluded.</p>
-      )}
-      {v2 && period.consistency.unknownDays > 0 && <p>{period.consistency.unknownDays} planned {period.consistency.unknownDays === 1 ? 'day has' : 'days have'} no qualifying measurement and {period.consistency.unknownDays === 1 ? 'is' : 'are'} excluded from consistency.</p>}
       <details>
         <summary>How this score works</summary>
-        {v2 ? <>
-          <p>This calculation combines measured work time, average attention and consistency. Attention is the camera-based quality proxy, not a judgment of your work’s results.</p>
-          <p>Daily score = average attention × time credit. Time credit grows smoothly: {formatMinutes(FOCUS_METRIC_V2.referenceMinutes)} of measured time earns {FOCUS_METRIC_V2.referenceTimeCredit * 100}%; longer days add progressively less. Better attention at the same duration always improves the unrounded score.</p>
-          <p>Weekly, monthly and yearly scores average measured daily scores, then multiply by a consistency factor between {(1 - FOCUS_METRIC_V2.consistencyWeight) * 100}% and 100%. Consistency is measured workdays divided by eligible planned workdays. A finished planned day with no session reduces it; an unfinished today, rest day or unmeasured session does not.</p>
-          <p>A session needs at least {formatMinutes(5)} of measured time. Camera gaps earn no time. Sessions belong to their start date. No measurements means no score; a genuine measured zero stays zero. Daily bars show daily scores before the period’s consistency adjustment.</p>
-          <p>The calculation uses validated raw measurements, including historical ones. Stored results stay unchanged, and different camera measurement methods are never mixed.</p>
-        </> : <>
         <p>Focus Score combines average attention with weighted focus time. It is a 1–100 index, not a percentage of time focused or a measure of completed work.</p>
         <p>Shorter days score lower at the same attention level. The duration adjustment reaches full weight at {formatMinutes(FOCUS_METRIC_V1.fullDayMinutes)} of measured time; weighted focus time still has diminishing returns after that.</p>
         <p>Average attention is the measured signal on a 0–100 scale. Weighted focus time gives each minute partial credit based on its focus phase; it is not literal time spent in deep focus.</p>
         <p>Focus Score uses estimated phase weights. A change of phase can lower the index even when average attention rises; use average attention to compare concentration alone.</p>
         <p>At least {formatMinutes(5)} of measured time in a session is required. Camera gaps earn no time. Sessions are assigned to their start date. Weekly and monthly values average qualifying daily scores equally; average attention is weighted by measured time.</p>
-        </>}
       </details>
     </div>
   )

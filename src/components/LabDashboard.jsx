@@ -6,8 +6,6 @@ import { useCompanionStatus } from '../lib/useCompanionStatus'
 import { useCurrentTime } from '../lib/useCurrentTime'
 import FocusScoreExplanation, { focusScoreLabel } from './FocusScoreExplanation'
 import { fmtDuration } from '../lib/sessionAnalysisPresentation'
-import FocusScoreControls from './FocusScoreControls'
-import { useFocusScoreSchedule } from '../lib/useFocusScoreSchedule'
 
 const PERIOD_RANGES = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']]
 
@@ -86,7 +84,6 @@ function AttentionField({ bins, range, title }) {
 
 export default function LabDashboard({ focusModeEnabled, sessions = [], ledger = null, onSession, onProtection, onAnalytics }) {
   const [periodSelection, setPeriodSelection] = useState({ range: 'day', periodStart: null })
-  const scheduleState = useFocusScoreSchedule()
   const nativeStatus = useCompanionStatus()
   // Sessions and the ledger arrive as props — App owns loading them and
   // re-reads after every completed session, so this stays a pure render of
@@ -106,8 +103,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     now: dashboardNow,
     nativeStatus,
     metricVersion: 1,
-    schedule: scheduleState.schedule,
-  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, scheduleState.schedule])
+  }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus])
   const { period } = data
   // V1 already stores one versioned, phase-weighted time contribution for
   // every qualifying historical session. The newer exact Flow accumulator is
@@ -119,8 +115,8 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     ? null
     : Math.round(period.deepFocusMinutes * 60)
   const focusTimeDetail = period.range === 'day'
-    ? 'Phase-weighted focus time'
-    : `Across ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'} · phase-weighted`
+    ? 'Estimated from measured focus phases'
+    : `Across ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'} · estimated`
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
   const selectRange = range => setPeriodSelection({ range, periodStart: null })
   const movePeriod = delta => setPeriodSelection(current => {
@@ -186,8 +182,6 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
       </section>
 
       <FocusScoreExplanation period={period} />
-      <p className="focus-score-explanation">Your workday plan stays available as context, but it does not alter Focus Score.</p>
-      <FocusScoreControls metricVersion={2} onVersionChange={() => {}} scheduleState={scheduleState} now={dashboardNow} showMetricVersions={false} />
 
       <section className="lab-attention-section">
         <div className="lab-section-head">
