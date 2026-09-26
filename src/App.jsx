@@ -341,18 +341,6 @@ export default function App() {
     setScreen('session-setup')
   }
 
-  const handleAnalyticsExperiment = (prefill = {}) => {
-    if (Number.isFinite(prefill.duration)) setDuration(prefill.duration)
-    if (prefill.workspaceId && workspaceState.workspaces.some(workspace => workspace.id === prefill.workspaceId)) {
-      setWorkspaceState({ ...workspaceState, activeWorkspaceId: prefill.workspaceId })
-    }
-    setTask('')
-    setGoal('')
-    setTags([])
-    setSessionData(null)
-    setScreen('session-setup')
-  }
-
   if (flow === 'landing') {
     return <LandingPage />
   }
@@ -465,7 +453,6 @@ export default function App() {
         <AnalyticsShell
           onClose={() => setScreen('lab')}
           onHistoryCleared={handleHistoryCleared}
-          onStartExperiment={handleAnalyticsExperiment}
         />
       )}
     </div>

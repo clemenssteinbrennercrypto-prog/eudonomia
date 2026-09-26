@@ -177,8 +177,8 @@ const ghostBtnStyle = {
 }
 
 /**
- * Searchable, paginated session history. Selecting a row opens the shared
- * SessionReport in place (SessionDetailView) — a dedicated route isn't needed
+ * Searchable, paginated session history. Selecting a row opens its compact
+ * overview in place (SessionDetailView) — a dedicated route isn't needed
  * since "back" is just clearing the selection.
  */
 export default function Sessions({ sessions, focusLedger, selectedSessionId, onSelectSession, onDeleteSession, onClearAll, onUpdateSession, compact = false }) {

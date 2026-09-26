@@ -63,32 +63,6 @@ function OutcomeInbox({ sessions, onRate }) {
   )
 }
 
-function Experiment({ experiment, onStartExperiment }) {
-  const outcome = experiment.evidence?.outcome
-  return (
-    <section className="analytics-experiment" aria-labelledby="next-experiment-heading">
-      <div className="analytics-section-heading">
-        <div>
-          <span className="analytics-kicker">Next session</span>
-          <h2 id="next-experiment-heading">{experiment.title}</h2>
-        </div>
-        <b>{experiment.source === 'qualified_pattern' ? 'Based on a pattern' : experiment.source === 'latest_session' ? 'Based on your last result' : 'Not enough data yet'}</b>
-      </div>
-      <p className="analytics-experiment-hypothesis">{experiment.hypothesis}</p>
-      {outcome && (
-        <p className="analytics-evidence-line">
-          Outcome check: {outcome.bestRate}% reached ({outcome.bestN} rated) vs {outcome.worstRate}% ({outcome.worstN} rated).
-        </p>
-      )}
-      {experiment.prefill && Object.keys(experiment.prefill).length > 0 && onStartExperiment && (
-        <button type="button" className="analytics-primary-action" onClick={() => onStartExperiment(experiment.prefill)}>
-          Use this setup →
-        </button>
-      )}
-    </section>
-  )
-}
-
 function RecentOverview({ progress, learning }) {
   const current = progress.current
   const remaining = Math.max(0, learning.requiredForComparison - learning.qualified)
@@ -163,7 +137,6 @@ export default function AnalyticsStory({
   onDeleteSession,
   onClearAll,
   onUpdateSession,
-  onStartExperiment,
 }) {
   const story = useMemo(() => buildAnalyticsStory(sessions), [sessions])
 
@@ -171,7 +144,6 @@ export default function AnalyticsStory({
     <div className="analytics-story">
       <RecentOverview progress={story.progress} learning={story.learning} />
       <OutcomeInbox sessions={story.unratedSessions} onRate={onUpdateSession} />
-      <Experiment experiment={story.experiment} onStartExperiment={onStartExperiment} />
       <section className="analytics-history" aria-labelledby="session-history-heading">
         <div className="analytics-section-heading">
           <div>

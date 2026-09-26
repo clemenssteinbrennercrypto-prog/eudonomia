@@ -6,7 +6,6 @@ import {
   buildExplorerSummary,
   buildFocusDistribution,
   buildInterventionSummary,
-  buildNextExperiment,
   knownComparableSessions,
 } from './analyticsModel'
 
@@ -69,13 +68,7 @@ describe('Analytics model — rolling cohort progress', () => {
   })
 })
 
-describe('Analytics model — recommendations and data', () => {
-  it('falls back to the latest rated session before enough pattern evidence exists', () => {
-    const result = buildNextExperiment([session(1, { goalOutcome: 'no', avgFocusScore: 35 })])
-    expect(result.source).toBe('latest_session')
-    expect(result.evidence.actionCode).toBeTruthy()
-  })
-
+describe('Analytics model — data', () => {
   it('summarizes only interventions that were actually stored', () => {
     const result = buildInterventionSummary([session(1, {
       distractionEvents: 2,

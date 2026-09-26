@@ -62,11 +62,11 @@ export async function clearHistoryAndRefresh({ clearAll, refresh, onHistoryClear
 }
 
 /**
- * The persistent top-level Analytics area: Overview for recent results and the
- * next useful action, Details for the underlying distributions. Owns the one
+ * The persistent top-level Analytics area: Overview for recent results and
+ * session history, Details for the underlying distributions. Owns the one
  * shared load of sessions + the focus ledger and every history mutation.
  */
-export default function AnalyticsShell({ onClose, onHistoryCleared = () => {}, onStartExperiment }) {
+export default function AnalyticsShell({ onClose, onHistoryCleared = () => {} }) {
   const [view, setView] = useState('story')
   const [sessions, setSessions] = useState([])
   const [focusLedger, setFocusLedger] = useState(() => emptyFocusLedger())
@@ -200,7 +200,6 @@ export default function AnalyticsShell({ onClose, onHistoryCleared = () => {}, o
                 onDeleteSession={handleDeleteSession}
                 onClearAll={handleClearAll}
                 onUpdateSession={handleUpdateSession}
-                onStartExperiment={onStartExperiment}
               />
             )}
             {view === 'data' && <DataExplorer sessions={sessions} />}

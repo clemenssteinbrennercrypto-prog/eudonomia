@@ -48,10 +48,11 @@ describe('Analytics Story', () => {
     expect(html).toContain('These values are useful now')
   })
 
-  it('asks for missing outcomes before giving a derived recommendation', () => {
+  it('asks for missing outcomes without inventing a next-session test', () => {
     const html = render([session(1, { goalOutcome: null })])
-    expect(html.indexOf('Missing outcomes')).toBeLessThan(html.indexOf('Next session'))
     expect(html).toContain('How did these sessions go?')
+    expect(html).not.toContain('Next session')
+    expect(html).not.toContain('Next-session test')
   })
 
   it('uses the agreed 8-vs-8 comparison and does not restore Focus Score', () => {

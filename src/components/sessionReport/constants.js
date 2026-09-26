@@ -1,7 +1,4 @@
-// Shared label/color tables for the session report — used by MeasuredFacts,
-// SessionDetails, CheckIn, and (via analytics/sessions/SessionDetailView) the
-// history detail view. Kept in one place so the post-session screen and the
-// reopened-from-history view can never disagree on what a code means.
+// Shared label/color tables for the post-session report.
 
 export const DISTRACTION_LABELS = {
   phone: 'Phone check',

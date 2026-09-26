@@ -43,7 +43,6 @@ export default function EndScreen({ sessionData, onOutcomeChange, onRestart, onP
         <SessionReport
           session={sessionData}
           analysis={analysis}
-          mode="post-session"
           onOutcomeChange={onOutcomeChange}
           onPrimaryAction={onPrimaryAction}
           onSecondaryAction={() => onRestart()}

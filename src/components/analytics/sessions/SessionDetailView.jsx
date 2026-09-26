@@ -1,14 +1,11 @@
 import { useMemo } from 'react'
 import { analyzeSession, SESSION_ANALYSIS_VERSION } from '../../../lib/sessionAnalysis'
-import SessionReport from '../../SessionReport'
-import SessionTimeline from './SessionTimeline'
-import WhyThisResult from './WhyThisResult'
+import SessionOverview from './SessionOverview'
 
 /**
- * Reopening a session from history renders through the exact same
- * SessionReport used right after the session ends (see EndScreen.jsx) — this
- * is what makes "post-session and historical detail render the same analysis
- * contract" true by construction rather than by convention.
+ * History is intentionally shorter than the immediate post-session debrief:
+ * one compact overview, a duration-only attention breakdown, and the editable
+ * outcome. Raw timelines and audit data remain in the stored/exported record.
  */
 export default function SessionDetailView({ session, allSessions, onBack, onUpdateSession }) {
   const priorSessions = useMemo(
@@ -25,15 +22,10 @@ export default function SessionDetailView({ session, allSessions, onBack, onUpda
   return (
     <div className="analytics-session-detail">
       <button type="button" className="analytics-detail-back" onClick={onBack}>← Session history</button>
-      <SessionTimeline session={session} />
-      <WhyThisResult session={session} analysis={analysis} />
-      <SessionReport
+      <SessionOverview
         session={session}
         analysis={analysis}
-        mode="history"
-        hideTimeline
-        onOutcomeChange={(patch) => onUpdateSession(session.id, patch)}
-        onPrimaryAction={onBack}
+        onUpdateSession={(patch) => onUpdateSession(session.id, patch)}
       />
     </div>
   )

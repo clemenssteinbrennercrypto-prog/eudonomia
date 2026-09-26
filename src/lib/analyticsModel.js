@@ -1,4 +1,4 @@
-import { isUsable, calibrate, outcomeFit } from './calibration'
+import { isUsable } from './calibration'
 import {
   aggregateAverageFocus,
   aggregateDeepFocusTime,
@@ -6,10 +6,7 @@ import {
   sessionAverageFocus,
 } from './historyTrend'
 import { SCOREABLE_SCORING_VERSIONS } from './focusMetric'
-import { analyzeSession } from './sessionAnalysis'
-import { describeNextAction } from './sessionAnalysisPresentation'
 import { summarizeSessionAlignment } from './sessionIntent'
-import { formatMinutes } from './durationFormat'
 
 export const COHORT_SIZE = 8
 
@@ -88,115 +85,6 @@ export function buildCohortProgress(sessions = []) {
   }
 }
 
-function candidateOutcomeSupport(bestSessions, worstSessions) {
-  const best = outcomeFit(bestSessions || [])
-  const worst = outcomeFit(worstSessions || [])
-  if (!best || !worst) return null
-  return {
-    bestRate: best.hitRate,
-    worstRate: worst.hitRate,
-    bestN: best.n,
-    worstN: worst.n,
-    delta: best.hitRate - worst.hitRate,
-  }
-}
-
-function bucketCandidate(kind, result, title, prefill = null) {
-  if (!result?.best || !result?.worst) return null
-  const outcome = candidateOutcomeSupport(result.best.sessions, result.worst.sessions)
-  const focusGap = result.best.focusPct - result.worst.focusPct
-  return {
-    kind,
-    source: 'qualified_pattern',
-    title,
-    hypothesis: `${result.best.label} averaged ${result.best.focusPct}% focus across ${result.best.n} sessions, versus ${result.worst.focusPct}% across ${result.worst.n} ${result.worst.label}. Test whether the same condition helps again.`,
-    evidence: { focusGap, best: result.best, worst: result.worst, outcome },
-    prefill,
-    rank: (outcome && outcome.delta > 0 ? 1000 + outcome.delta : 0) + focusGap + Math.min(20, result.best.n + result.worst.n),
-  }
-}
-
-function qualifiedExperiment(calibration, usable) {
-  if (!calibration.ready) return null
-  const candidates = [
-    bucketCandidate(
-      'workspace',
-      calibration.workspace,
-      calibration.workspace?.best ? `Repeat ${calibration.workspace.best.label}` : '',
-      calibration.workspace?.best ? { workspaceId: String(calibration.workspace.best.id).split(':')[0] } : null,
-    ),
-    bucketCandidate(
-      'time_of_day',
-      calibration.timeOfDay,
-      calibration.timeOfDay?.best ? `Test the ${calibration.timeOfDay.best.label}` : '',
-    ),
-    bucketCandidate(
-      'weekday',
-      calibration.weekday,
-      calibration.weekday?.best ? `Test ${calibration.weekday.best.label} again` : '',
-    ),
-  ].filter(Boolean)
-
-  if (calibration.duration?.shorterIsBetter) {
-    const { best, longest } = calibration.duration.shorterIsBetter
-    const bestSessions = usable.filter(session => session.plannedDuration === best.minutes)
-    const longestSessions = usable.filter(session => session.plannedDuration === longest.minutes)
-    const outcome = candidateOutcomeSupport(bestSessions, longestSessions)
-    candidates.push({
-      kind: 'duration',
-      source: 'qualified_pattern',
-      title: `Test a ${formatMinutes(best.minutes)} block`,
-      hypothesis: `${formatMinutes(best.minutes)} sessions averaged ${best.focusPct}% focus (${best.n} sessions), versus ${longest.focusPct}% for ${formatMinutes(longest.minutes)} blocks (${longest.n}). Test the shorter block once more.`,
-      evidence: { focusGap: best.focusPct - longest.focusPct, best, worst: longest, outcome },
-      prefill: { duration: best.minutes },
-      rank: (outcome && outcome.delta > 0 ? 1000 + outcome.delta : 0) + (best.focusPct - longest.focusPct) + Math.min(20, best.n + longest.n),
-    })
-  }
-
-  return candidates.sort((a, b) => b.rank - a.rank)[0] || null
-}
-
-export function buildNextExperiment(sessions = []) {
-  const comparable = knownComparableSessions(sessions)
-  const usable = comparable.filter(isUsable)
-  const calibration = calibrate(comparable)
-  const qualified = qualifiedExperiment(calibration, usable)
-  if (qualified) return qualified
-
-  const latestRated = comparable.find(session => normalizedOutcome(session))
-  if (latestRated) {
-    const priorSessions = comparable.filter(session => session.id !== latestRated.id)
-    const analysis = analyzeSession(latestRated, { priorSessions })
-    const action = describeNextAction(analysis.nextAction)
-    if (action) {
-      return {
-        kind: 'latest_session',
-        source: 'latest_session',
-        title: 'Next-session test',
-        hypothesis: action,
-        evidence: {
-          sessionId: latestRated.id,
-          conclusionCode: analysis.conclusion?.code ?? null,
-          actionCode: analysis.nextAction?.code ?? null,
-        },
-        prefill: {
-          ...(Number.isFinite(latestRated.plannedDuration) ? { duration: latestRated.plannedDuration } : {}),
-          ...(latestRated.workspace?.id ? { workspaceId: latestRated.workspace.id } : {}),
-        },
-      }
-    }
-  }
-
-  return {
-    kind: 'collecting',
-    source: 'collecting',
-    title: 'Build the evidence base',
-    hypothesis: 'Complete a measured session and rate whether you reached the goal. Analytics will stay quiet until it has enough comparable evidence.',
-    evidence: { qualifiedCount: usable.length, required: 8 },
-    prefill: null,
-  }
-}
-
 export function buildInterventionSummary(sessions = []) {
   const comparable = knownComparableSessions(sessions)
   const summary = comparable.reduce((summary, session) => {
@@ -271,7 +159,6 @@ export function buildAnalyticsStory(sessions = []) {
       .filter(session => !normalizedOutcome(session))
       .sort((a, b) => timestampOf(b) - timestampOf(a)),
     progress: buildCohortProgress(safe),
-    experiment: buildNextExperiment(safe),
     interventions: buildInterventionSummary(safe),
     distribution: buildFocusDistribution(safe),
     learning: {

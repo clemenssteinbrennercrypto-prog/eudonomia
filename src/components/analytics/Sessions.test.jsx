@@ -120,10 +120,21 @@ describe('Sessions — wall-clock timing', () => {
 })
 
 describe('Sessions — detail view', () => {
-  it('opens the shared session report when a session is selected', () => {
-    const s = session({ id: 'a', extra: { task: 'Write docs', goalOutcome: 'yes' } })
+  it('opens a compact duration overview instead of the old chronology and audit trail', () => {
+    const s = session({ id: 'a', extra: {
+      task: 'Write docs',
+      goalOutcome: 'yes',
+      deepFocusTimeVersion: 1,
+      flowSeconds: 300,
+    } })
     const html = render([s], { selectedSessionId: 'a' })
+    expect(html).toContain('Session overview')
+    expect(html).toContain('Where the session time went')
+    expect(html).toContain('High attention')
     expect(html).toContain('Quick check-in')
+    expect(html).not.toContain('What happened, in order')
+    expect(html).not.toContain('Why this result?')
+    expect(html).not.toContain('Session read')
   })
 })
 
