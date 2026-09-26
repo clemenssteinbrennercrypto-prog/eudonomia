@@ -37,24 +37,36 @@ function render(sessions) {
 }
 
 describe('Analytics Story', () => {
-  it('puts unrated outcomes ahead of every derived recommendation', () => {
+  it('shows useful recent values before a full comparison is available', () => {
+    const html = render([
+      session(1, { goalOutcome: 'yes', avgFocusScore: 60, scoreSum: 60 * 1800 }),
+      session(2, { goalOutcome: null, avgFocusScore: 80, scoreSum: 80 * 1800 }),
+    ])
+    expect(html).toContain('Your latest 2 sessions')
+    expect(html).toContain('70/100')
+    expect(html).toContain('1/1')
+    expect(html).toContain('These values are useful now')
+  })
+
+  it('asks for missing outcomes before giving a derived recommendation', () => {
     const html = render([session(1, { goalOutcome: null })])
-    expect(html.indexOf('Outcome inbox')).toBeLessThan(html.indexOf('Next experiment'))
-    expect(html).toContain('Close the evidence gap')
+    expect(html.indexOf('Missing outcomes')).toBeLessThan(html.indexOf('Next session'))
+    expect(html).toContain('How did these sessions go?')
   })
 
   it('uses the agreed 8-vs-8 comparison and does not restore Focus Score', () => {
     const html = render(Array.from({ length: 16 }, (_, index) => session(index)))
-    expect(html).toContain('Latest 8 vs previous 8')
+    expect(html).toContain('Your latest 8 sessions')
+    expect(html).toContain('Compared with the previous 8 sessions')
     expect(html).toContain('Average attention')
     expect(html).toContain('70/100')
     expect(html).not.toContain('Average focus')
     expect(html).not.toContain('Focus Score')
   })
 
-  it('states the intervention boundary instead of fabricating protection events', () => {
+  it('keeps raw intervention counters out of the overview', () => {
     const html = render([session(1)])
-    expect(html).toContain('Protection blocks')
-    expect(html).toContain('not tracked yet')
+    expect(html).not.toContain('Protection blocks')
+    expect(html).not.toContain('What the app did')
   })
 })

@@ -5,8 +5,8 @@ import AnalyticsStory from './AnalyticsStory'
 import DataExplorer from './DataExplorer'
 
 const VIEWS = [
-  { id: 'story', label: 'Story' },
-  { id: 'data', label: 'Data Explorer' },
+  { id: 'story', label: 'Overview' },
+  { id: 'data', label: 'Details' },
 ]
 
 /**
@@ -62,9 +62,9 @@ export async function clearHistoryAndRefresh({ clearAll, refresh, onHistoryClear
 }
 
 /**
- * The persistent top-level Analytics area: Story for decisions and progress,
- * Data Explorer for the underlying distributions. Owns the one shared load of
- * sessions + the focus ledger and every history mutation.
+ * The persistent top-level Analytics area: Overview for recent results and the
+ * next useful action, Details for the underlying distributions. Owns the one
+ * shared load of sessions + the focus ledger and every history mutation.
  */
 export default function AnalyticsShell({ onClose, onHistoryCleared = () => {}, onStartExperiment }) {
   const [view, setView] = useState('story')
@@ -149,7 +149,7 @@ export default function AnalyticsShell({ onClose, onHistoryCleared = () => {}, o
       <div className="analytics-canvas">
         <div className="analytics-heading">
           <div>
-            <span>Local evidence · nothing leaves this device</span>
+            <span>Recent work first · detailed evidence when you need it</span>
             <h1>Analytics</h1>
           </div>
           <button onClick={onClose}>← Back</button>

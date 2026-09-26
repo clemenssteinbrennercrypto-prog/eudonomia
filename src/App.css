@@ -2405,10 +2405,9 @@ html {
   .term-cell > b { font-size: 24px; }
 }
 
-/* ── ANALYTICS / STORY + DATA EXPLORER ────────────────────────────────────
-   Dense, evidence-first, and deliberately built from the existing dark +
-   ultramarine system. Story answers what to do next; Explorer exposes the
-   underlying sample without promoting a second headline score. */
+/* ── ANALYTICS / OVERVIEW + DETAILS ───────────────────────────────────────
+   The overview answers how recent work went and what to try next. Details
+   keeps the underlying evidence inspectable without making it the entry view. */
 .analytics-shell {
   min-height: calc(100vh - 64px);
   background:
@@ -2502,13 +2501,6 @@ html {
   gap: 28px;
 }
 
-.analytics-story-lead {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
-  border: 1px solid rgba(122, 152, 255, 0.26);
-  background: rgba(5, 10, 28, 0.38);
-}
-
 .analytics-experiment,
 .analytics-panel,
 .analytics-inbox,
@@ -2518,16 +2510,6 @@ html {
   padding: 20px 22px;
   border: 1px solid rgba(122, 152, 255, 0.22);
   background: rgba(6, 11, 28, 0.52);
-}
-
-.analytics-story-lead > .analytics-experiment,
-.analytics-story-lead > .analytics-panel {
-  border: 0;
-  background: transparent;
-}
-
-.analytics-story-lead > .analytics-experiment {
-  border-right: 1px solid rgba(122, 152, 255, 0.22);
 }
 
 .analytics-section-heading {
@@ -2564,6 +2546,7 @@ html {
 .analytics-experiment-hypothesis { max-width: 720px; margin: 24px 0 0; font-size: 16px; line-height: 1.55; }
 .analytics-evidence-line { margin: 12px 0 0; color: var(--text-muted); }
 .analytics-footnote { margin: 12px 0 0; color: var(--text-muted); font-size: 10.5px; }
+.analytics-overview-note { margin: 14px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
 
 .analytics-primary-action {
   margin-top: 22px;
@@ -2827,8 +2810,6 @@ html {
 
 @media (max-width: 900px) {
   .analytics-canvas { width: min(100% - 36px, 1240px); padding-top: 28px; }
-  .analytics-story-lead { grid-template-columns: 1fr; }
-  .analytics-story-lead > .analytics-experiment { border-right: 0; border-bottom: 1px solid rgba(122, 152, 255, 0.22); }
   .analytics-filter-bar { grid-template-columns: repeat(3, 1fr); }
   .analytics-filter-result { grid-column: 1 / -1; justify-items: start; }
   .analytics-filter-result > div { justify-items: start; }

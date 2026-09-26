@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { buildAnalyticsStory } from '../../lib/analyticsModel'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
-import { measurementMethodLabel } from '../../lib/measurementTerminology'
 import Sessions from './Sessions'
 
 const OUTCOMES = [
@@ -26,12 +25,12 @@ function OutcomeInbox({ sessions, onRate }) {
     <section className="analytics-inbox" aria-labelledby="outcome-inbox-heading">
       <div className="analytics-section-heading">
         <div>
-          <span className="analytics-kicker">Outcome inbox</span>
-          <h2 id="outcome-inbox-heading">Close the evidence gap</h2>
+          <span className="analytics-kicker">Missing outcomes</span>
+          <h2 id="outcome-inbox-heading">How did these sessions go?</h2>
         </div>
         <b>{sessions.length} open</b>
       </div>
-      <p className="analytics-copy">Your outcome is the ground truth. Focus explains it; it does not replace it.</p>
+      <p className="analytics-copy">Add the result so Analytics can connect measured attention with whether the work actually got done.</p>
       <div className="analytics-inbox-list">
         {visible.map(session => (
           <div className="analytics-inbox-row" key={session.id}>
@@ -70,10 +69,10 @@ function Experiment({ experiment, onStartExperiment }) {
     <section className="analytics-experiment" aria-labelledby="next-experiment-heading">
       <div className="analytics-section-heading">
         <div>
-          <span className="analytics-kicker">Next experiment</span>
+          <span className="analytics-kicker">Next session</span>
           <h2 id="next-experiment-heading">{experiment.title}</h2>
         </div>
-        <b>{experiment.source === 'qualified_pattern' ? 'Pattern' : experiment.source === 'latest_session' ? 'Latest session' : 'Collecting'}</b>
+        <b>{experiment.source === 'qualified_pattern' ? 'Based on a pattern' : experiment.source === 'latest_session' ? 'Based on your last result' : 'Not enough data yet'}</b>
       </div>
       <p className="analytics-experiment-hypothesis">{experiment.hypothesis}</p>
       {outcome && (
@@ -83,92 +82,75 @@ function Experiment({ experiment, onStartExperiment }) {
       )}
       {experiment.prefill && Object.keys(experiment.prefill).length > 0 && onStartExperiment && (
         <button type="button" className="analytics-primary-action" onClick={() => onStartExperiment(experiment.prefill)}>
-          Set up this experiment →
+          Use this setup →
         </button>
       )}
     </section>
   )
 }
 
-function Progress({ progress, learning }) {
-  if (!progress.comparisonReady) {
-    const remaining = Math.max(0, learning.requiredForComparison - learning.qualified)
+function RecentOverview({ progress, learning }) {
+  const current = progress.current
+  const remaining = Math.max(0, learning.requiredForComparison - learning.qualified)
+
+  if (current.sessionCount === 0) {
     return (
-      <section className="analytics-panel" aria-labelledby="progress-heading">
+      <section className="analytics-panel analytics-overview" aria-labelledby="recent-overview-heading">
         <div className="analytics-section-heading">
           <div>
-            <span className="analytics-kicker">Progress</span>
-            <h2 id="progress-heading">Two comparable blocks</h2>
+            <span className="analytics-kicker">Overview</span>
+            <h2 id="recent-overview-heading">No measured sessions yet</h2>
           </div>
-          <b>{learning.qualified}/{learning.requiredForComparison}</b>
+          <b>Nothing inferred</b>
         </div>
-        <div className="analytics-progress-track" aria-label={`${learning.qualified} of ${learning.requiredForComparison} comparable sessions`}>
-          <span style={{ width: `${Math.min(100, (learning.qualified / learning.requiredForComparison) * 100)}%` }} />
-        </div>
-        <p className="analytics-copy">
-          {remaining > 0
-            ? `${remaining} more compatible measured ${remaining === 1 ? 'session' : 'sessions'} before the latest 8 can be compared with the previous 8.`
-            : 'Waiting for two complete comparable blocks.'}
-          {learning.generation ? ` ${measurementMethodLabel(learning.generation)}.` : ' No compatible measurement method is available yet.'}
-        </p>
+        <p className="analytics-copy">Complete a measured session to see recent attention, measured work time, and goal results here.</p>
       </section>
     )
   }
 
   return (
-    <section className="analytics-panel" aria-labelledby="progress-heading">
+    <section className="analytics-panel analytics-overview" aria-labelledby="recent-overview-heading">
       <div className="analytics-section-heading">
         <div>
-          <span className="analytics-kicker">Progress</span>
-          <h2 id="progress-heading">Latest 8 vs previous 8</h2>
+          <span className="analytics-kicker">Overview</span>
+          <h2 id="recent-overview-heading">Your latest {current.sessionCount} {current.sessionCount === 1 ? 'session' : 'sessions'}</h2>
         </div>
-        <b>{measurementMethodLabel(progress.generation)}</b>
+        <b>Up to 8 recent sessions</b>
       </div>
       <div className="analytics-comparison-grid">
         <div className="analytics-comparison-metric">
-          <span>Goal reached</span>
-          <strong>{progress.current.hitRate == null ? '—' : `${progress.current.hitRate}%`}</strong>
-          <small>{signed(progress.outcomeDelta, ' pts')} · previous {progress.previous.hitRate == null ? '—' : `${progress.previous.hitRate}%`}</small>
-        </div>
-        <div className="analytics-comparison-metric">
           <span>Average attention</span>
-          <strong>{progress.current.averageFocus == null ? '—' : `${progress.current.averageFocus}/100`}</strong>
-          <small>{signed(progress.focusDelta, ' pts')} · previous {progress.previous.averageFocus == null ? '—' : `${progress.previous.averageFocus}/100`}</small>
+          <strong>{current.averageFocus == null ? '—' : `${current.averageFocus}/100`}</strong>
+          <small>{progress.comparisonReady ? `${signed(progress.focusDelta, ' pts')} vs previous 8` : 'Measured session average'}</small>
         </div>
         <div className="analytics-comparison-metric">
           <span>Measured time</span>
-          <strong>{fmtDuration(progress.current.measuredSeconds)}</strong>
-          <small>previous {fmtDuration(progress.previous.measuredSeconds)}</small>
+          <strong>{fmtDuration(current.measuredSeconds)}</strong>
+          <small>{progress.comparisonReady ? `Previous 8: ${fmtDuration(progress.previous.measuredSeconds)}` : 'Only time with valid measurements'}</small>
+        </div>
+        <div className="analytics-comparison-metric">
+          <span>Goals reached</span>
+          <strong>{current.ratedCount ? `${current.outcomes.yes}/${current.ratedCount}` : '—'}</strong>
+          <small>{progress.comparisonReady && progress.outcomeDelta != null ? `${signed(progress.outcomeDelta, ' pts')} vs previous 8` : 'From sessions you rated'}</small>
         </div>
         <div className="analytics-comparison-metric">
           <span>Rated</span>
-          <strong>{progress.current.ratedCount}/8</strong>
-          <small>previous {progress.previous.ratedCount}/8</small>
+          <strong>{current.ratedCount}/{current.sessionCount}</strong>
+          <small>{current.sessionCount - current.ratedCount === 0 ? 'All results added' : `${current.sessionCount - current.ratedCount} still open`}</small>
         </div>
       </div>
-    </section>
-  )
-}
-
-function Interventions({ interventions }) {
-  return (
-    <section className="analytics-panel" aria-labelledby="interventions-heading">
-      <div className="analytics-section-heading">
-        <div>
-          <span className="analytics-kicker">Interventions</span>
-          <h2 id="interventions-heading">What the app did</h2>
-        </div>
-        <b>{interventions.sessions} sessions</b>
-      </div>
-      <div className="analytics-intervention-grid">
-        <div><strong>{interventions.preDriftNudges}</strong><span>Drift-risk nudges</span></div>
-        <div><strong>{interventions.gentleReminders}</strong><span>Gentle reminders</span></div>
-        <div><strong>{interventions.alerts}</strong><span>Alerts</span></div>
-        <div className={interventions.protectionEvents == null ? 'is-untracked' : ''}>
-          <strong>{interventions.protectionEvents == null ? '—' : interventions.protectionEvents}</strong>
-          <span>{interventions.protectionEvents == null ? 'Protection blocks · not tracked yet' : 'Protection blocks enforced'}</span>
-        </div>
-      </div>
+      {progress.comparisonReady ? (
+        <p className="analytics-overview-note">Compared with the previous 8 sessions measured the same way. Open Details to inspect the underlying groups.</p>
+      ) : (
+        <>
+          <div className="analytics-progress-track" aria-label={`${learning.qualified} of ${learning.requiredForComparison} sessions needed for a trend comparison`}>
+            <span style={{ width: `${Math.min(100, (learning.qualified / learning.requiredForComparison) * 100)}%` }} />
+          </div>
+          <p className="analytics-overview-note">
+            These values are useful now. After {remaining} more {remaining === 1 ? 'session' : 'sessions'} measured the same way, Analytics can compare this block with the previous one.
+          </p>
+        </>
+      )}
     </section>
   )
 }
@@ -187,16 +169,13 @@ export default function AnalyticsStory({
 
   return (
     <div className="analytics-story">
+      <RecentOverview progress={story.progress} learning={story.learning} />
       <OutcomeInbox sessions={story.unratedSessions} onRate={onUpdateSession} />
-      <div className="analytics-story-lead">
-        <Experiment experiment={story.experiment} onStartExperiment={onStartExperiment} />
-        <Progress progress={story.progress} learning={story.learning} />
-      </div>
-      <Interventions interventions={story.interventions} />
+      <Experiment experiment={story.experiment} onStartExperiment={onStartExperiment} />
       <section className="analytics-history" aria-labelledby="session-history-heading">
         <div className="analytics-section-heading">
           <div>
-            <span className="analytics-kicker">Evidence</span>
+            <span className="analytics-kicker">History</span>
             <h2 id="session-history-heading">Session history</h2>
           </div>
           <b>{sessions.length} total</b>
