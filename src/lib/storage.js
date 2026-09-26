@@ -244,10 +244,10 @@ export async function pickOutputFolder() {
 }
 
 // ── Intent contract provider ────────────────────────────────────────────────
-// Which engine turns a goal sentence into session expectations. Switchable at
-// any time; the app behaves identically whichever is chosen, only better or
-// worse informed.
-const CONTRACT_KEY = 'eudaimonia_contract_settings'
+// The optional model transports remain available for later product work, but
+// the public app pins session contracts to local built-in keyword profiles
+// until model output can be made visible and useful to the user.
+export const CONTRACT_KEY = 'eudaimonia_contract_settings'
 
 const CONTRACT_DEFAULTS = {
   provider: 'keywords',                    // off by default: no network, no key
@@ -259,33 +259,30 @@ export function loadContractSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
     const { apiKey: _legacyKey, ...safe } = raw
-    return { ...CONTRACT_DEFAULTS, ...safe }
+    const next = { ...CONTRACT_DEFAULTS, ...safe, provider: 'keywords' }
+    // Local/cloud goal understanding is not a public product feature yet.
+    // Persist the downgrade so an old selection cannot keep making invisible
+    // model calls after its controls have been removed from the interface.
+    if (raw.provider && raw.provider !== 'keywords') {
+      localStorage.setItem(CONTRACT_KEY, JSON.stringify(next))
+    }
+    return next
   } catch {
     return { ...CONTRACT_DEFAULTS }
   }
 }
 
 export function saveContractSettings(patch) {
-  const next = { ...loadContractSettings(), ...patch }
+  const next = { ...loadContractSettings(), ...patch, provider: 'keywords' }
   try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(next)) } catch {}
   return next
 }
 
-// One-shot compatibility bridge for versions that kept the key in WebView
-// storage. It is removed only after the native Keychain write succeeds.
-export function loadLegacyCloudApiKey() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
-    const key = typeof raw.apiKey === 'string' ? raw.apiKey.trim() : ''
-    if (!key) return ''
-    return key
-  } catch { return '' }
-}
-
-export function clearLegacyCloudApiKey() {
+export function disableOptionalModelProviders() {
   try {
     const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || '{}')
     delete raw.apiKey
+    raw.provider = 'keywords'
     localStorage.setItem(CONTRACT_KEY, JSON.stringify(raw))
   } catch {}
 }

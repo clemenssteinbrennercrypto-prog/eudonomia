@@ -205,6 +205,11 @@ person's measured working rhythm.
 
 ## The decision that has to be made first
 
+> Product status, 25 Sep 2026: the public provider controls were removed until
+> model output can be shown and verified by the user. Shipped sessions use the
+> built-in local keyword contract only. The alternatives below remain design
+> history, not currently available settings.
+
 **Sending anything to an LLM conflicts with "nothing leaves your device."**
 That claim is currently true and is a real part of the product's positioning.
 

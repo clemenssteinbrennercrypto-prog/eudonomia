@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 import React from 'react'
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FocusAppsScreen from './FocusAppsScreen'
 import { PROTECTION_SETUPS_KEY, loadProtectionSetups } from '../lib/storage'
 import { normalizeProtectionState } from '../lib/protectionSetups'
+import { installCompanionHelper, pushCompanionSession } from '../lib/nativeCompanion'
 
 const companion = vi.hoisted(() => ({ debug: null }))
 
@@ -219,6 +220,11 @@ describe('FocusAppsScreen readiness', () => {
     companion.debug = { helperInstalled: false }
     await renderScreen()
     expect(screen.getByText('Website helper required')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Install helper' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install helper' }))
+    await waitFor(() => expect(installCompanionHelper).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.getByText('Ready for focus')).toBeInTheDocument())
 
     fireEvent.click(setupButton('Writing'))
     expect(screen.getByText('Ready for focus')).toBeInTheDocument()
@@ -229,46 +235,20 @@ describe('FocusAppsScreen readiness', () => {
     expect(screen.getByText('Ready for focus')).toBeInTheDocument()
   })
 
-  it('shows browser Automation gaps as partial protection when hosts blocking is active', async () => {
-    const now = Date.now()
-    companion.debug = {
-      helperInstalled: true,
-      permissionMissing: 'Safari',
-      missingPermissions: ['Safari'],
-      sessionActive: true,
-      sessionState: 'active',
-      sessionEndTs: now + 60_000,
-      lastPollTs: now,
-      lastActivity: { app: 'Eudaimonai Companion', url: null, ts: now },
-      blockedDomainsCount: 1,
-      hostBlockActive: true,
-    }
+  it('keeps the blocking test visible without an Advanced drawer', async () => {
     await renderScreen()
-    fireEvent.click(screen.getByText('Advanced'))
 
-    expect(screen.getByText('Protection: Partially protected')).toBeInTheDocument()
-    const website = screen.getByText('Website blocking').parentElement
-    expect(within(website).getByText('limited')).toBeInTheDocument()
-    expect(within(website).getByText(/tab|close blocked websites|Automation access/i)).toBeInTheDocument()
-  })
+    expect(screen.getByRole('heading', { name: 'Test this setup' })).toBeInTheDocument()
+    expect(screen.queryByText('Advanced')).not.toBeInTheDocument()
+    expect(screen.queryByText('Goal understanding')).not.toBeInTheDocument()
 
-  it('reports configured protection as active while focus measurement is paused', async () => {
-    const now = Date.now()
-    companion.debug = {
-      helperInstalled: true,
-      sessionActive: true,
-      sessionState: 'paused',
-      sessionEndTs: now + 60_000,
-      lastPollTs: now,
-      lastActivity: { app: 'Eudaimonai Companion', url: null, ts: now },
-      blockedAppsCount: 1,
-    }
-    await renderScreen()
-    fireEvent.click(screen.getByText('Advanced'))
+    fireEvent.click(screen.getByRole('button', { name: 'Test for 60s' }))
 
-    expect(screen.getByText('Protection: Fully protected')).toBeInTheDocument()
-    expect(screen.getByText('Focus measurement paused. Blocking remains active until the session ends.')).toBeInTheDocument()
-    const appBlocking = screen.getByText('App blocking').parentElement
-    expect(within(appBlocking).getByText('active')).toBeInTheDocument()
+    await waitFor(() => expect(pushCompanionSession).toHaveBeenCalledWith(expect.objectContaining({
+      active: true,
+      blockedApps: ['YouTube'],
+      blockedDomains: ['youtube.com'],
+    })))
+    expect(screen.getByText('Test session active for 60s')).toBeInTheDocument()
   })
 })

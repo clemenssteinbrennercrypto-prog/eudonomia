@@ -47,13 +47,12 @@ describe('legal copy', () => {
     expect(output).toContain('aria-pressed="true"')
   })
 
-  it('names the actual provider labels and update behavior', () => {
+  it('describes update behavior without advertising disabled model providers', () => {
     const output = html()
-    expect(output).toContain('„Local model“')
-    expect(output).toContain('„Claude API“')
+    expect(output).not.toContain('„Local model“')
+    expect(output).not.toContain('„Claude API“')
     expect(output).toContain('ungefähr alle fünf Minuten')
     expect(output).toContain('GitHub Releases')
-    expect(output).toContain('Cloud-Aufruf scheitert')
   })
 })
 

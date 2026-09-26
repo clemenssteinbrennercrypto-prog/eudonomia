@@ -11,9 +11,9 @@ import SessionScreen from './components/SessionScreen'
 import EndScreen from './components/EndScreen'
 import AnalyticsShell from './components/analytics/AnalyticsShell'
 import HistoryStorageAlerts from './components/HistoryStorageAlerts'
-import { loadContractSettings, loadFocusModeEnabled, loadProtectionSetups, saveFocusModeEnabled, saveProtectionSetups, loadLegacyCloudApiKey, clearLegacyCloudApiKey } from './lib/storage'
+import { loadFocusModeEnabled, loadProtectionSetups, saveFocusModeEnabled, saveProtectionSetups, disableOptionalModelProviders } from './lib/storage'
 import { activateProtectionSetup, getActiveProtectionSetup } from './lib/protectionSetups'
-import { setCloudApiKey } from './lib/nativeCompanion'
+import { deleteCloudApiKey } from './lib/nativeCompanion'
 import LegalModal from './components/LegalModal'
 import { sessionRepository } from './lib/sessionRepository'
 import { createSessionPersister } from './lib/sessionPersistence'
@@ -167,8 +167,11 @@ function BuildIdentity() {
 
 export default function App() {
   useEffect(() => {
-    const legacy = loadLegacyCloudApiKey()
-    if (legacy) setCloudApiKey(legacy).then(ok => { if (ok) clearLegacyCloudApiKey() }).catch(() => {})
+    // Optional model providers are hidden until their result can be made
+    // visible and useful. Remove both legacy WebView credentials and the
+    // native Keychain copy so disabling the feature leaves no dormant secret.
+    disableOptionalModelProviders()
+    deleteCloudApiKey().catch(() => {})
   }, [])
   // Public web stays marketing/download only. Native and local dev expose the app.
   const [flow, setFlow] = useState(getInitialFlow)
@@ -187,6 +190,7 @@ export default function App() {
   const [workspaceState, setWorkspaceStateRaw] = useState(loadWorkspaceState)
   const [focusModeEnabled, setFocusModeEnabledRaw] = useState(loadFocusModeEnabled)
   const [protectionState, setProtectionState] = useState(loadProtectionSetups)
+  const [protectionReturnScreen, setProtectionReturnScreen] = useState('lab')
   const updateStatus = useAppUpdateStatus()
 
   // Session history lives here rather than inside each screen: App already
@@ -272,6 +276,11 @@ export default function App() {
   }, [])
 
   const handleStart = () => activeWorkspace ? setScreen('session') : setScreen('setup')
+
+  const openProtection = (returnScreen) => {
+    setProtectionReturnScreen(returnScreen)
+    setScreen('focus-apps')
+  }
 
   // Owns the save and the check-in answers together, because only one place
   // can know whether the session has a stored row yet. See sessionPersistence.js.
@@ -370,7 +379,7 @@ export default function App() {
           sessions={history.sessions}
           ledger={history.ledger}
           onSession={() => setScreen('session-setup')}
-          onProtection={() => setScreen('focus-apps')}
+          onProtection={() => openProtection('lab')}
           onAnalytics={() => setScreen('analytics')}
         />
       )}
@@ -389,7 +398,6 @@ export default function App() {
           setTags={setTags}
           workspaces={workspaceState.workspaces}
           activeWorkspaceId={workspaceState.activeWorkspaceId}
-          contractProvider={loadContractSettings().provider}
           protectionSetup={getActiveProtectionSetup(protectionState)}
           protectionSetups={protectionState.setups}
           protectionEnabled={focusModeEnabled}
@@ -397,7 +405,7 @@ export default function App() {
             const next = activateProtectionSetup(current, setupId)
             return saveProtectionSetups(next)
           })}
-          onEditProtection={() => setScreen('focus-apps')}
+          onEditProtection={() => openProtection('session-setup')}
           onWorkspaceChange={(id) => setWorkspaceState({ ...workspaceState, activeWorkspaceId: id })}
           onEditWorkspaces={() => setScreen('setup')}
           onStart={handleStart}
@@ -409,7 +417,7 @@ export default function App() {
           onProtectionStateChange={setProtectionState}
           focusModeEnabled={focusModeEnabled}
           setFocusModeEnabled={setFocusModeEnabled}
-          onBack={() => setScreen('lab')}
+          onBack={() => setScreen(protectionReturnScreen)}
         />
       )}
       {screen === 'setup' && (

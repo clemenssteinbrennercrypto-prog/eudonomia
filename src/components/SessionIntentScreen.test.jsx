@@ -1,5 +1,8 @@
+/** @vitest-environment jsdom */
 import React from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import '@testing-library/jest-dom/vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import SessionIntentScreen from './SessionIntentScreen'
 
@@ -7,6 +10,7 @@ class MemoryStorage {
   constructor() { this.values = new Map() }
   getItem(key) { return this.values.has(key) ? this.values.get(key) : null }
   setItem(key, value) { this.values.set(key, String(value)) }
+  removeItem(key) { this.values.delete(key) }
 }
 
 function renderIntent(overrides = {}) {
@@ -27,6 +31,8 @@ const CONNECTED = { checked: true, connected: true, helperInstalled: true }
 beforeEach(() => {
   globalThis.localStorage = new MemoryStorage()
 })
+
+afterEach(cleanup)
 
 describe('SessionIntentScreen', () => {
   it('is an intent briefing and does not display a focus metric', () => {
@@ -156,6 +162,81 @@ describe('SessionIntentScreen', () => {
 
     expect(html).toContain('aria-label="Protection setup"')
     expect(html).toContain('<option value="study">Study</option>')
+  })
+
+  describe('protection activation at session start', () => {
+    const renderStart = (overrides = {}) => {
+      const onStart = vi.fn()
+      const onEditProtection = vi.fn()
+      const noop = () => {}
+      render(React.createElement(SessionIntentScreen, {
+        task: 'Current task', setTask: noop,
+        goal: '', setGoal: noop,
+        duration: 30, setDuration: noop,
+        energyLevel: 'medium', setEnergyLevel: noop,
+        tags: [], setTags: noop,
+        nativeStatus: CONNECTED,
+        onStart,
+        onEditProtection,
+        ...overrides,
+      }))
+      return { onStart, onEditProtection }
+    }
+
+    it('asks before starting when Protection is off and keeps the unprotected path explicit', () => {
+      const { onStart, onEditProtection } = renderStart({ protectionEnabled: false })
+
+      fireEvent.click(screen.getByRole('button', { name: /Start focus session/ }))
+
+      expect(onStart).not.toHaveBeenCalled()
+      const dialog = screen.getByRole('dialog', { name: 'Start without active Protection?' })
+      expect(within(dialog).getByText(/No distractions will be blocked/)).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Open Protection' })).toHaveFocus()
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Continue without Protection' }))
+      expect(onStart).toHaveBeenCalledOnce()
+      expect(onEditProtection).not.toHaveBeenCalled()
+    })
+
+    it('opens the existing setup instead of starting an empty protected session', () => {
+      const { onStart, onEditProtection } = renderStart({
+        protectionEnabled: true,
+        protectionSetup: { name: 'Deep Work', distractionApps: [], distractionDomains: [], strictMode: false },
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /Start focus session/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Set up Protection' }))
+
+      expect(onEditProtection).toHaveBeenCalledOnce()
+      expect(onStart).not.toHaveBeenCalled()
+    })
+
+    it('does not claim every safeguard is absent when only website enforcement is incomplete', () => {
+      renderStart({
+        protectionEnabled: true,
+        protectionSetup: { name: 'Writing', distractionApps: ['YouTube'], distractionDomains: ['youtube.com'], strictMode: false },
+        nativeStatus: { checked: true, connected: true, helperInstalled: false },
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /Start focus session/ }))
+
+      const dialog = screen.getByRole('dialog', { name: 'Start before Protection is ready?' })
+      expect(within(dialog).getByText(/full Protection setup cannot be verified or enforced/)).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Continue anyway' })).toBeInTheDocument()
+      expect(within(dialog).queryByText(/No distractions will be blocked/)).not.toBeInTheDocument()
+    })
+
+    it('starts immediately when the selected setup is ready', () => {
+      const { onStart } = renderStart({
+        protectionEnabled: true,
+        protectionSetup: { name: 'Writing', distractionApps: ['Slack'], distractionDomains: [], strictMode: false },
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /Start protected session/ }))
+
+      expect(onStart).toHaveBeenCalledOnce()
+      expect(screen.queryByRole('dialog', { name: 'Start without active Protection?' })).not.toBeInTheDocument()
+    })
   })
 
   it('reuses honest fields from recent session history', () => {

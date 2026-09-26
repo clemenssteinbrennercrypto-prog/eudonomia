@@ -1,5 +1,4 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 
 const navy = 'var(--ultra)'
 
@@ -29,8 +28,7 @@ E-Mail: clemenssteinbrenner.crypto@gmail.com`,
 //
 // Wer hier etwas ändert: erst prüfen, ob der Code es noch hergibt.
 //   Update-Intervall      src/lib/useUpdateAvailable.js  (CHECK_INTERVAL_MS)
-//   Cloud-Anbieter        src/lib/intentContract.js      (cloudProvider)
-//   Standard = aus        src/lib/storage.js             (CONTRACT_DEFAULTS)
+//   Modellanbieter aus    src/lib/storage.js             (CONTRACT_DEFAULTS)
 //   Nur Metadaten         companion/src-tauri/src/output.rs
 export const DATENSCHUTZ = [
   {
@@ -39,7 +37,7 @@ export const DATENSCHUTZ = [
   },
   {
     heading: 'Grundsatz',
-    body: `Eudaimonai betreibt keinen Server und kein Nutzerkonto. Ihre Sitzungsdaten werden ausschließlich auf Ihrem Gerät verarbeitet und gespeichert. Zwei Ausnahmen gibt es — die Update-Prüfung und ein optionales Sprachmodell. Beide sind unten einzeln beschrieben.`,
+    body: `Eudaimonai betreibt keinen Server und kein Nutzerkonto. Ihre Sitzungsdaten werden ausschließlich auf Ihrem Gerät verarbeitet und gespeichert. Die einzige Netzwerkverbindung der öffentlichen App ist die unten beschriebene Update-Prüfung.`,
   },
   {
     heading: 'Kamera',
@@ -68,14 +66,6 @@ Wenn Sie einen Projektordner für die Fortschrittsmessung auswählen, werden aus
     body: `Die App fragt beim Start und anschließend ungefähr alle fünf Minuten bei GitHub Releases an, ob eine neuere signierte Version vorliegt. GitHub erhält dabei technisch bedingt Ihre IP-Adresse und übliche Verbindungsdaten. Die installierte Version wird von der App lokal mit der Antwort verglichen; Sitzungs-, Kamera- und Aktivitätsdaten werden nicht übertragen.
 
 Es werden dabei keine Sitzungs-, Kamera- oder Aktivitätsdaten übertragen. Rechtsgrundlage ist unser berechtigtes Interesse an sicheren und aktuellen Installationen (Art. 6 Abs. 1 lit. f DSGVO).`,
-  },
-  {
-    heading: 'Zielverständnis per Sprachmodell (optional)',
-    body: `Standardmäßig ausgeschaltet. Die Voreinstellung „Built-in“ arbeitet mit lokalen Stichwortprofilen und ohne jede Netzwerkverbindung.
-
-Schalten Sie unter Focus Apps auf „Local model“, läuft ein Modell über Ollama auf Ihrem Gerät — es wird nichts übertragen.
-
-Schalten Sie auf „Claude API“, wird ausschließlich der Text übermittelt, den Sie selbst in das optionale Feld „Definition of plan“ (Dialog „Session plan“) geschrieben haben — gekürzt auf die ersten ${CLOUD_GOAL_MAX_CHARS} Zeichen und ausschließlich zur Ableitung der Session-Erwartungen. Dieser Text geht wörtlich an Anthropic (USA); ist das Feld leer, wird nichts übermittelt. Sessionname, Tags, Aktivitätsprotokolle, Sitzungsdaten, Fenstertitel und Dateinamen werden nie übertragen; die Sitzungsbewertung bleibt lokal. Wenn der Cloud-Aufruf scheitert, fällt die App auf die lokalen Stichwortprofile zurück. Rechtsgrundlage ist Ihre Einwilligung durch das aktive Umschalten (Art. 6 Abs. 1 lit. a DSGVO); Sie können sie jederzeit widerrufen, indem Sie zurückschalten.`,
   },
   {
     heading: 'Cookies',

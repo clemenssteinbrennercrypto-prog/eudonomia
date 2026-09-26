@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  getLastActivity,
-  isActivityConnected,
-  startActivityUpdates,
-  stopActivityUpdates,
-} from '../lib/activityReceiver'
-import {
-  fetchCompanionDebug,
   fetchNativeCameraStatus,
   installCompanionHelper,
   listenNativeCameraLandmarks,
@@ -14,12 +7,8 @@ import {
   pushCompanionSession,
   startNativeCameraPrototype,
   stopNativeCameraPrototype,
-  setCloudApiKey,
-  deleteCloudApiKey,
-  hasCloudApiKey,
 } from '../lib/nativeCompanion'
 import { getDomainsFromAppPreset } from '../lib/focusAppsConfig'
-import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 import {
   createProtectionSetup,
   firstProtectionSetupWithNameIssue,
@@ -28,11 +17,9 @@ import {
   protectionSetupNameIssue,
   removeProtectionSetup,
 } from '../lib/protectionSetups'
-import { getProtectionReadiness, missingPermissionsFromDebug } from '../lib/protectionReadiness'
+import { getProtectionReadiness } from '../lib/protectionReadiness'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
 import {
-  loadContractSettings,
-  saveContractSettings,
   loadFocusModeEnabled,
   loadProtectionSetups,
   saveFocusModeEnabled,
@@ -45,18 +32,6 @@ const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chro
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
 const SHOW_NATIVE_CAMERA_DIAGNOSTICS = import.meta.env.DEV ||
   import.meta.env.VITE_EUDONOMIA_BUILD_CHANNEL === 'test'
-
-export function CloudPrivacyNotice() {
-  return (
-    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
-      How your session plan becomes session expectations. With Cloud, only the text you
-      typed into &quot;Definition of plan&quot; is sent to Anthropic, cut to the first{' '}
-      {CLOUD_GOAL_MAX_CHARS} characters — never the session name, tags, activity, window
-      titles or file names, and never anything after the session. Leave that field empty
-      and nothing is sent: the built-in profiles answer instead.
-    </p>
-  )
-}
 
 function addUnique(list, value) {
   const app = value.trim()
@@ -86,252 +61,12 @@ function domainsFor(items) {
   })
 }
 
-function domainMatches(domain, candidates) {
-  const normalizedDomain = normalizeDomain(domain)
-  if (!normalizedDomain) return false
-  return candidates.some(candidate => {
-    const normalizedCandidate = normalizeDomain(candidate)
-    return normalizedCandidate &&
-      (normalizedDomain === normalizedCandidate || normalizedDomain.endsWith(`.${normalizedCandidate}`))
-  })
-}
-
-function classifyCurrentActivity(activity, focusApps, distractionApps, connected) {
-  if (!connected) return { kind: 'unknown', label: 'No activity detected' }
-  const app = String(activity.app || '').trim()
-  const appKey = app.toLowerCase()
-  const domain = normalizeDomain(activity.domain || activity.full_url || activity.url)
-  const domainKey = domain.toLowerCase()
-  const focusKeys = new Set(focusApps.map(item => item.toLowerCase()))
-  const distractionKeys = new Set(distractionApps.map(item => item.toLowerCase()))
-  const focusDomains = domainsFor(focusApps)
-  const distractionDomains = domainsFor(distractionApps)
-  const label = domain || activity.title || app || 'Unknown'
-
-  if (
-    (appKey && distractionKeys.has(appKey)) ||
-    (domainKey && distractionKeys.has(domainKey)) ||
-    domainMatches(domain, distractionDomains)
-  ) {
-    return { kind: 'distraction', label }
-  }
-  if (
-    (appKey && focusKeys.has(appKey)) ||
-    (domainKey && focusKeys.has(domainKey)) ||
-    domainMatches(domain, focusDomains)
-  ) {
-    return { kind: 'focus', label }
-  }
-  return { kind: 'unknown', label }
-}
-
-const TRACKING_STALE_MS = 12_000
-
 function ageLabel(ts, now = Date.now()) {
   if (!ts) return 'never'
   const seconds = Math.max(0, Math.round((now - ts) / 1000))
   if (seconds < 2) return 'just now'
   if (seconds < 60) return `${seconds}s ago`
   return `${formatDuration(Math.round(seconds / 60) * 60)} ago`
-}
-
-function getProtectionStatus(debug, connected, now = Date.now()) {
-  const sessionState = debug?.sessionState || (debug?.sessionActive ? 'active' : 'inactive')
-  // `sessionActive` describes native enforcement. Measurement may be paused
-  // while the same app/site protection remains active.
-  const sessionActive = connected && debug?.sessionActive === true &&
-    (sessionState === 'active' || sessionState === 'paused')
-  const lastPollTs = debug?.lastPollTs || 0
-  const lastActivityTs = debug?.lastActivity?.ts || 0
-  const pollFresh = lastPollTs > 0 && now - lastPollTs <= TRACKING_STALE_MS
-  const activityFresh = lastActivityTs > 0 && now - lastActivityTs <= TRACKING_STALE_MS
-  const missingPermissions = missingPermissionsFromDebug(debug)
-  const systemPermissionMissing = missingPermissions.some(item => item.scope === 'system')
-  const browserPermissionsMissing = missingPermissions.filter(item => item.scope === 'browser')
-  const permissionMissing = missingPermissions.map(item => item.name).join(', ')
-  const trackingActive = connected && pollFresh && activityFresh && !systemPermissionMissing
-  const trackingKnown = connected && lastPollTs > 0
-  const blockedAppsCount = debug?.blockedAppsCount || 0
-  const blockedDomainsCount = debug?.blockedDomainsCount || 0
-  const strictMode = Boolean(debug?.strictMode)
-  const appBlockingConfigured = blockedAppsCount > 0 || strictMode
-  const websiteBlockingConfigured = blockedDomainsCount > 0
-  const hostCancelled = debug?.hostBlockError === 'cancelled'
-  const hostFailed = Boolean(debug?.hostBlockError && !hostCancelled)
-  const hostActive = Boolean(debug?.hostBlockActive)
-
-  const dimensions = [
-    {
-      label: 'Session',
-      state: !connected
-        ? 'off'
-        : sessionState === 'active'
-          ? 'active'
-          : sessionState === 'paused'
-            ? 'paused'
-            : 'inactive',
-      detail: !connected
-        ? 'Companion not reachable.'
-        : sessionState === 'active'
-          ? `Running until ${debug?.sessionEndTs ? new Date(debug.sessionEndTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'unknown end time'}.`
-          : sessionState === 'paused'
-            ? 'Focus measurement paused. Blocking remains active until the session ends.'
-            : 'No active focus session. Blocking is off.',
-    },
-    {
-      label: 'Tracking',
-      state: !connected || systemPermissionMissing
-        ? 'unavailable'
-        : trackingActive
-          ? 'active'
-          : trackingKnown
-            ? 'stale'
-            : 'unavailable',
-      detail: systemPermissionMissing
-        ? 'Missing Automation permission for System Events.'
-        : trackingActive
-          ? `Last activity ${ageLabel(lastActivityTs, now)}.`
-          : trackingKnown
-            ? `Last poll ${ageLabel(lastPollTs, now)}, last activity ${ageLabel(lastActivityTs, now)}.`
-            : 'No native activity data yet.',
-    },
-    {
-      label: 'Website blocking',
-      state: !sessionActive || !websiteBlockingConfigured
-        ? 'off'
-        : systemPermissionMissing || browserPermissionsMissing.length > 0
-          ? 'limited'
-          : hostActive
-            ? 'active'
-            : hostCancelled
-              ? 'off'
-              : hostFailed
-                ? 'failed'
-                : 'unconfirmed',
-      detail: !sessionActive
-        ? 'Off because there is no active session.'
-        : !websiteBlockingConfigured
-          ? 'No blocked websites are configured for this session.'
-          : systemPermissionMissing || browserPermissionsMissing.length > 0
-            ? `Cannot reliably close blocked websites without Automation access for ${permissionMissing}.`
-            : hostActive
-              ? `${blockedDomainsCount} domain${blockedDomainsCount === 1 ? '' : 's'} blocked system-wide via /etc/hosts.`
-              : hostCancelled
-                ? 'Off because the admin password prompt was dismissed.'
-                : hostFailed
-                  ? `Failed: ${debug.hostBlockError}`
-                  : 'Requested, but the companion has not confirmed the hosts block yet.',
-    },
-    {
-      label: 'App blocking',
-      state: !sessionActive || !appBlockingConfigured
-        ? 'off'
-        : systemPermissionMissing
-          ? 'failed'
-          : trackingActive
-            ? 'active'
-            : 'unconfirmed',
-      detail: !sessionActive
-        ? 'Off because there is no active session.'
-        : !appBlockingConfigured
-          ? 'No blocked apps or strict allowlist are configured for this session.'
-          : systemPermissionMissing
-            ? 'Cannot reliably hide apps without Automation permission.'
-            : trackingActive
-              ? strictMode
-                ? `Strict mode is on; app hiding uses frontmost-app checks. ${blockedAppsCount} explicit blocked app${blockedAppsCount === 1 ? '' : 's'}.`
-                : `${blockedAppsCount} blocked app${blockedAppsCount === 1 ? '' : 's'} configured. Enforcement is checked when an app becomes frontmost.`
-              : 'Configured, but tracking is stale or not confirmed.',
-    },
-    {
-      label: 'Helper',
-      state: !connected ? 'unknown' : debug?.helperInstalled ? 'installed' : 'not installed',
-      detail: !connected
-        ? 'Cannot check helper installation until the companion is reachable.'
-        : debug?.helperInstalled
-          ? 'Silent website blocking helper is installed.'
-          : 'Website blocking may require an admin prompt until the helper is installed.',
-    },
-    {
-      label: 'Permissions',
-      state: permissionMissing ? 'missing' : connected ? 'no known issue' : 'unknown',
-      detail: permissionMissing
-        ? `Enable Eudaimonai Companion Automation access for ${permissionMissing} in System Settings.`
-        : connected
-          ? 'No Automation error reported by the companion.'
-          : 'Cannot check permissions until the companion is reachable.',
-    },
-  ]
-
-  const blockingConfigured = appBlockingConfigured || websiteBlockingConfigured
-  const websitePermissionMissing = systemPermissionMissing || browserPermissionsMissing.length > 0
-  const websiteOk = !websiteBlockingConfigured || (hostActive && !websitePermissionMissing)
-  const appOk = !appBlockingConfigured || trackingActive
-
-  if (!connected) {
-    return {
-      level: 'off',
-      title: 'Off',
-      summary: 'Companion not reachable. Native tracking and blocking are off.',
-      tone: 'red',
-      dimensions,
-    }
-  }
-  if (!sessionActive) {
-    return {
-      level: 'off',
-      title: 'Off',
-      summary: sessionState === 'paused'
-        ? 'The companion reports a pause without active protection.'
-        : 'No active focus session. The companion can track, but it is not enforcing blocking.',
-      tone: 'yellow',
-      dimensions,
-    }
-  }
-  if (!trackingActive || hostFailed || hostCancelled) {
-    return {
-      level: 'degraded',
-      title: 'Degraded',
-      summary: 'A session is active, but at least one required native signal is missing or failed.',
-      tone: 'red',
-      dimensions,
-    }
-  }
-  if (!blockingConfigured) {
-    return {
-      level: 'tracking_only',
-      title: 'Tracking only',
-      summary: 'The companion is tracking activity, but no app or website blocking is configured.',
-      tone: 'yellow',
-      dimensions,
-    }
-  }
-  if (websiteOk && appOk) {
-    return {
-      level: 'fully_protected',
-      title: 'Fully protected',
-      summary: sessionState === 'paused'
-        ? 'Focus measurement is paused. All configured protection paths remain active.'
-        : 'All configured protection paths are active or have no known native failure.',
-      tone: 'green',
-      dimensions,
-    }
-  }
-  return {
-    level: 'partially_protected',
-    title: 'Partially protected',
-    summary: 'Some configured protection is active, but at least one path is off or not confirmed.',
-    tone: 'yellow',
-    dimensions,
-  }
-}
-
-function statusColors(tone) {
-  return {
-    green: { border: 'rgba(47,227,168,0.20)', bg: 'rgba(47,227,168,0.10)', text: 'var(--good)', dot: 'var(--good)' },
-    yellow: { border: 'rgba(255,179,64,0.20)', bg: 'rgba(255,179,64,0.09)', text: 'var(--warn)', dot: 'var(--warn)' },
-    red: { border: 'rgba(255,77,106,0.20)', bg: 'rgba(255,77,106,0.10)', text: 'var(--bad)', dot: 'var(--bad)' },
-  }[tone] || { border: 'var(--line)', bg: 'rgba(122,152,255,0.05)', text: 'var(--text-secondary)', dot: 'var(--text-muted)' }
 }
 
 function AppChip({ app, tone, onRemove }) {
@@ -499,175 +234,6 @@ function AppSection({ title, subtitle, apps, setApps, presets, inputValue, setIn
         ))}
       </div>
     </section>
-  )
-}
-
-function CompanionStatus() {
-  const [debug, setDebug] = useState(null)
-  const [connected, setConnected] = useState(false)
-  const [installing, setInstalling] = useState(false)
-  const [installError, setInstallError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const poll = async () => {
-      const next = await fetchCompanionDebug()
-      if (cancelled) return
-      setDebug(next)
-      setConnected(Boolean(next))
-    }
-
-    poll()
-    const interval = setInterval(poll, 3000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
-
-  const runInstall = async () => {
-    setInstalling(true)
-    setInstallError(null)
-    const res = await installCompanionHelper()
-    setInstalling(false)
-    if (!res.ok) {
-      setInstallError(res.error === 'cancelled' ? 'You cancelled the password prompt.' : res.error)
-    } else {
-      const next = await fetchCompanionDebug()
-      setDebug(next)
-    }
-  }
-
-  const protection = getProtectionStatus(debug, connected)
-  const colors = statusColors(protection.tone)
-  const lastActivity = debug?.lastActivity
-  const activityLabel = lastActivity?.domain || lastActivity?.app || null
-  const websitesBlocked = debug?.hostBlockActive
-  const helperInstalled = debug?.helperInstalled
-
-  return (
-    <div style={{ display: 'grid', gap: 10, width: '100%', maxWidth: 540 }}>
-      <section style={{
-        border: `1.5px solid ${colors.border}`,
-        background: colors.bg,
-        color: colors.text,
-        borderRadius: 14,
-        padding: '13px 14px',
-        display: 'grid',
-        gap: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 950 }}>
-              <span style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: colors.dot,
-                boxShadow: `0 0 0 3px ${colors.dot}28`,
-                flexShrink: 0,
-              }} />
-              Protection: {protection.title}
-            </div>
-            <div style={{ marginTop: 4, fontSize: 12, fontWeight: 750, lineHeight: 1.45 }}>
-              {protection.summary}
-            </div>
-          </div>
-          <span style={{
-            border: `1px solid ${colors.border}`,
-            background: 'var(--surface)',
-            borderRadius: 100,
-            padding: '5px 9px',
-            fontSize: 11,
-            fontWeight: 900,
-            whiteSpace: 'nowrap',
-          }}>
-            {protection.level.replace('_', ' ')}
-          </span>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-          gap: 8,
-        }}>
-          {protection.dimensions.map(item => (
-            <div
-              key={item.label}
-              style={{
-                border: '1px solid rgba(122,152,255,0.12)',
-                background: 'rgba(122,152,255,0.06)',
-                borderRadius: 10,
-                padding: '9px 10px',
-                minWidth: 0,
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 950, color: 'var(--ultra-bright)' }}>{item.label}</div>
-              <div style={{ marginTop: 2, fontSize: 12, fontWeight: 900, color: colors.text }}>{item.state}</div>
-              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 650, color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                {item.detail}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {connected && !helperInstalled && (
-        <div style={{
-          border: '1px solid #93c5fd',
-          background: 'rgba(122,152,255,0.09)',
-          color: 'var(--ultra-bright)',
-          borderRadius: 12,
-          padding: '12px 14px',
-          display: 'grid',
-          gap: 8,
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 900 }}>⚡ Frictionless blocking (one-time setup)</div>
-          <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: 'var(--ultra-bright)' }}>
-            Enter your Mac password <b>once</b> to let Eudaimonai block distraction sites silently — no password on every session. It installs a small helper that only edits your block list.
-          </div>
-          <button
-            onClick={runInstall}
-            disabled={installing}
-            style={{
-              justifySelf: 'start',
-              border: 'none',
-              borderRadius: 9,
-              padding: '8px 16px',
-              fontSize: 13,
-              fontWeight: 900,
-              cursor: installing ? 'default' : 'pointer',
-              background: installing ? '#93c5fd' : 'var(--ultra-bright)',
-              color: 'var(--text)',
-            }}
-          >
-            {installing ? 'Waiting for password…' : 'Enable — enter password once'}
-          </button>
-          {installError && (
-            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--bad)' }}>⚠ {installError}</div>
-          )}
-        </div>
-      )}
-
-      {connected && helperInstalled && (
-        <div style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
-          Silent website blocking helper installed; no password prompt expected per session.
-        </div>
-      )}
-
-      {connected && debug?.sessionActive && websitesBlocked && (
-        <div style={{ color: 'var(--good)', fontSize: 11, fontWeight: 800 }}>
-          Website blocking is confirmed system-wide via /etc/hosts.
-        </div>
-      )}
-
-      {connected && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>
-          {activityLabel ? `Last activity: ${activityLabel}` : 'Last activity: none yet'}
-          {debug?.lastOsascriptError ? ` · osascript: ${debug.lastOsascriptError}` : ''}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -865,13 +431,9 @@ export default function FocusAppsScreen({
   const [confirmingBack, setConfirmingBack] = useState(false)
   const [setupPendingDeletion, setSetupPendingDeletion] = useState(null)
   const [localFocusModeEnabled, setLocalFocusModeEnabled] = useState(() => loadFocusModeEnabled())
-  const [activity, setActivity] = useState(() => getLastActivity())
-  const [activityConnected, setActivityConnected] = useState(() => isActivityConnected())
   const [testFeedback, setTestFeedback] = useState('')
   const [testBlockingActive, setTestBlockingActive] = useState(false)
-  const [contract, setContract] = useState(loadContractSettings)
-  const [cloudKey, setCloudKey] = useState('')
-  const [cloudKeyStatus, setCloudKeyStatus] = useState('pending')
+  const [helperInstallState, setHelperInstallState] = useState({ status: 'idle', error: '' })
   const testTimerRef = useRef(null)
   const testBlockingActiveRef = useRef(false)
   const savedTimerRef = useRef(null)
@@ -890,18 +452,17 @@ export default function FocusAppsScreen({
   const configuredCount = focusApps.length + distractionApps.length
   const modeEnabled = focusModeEnabled ?? localFocusModeEnabled
   const companionStatus = useCompanionStatus({ enabled: modeEnabled, intervalMs: 5000 })
+  const effectiveCompanionStatus = helperInstallState.status === 'installed'
+    ? { ...companionStatus, helperInstalled: true }
+    : companionStatus
   const readiness = useMemo(
-    () => getProtectionReadiness({ enabled: modeEnabled, setup: normalizeProtectionSetup(activeSetup, activeSetup.id), nativeStatus: companionStatus }),
-    [modeEnabled, activeSetup, companionStatus],
+    () => getProtectionReadiness({ enabled: modeEnabled, setup: normalizeProtectionSetup(activeSetup, activeSetup.id), nativeStatus: effectiveCompanionStatus }),
+    [modeEnabled, activeSetup, effectiveCompanionStatus],
   )
   const rulesConfigured = strictMode || distractionApps.length > 0
   const protectionReady = readiness.state === 'ready'
   const nameIssue = protectionSetupNameIssue(protectionState.setups, activeSetup.id)
   const invalidNameSetup = firstProtectionSetupWithNameIssue(protectionState.setups)
-  const activityPreview = useMemo(
-    () => classifyCurrentActivity(activity, focusApps, distractionApps, activityConnected),
-    [activity, focusApps, distractionApps, activityConnected]
-  )
 
   const updateActiveSetup = useCallback((patch) => {
     setProtectionState(current => ({
@@ -925,29 +486,6 @@ export default function FocusAppsScreen({
       distractionDomains: [],
     }))
   }, [updateActiveSetup])
-
-  useEffect(() => {
-    startActivityUpdates((nextActivity) => {
-      setActivity(nextActivity)
-      setActivityConnected(isActivityConnected())
-    })
-    const heartbeat = setInterval(() => {
-      setActivity(getLastActivity())
-      setActivityConnected(isActivityConnected())
-    }, 1000)
-    return () => {
-      clearInterval(heartbeat)
-      stopActivityUpdates()
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    hasCloudApiKey().then(configured => {
-      if (!cancelled) setCloudKeyStatus(configured === null ? 'error' : configured ? 'configured' : 'not-configured')
-    })
-    return () => { cancelled = true }
-  }, [])
 
   useEffect(() => () => {
     if (testTimerRef.current) clearTimeout(testTimerRef.current)
@@ -983,28 +521,18 @@ export default function FocusAppsScreen({
 
   const toggleStrictMode = () => updateActiveSetup({ strictMode: !strictMode })
 
-  const handleSaveCloudKey = async () => {
-    const key = cloudKey.trim()
-    if (!key) {
-      setCloudKeyStatus('error')
+  const handleInstallWebsiteHelper = async () => {
+    setHelperInstallState({ status: 'installing', error: '' })
+    const result = await installCompanionHelper()
+    if (result.ok) {
+      setHelperInstallState({ status: 'installed', error: '' })
       return
     }
-    setCloudKeyStatus('saving')
-    const ok = await setCloudApiKey(key)
-    if (ok) setCloudKey('')
-    setCloudKeyStatus(ok ? 'configured' : 'error')
+    setHelperInstallState({
+      status: 'error',
+      error: result.error === 'cancelled' ? 'You cancelled the password prompt.' : result.error,
+    })
   }
-
-  const handleRemoveCloudKey = async () => {
-    setCloudKeyStatus('removing')
-    const ok = await deleteCloudApiKey()
-    if (ok) setCloudKey('')
-    setCloudKeyStatus(ok ? 'not-configured' : 'error')
-  }
-
-  const cloudKeyBusy = cloudKeyStatus === 'saving' || cloudKeyStatus === 'removing' || cloudKeyStatus === 'pending'
-  const saveKeyDisabled = !cloudKey.trim() || cloudKeyBusy
-  const removeKeyDisabled = cloudKeyBusy || cloudKeyStatus === 'not-configured' || cloudKeyStatus === 'error'
 
   // The entire library is one draft. Switching setups never leaks or silently
   // saves one setup's rules into another. Both sides are compared in their
@@ -1074,11 +602,6 @@ export default function FocusAppsScreen({
 
     testTimerRef.current = setTimeout(stopTestBlocking, 60_000)
   }
-
-  const activityRuntimeLabel = 'Native Companion'
-  const currentActivityValue = activityConnected
-    ? (activity?.domain || activity?.title || activity?.url || activity?.app || 'Waiting for activity')
-    : 'Waiting for Companion activity'
 
   const resetEditorInputs = () => {
     setFocusInput('')
@@ -1233,7 +756,7 @@ export default function FocusAppsScreen({
                     checking: 'Rules are set. Verifying that the Companion can enforce them.',
                     disconnected: 'Rules are set, but nothing is enforced until the Companion app is running.',
                     permission: `Enable Eudaimonai Companion Automation access for ${readiness.permissionMissing} in System Settings so ${readiness.permissionScope === 'system' ? 'these rules can be enforced' : 'blocked websites can be closed there'}.`,
-                    helper: 'Install the website blocking helper under Advanced so websites can be blocked.',
+                    helper: 'Install the website blocking helper below so websites can be blocked.',
                   }[readiness.state]}
               </p>
             </div>
@@ -1248,6 +771,23 @@ export default function FocusAppsScreen({
               <span />
             </button>
           </section>
+
+          {readiness.state === 'helper' && (
+            <section className="protection-helper-setup" aria-labelledby="website-helper-heading">
+              <div>
+                <h2 id="website-helper-heading">Enable website blocking</h2>
+                <p>Enter your Mac password once. The helper only updates Eudaimonai’s website block list, so sessions do not need another password prompt.</p>
+                {helperInstallState.error && <span role="alert">{helperInstallState.error}</span>}
+              </div>
+              <button
+                type="button"
+                onClick={handleInstallWebsiteHelper}
+                disabled={helperInstallState.status === 'installing'}
+              >
+                {helperInstallState.status === 'installing' ? 'Waiting for password…' : 'Install helper'}
+              </button>
+            </section>
+          )}
 
           <fieldset className="protection-strength">
             <legend>Protection level</legend>
@@ -1294,6 +834,17 @@ export default function FocusAppsScreen({
             />
           </div>
 
+          <section className="protection-blocking-test" aria-labelledby="blocking-test-heading">
+            <div>
+              <h2 id="blocking-test-heading">Test this setup</h2>
+              <p>Temporarily enforce the current draft for 60 seconds before using it in a session.</p>
+              {testFeedback && <span className="protection-test-feedback" role="status">{testFeedback}</span>}
+            </div>
+            <button type="button" onClick={handleTestBlocking} disabled={testBlockingActive || !rulesConfigured}>
+              {testBlockingActive ? 'Test active' : 'Test for 60s'}
+            </button>
+          </section>
+
           <footer className="protection-save-row">
             <span>{invalidNameSetup && hasUnsavedChanges ? 'Name every setup before saving' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}</span>
             <button type="button" disabled={(!hasUnsavedChanges && !saved) || Boolean(invalidNameSetup)} onClick={handleSave}>
@@ -1303,93 +854,12 @@ export default function FocusAppsScreen({
         </section>
       </div>
 
-      <details className="protection-advanced">
-        <summary>
-          <span>Advanced</span>
-          <small>Companion status, blocking test and goal understanding</small>
-        </summary>
-        <div className="protection-advanced-content">
-          <CompanionStatus />
-
-          <section className="protection-advanced-section">
-            <div className="protection-advanced-row">
-              <div>
-                <strong>Blocking test</strong>
-                <p>Temporarily enforce the current draft for 60 seconds.</p>
-              </div>
-              <button type="button" onClick={handleTestBlocking} disabled={testBlockingActive}>
-                {testBlockingActive ? 'Test active' : 'Test for 60s'}
-              </button>
-            </div>
-            {testFeedback && <span className="protection-test-feedback">{testFeedback}</span>}
-          </section>
-
-          <section className="protection-advanced-section">
-            <div className="protection-activity-preview">
-              <div>
-                <span>Current activity from {activityRuntimeLabel}</span>
-                <strong>{currentActivityValue}</strong>
-              </div>
-              <em className={`is-${activityPreview.kind}`}>
-                {activityPreview.kind === 'focus'
-                  ? `${activityPreview.label} · allowed`
-                  : activityPreview.kind === 'distraction'
-                    ? `${activityPreview.label} · unavailable`
-                    : `${activityPreview.label} · not classified`}
-              </em>
-            </div>
-          </section>
-
-          <section className="protection-advanced-section">
-            <strong>Goal understanding</strong>
-            <CloudPrivacyNotice />
-            <div className="protection-provider-options">
-              {[
-                { id: 'keywords', label: 'Built-in', hint: 'offline · instant' },
-                { id: 'local', label: 'Local model', hint: 'private · needs Ollama' },
-                { id: 'cloud', label: 'Claude API', hint: 'best · needs key' },
-              ].map(opt => {
-                const active = contract.provider === opt.id
-                return (
-                  <button key={opt.id} type="button" className={active ? 'is-active' : ''} onClick={() => setContract(saveContractSettings({ provider: opt.id }))}>
-                    <strong>{opt.label}</strong>
-                    <span>{opt.hint}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {contract.provider === 'local' && (
-              <input type="text" className="text-input" value={contract.localModel} onChange={event => setContract(saveContractSettings({ localModel: event.target.value }))} placeholder="ollama model, e.g. qwen2.5:3b" />
-            )}
-
-            {contract.provider === 'cloud' && (
-              <>
-                <input
-                  type="password"
-                  className="text-input"
-                  value={cloudKey}
-                  onChange={event => {
-                    setCloudKey(event.target.value)
-                    setCloudKeyStatus('not-saved')
-                  }}
-                  placeholder="Anthropic API key"
-                />
-                <div className="protection-key-actions">
-                  <button type="button" onClick={handleSaveCloudKey} disabled={saveKeyDisabled}>Save key</button>
-                  <button type="button" onClick={handleRemoveCloudKey} disabled={removeKeyDisabled}>Remove key</button>
-                  <span role="status" aria-live="polite">
-                    {({ pending: 'Checking Keychain…', saving: 'Saving…', removing: 'Removing…', configured: 'Keychain key configured', 'not-configured': 'No Keychain key configured', 'not-saved': 'Unsaved key', error: 'Keychain unavailable' })[cloudKeyStatus]}
-                  </span>
-                </div>
-                <p className="protection-key-note">The key stays in your macOS Keychain and is used only for goal understanding.</p>
-              </>
-            )}
-          </section>
-
-          {SHOW_NATIVE_CAMERA_DIAGNOSTICS && <NativeCameraDiagnostics />}
-        </div>
-      </details>
+      {SHOW_NATIVE_CAMERA_DIAGNOSTICS && (
+        <details className="protection-internal-diagnostics">
+          <summary>Internal camera diagnostics</summary>
+          <NativeCameraDiagnostics />
+        </details>
+      )}
 
       {setupPendingDeletion && (
         <ConfirmDialog
