@@ -172,7 +172,7 @@ describe('SessionIntentScreen', () => {
     })
     expect(html).toContain('Draft essay')
     expect(html).toContain('Write 800 words')
-    expect(html).toContain('60 min')
+    expect(html).toContain('1h')
     expect(html).toContain('<button class="session-intent-start" type="button">')
   })
 })

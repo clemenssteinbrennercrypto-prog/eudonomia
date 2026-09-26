@@ -10,7 +10,7 @@ function fmtTime(timestamp) {
 function activityOutputLine(facts) {
   const bits = []
   bits.push(facts.activity
-    ? `Activity tracked for ${Math.round(facts.activity.observedSeconds / 60)} min`
+    ? `Activity tracked for ${fmtDuration(facts.activity.observedSeconds)}`
     : 'No activity data')
   bits.push(facts.output ? 'Output folder watched' : 'No output folder watched')
   return bits.join(' · ')
@@ -68,12 +68,11 @@ export default function MeasuredFacts({ session, analysis, hideTimeline = false 
             {measurement.deepFocusSeconds == null ? '--' : fmtDuration(measurement.deepFocusSeconds)}
           </span>
           <span className="stat-label">{measurement.deepFocusSeconds == null ? 'deep focus available for new sessions' : 'deep focus'}</span>
-          {/* Which ruler produced this number. V2 is a different measurement
-              generation held out of cross-session comparison, so the figure is
-              labelled rather than silently mixed in with V1 history. */}
+          {/* Name the current measurement method without exposing its internal
+              schema generation. Historical methods still remain separate. */}
           {measurement.measurementSource === 'native_mediapipe_v2' && (
             <span style={{ fontSize: 10, color: 'var(--ultra-bright)', fontWeight: 800, marginTop: 4, display: 'block', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Native ruler · V2
+              Current camera measurement
             </span>
           )}
         </div>

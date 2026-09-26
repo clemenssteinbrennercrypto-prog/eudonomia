@@ -8,6 +8,8 @@ import {
 } from '../../lib/analyticsModel'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
 import { SCORE_COMPONENT_LABELS } from '../../lib/attentionScore'
+import { measurementMethodLabel } from '../../lib/measurementTerminology'
+import { formatMinutes } from '../../lib/durationFormat'
 
 function Filter({ label, value, onChange, children }) {
   return (
@@ -75,11 +77,11 @@ function DurationScatter({ rows }) {
       {[20, 40, 60, 80, 100].map(value => <line key={value} x1="30" x2="970" y1={y(value)} y2={y(value)} />)}
       {points.map(point => (
         <circle key={point.id} cx={x(point.durationMinutes)} cy={y(point.averageFocus)} r="6" fill={outcomeColor(point.outcome)}>
-          <title>{point.durationMinutes} min · {point.averageFocus}/100 attention · {point.outcome || 'unrated'}</title>
+          <title>{formatMinutes(point.durationMinutes)} · {point.averageFocus}/100 attention · {point.outcome || 'unrated'}</title>
         </circle>
       ))}
       <text x="30" y="252">0 min</text>
-      <text x="970" y="252" textAnchor="end">{maxDuration} min</text>
+      <text x="970" y="252" textAnchor="end">{formatMinutes(maxDuration)}</text>
     </svg>
   )
 }
@@ -106,7 +108,7 @@ function OutcomeBar({ outcomes }) {
   )
 }
 
-function FacetTable({ title, rows }) {
+function FacetTable({ title, rows, formatLabel = row => row.label }) {
   return (
     <section className="analytics-panel analytics-facet">
       <div className="analytics-section-heading"><h2>{title}</h2><b>{rows.length} groups</b></div>
@@ -115,7 +117,7 @@ function FacetTable({ title, rows }) {
           <div role="row" className="is-head"><span>Condition</span><span>Attention</span><span>Reached</span><span>n</span></div>
           {rows.map(row => (
             <div role="row" key={row.id}>
-              <span>{row.label}</span>
+              <span>{formatLabel(row)}</span>
               <strong>{row.averageFocus == null ? '—' : `${row.averageFocus}/100`}</strong>
               <strong>{row.outcomeRate == null ? '—' : `${row.outcomeRate}%`}</strong>
               <strong>{row.sessions}</strong>
@@ -229,7 +231,7 @@ export default function DataExplorer({ sessions }) {
         <div className="analytics-filter-result">
           <div>
             <strong>{filtered.length}</strong>
-            <span>sessions · {comparable[0] ? `ruler V${comparable[0].attentionScoringVersion}` : 'no compatible ruler'}</span>
+            <span>sessions · {comparable[0] ? measurementMethodLabel(comparable[0].attentionScoringVersion) : 'no compatible measurement'}</span>
           </div>
           <button type="button" onClick={() => downloadAnalytics(filtered, { range, outcome, workspace })}>Export analysis</button>
         </div>
@@ -302,7 +304,7 @@ export default function DataExplorer({ sessions }) {
       <div className="analytics-facet-grid">
         <FacetTable title="Workspace" rows={explorer.facets.workspace} />
         <FacetTable title="Time of day" rows={explorer.facets.timeOfDay} />
-        <FacetTable title="Planned duration" rows={explorer.facets.duration} />
+        <FacetTable title="Planned duration" rows={explorer.facets.duration} formatLabel={row => `${formatMinutes(Number(row.id))} planned`} />
         <FacetTable title="Energy context" rows={explorer.facets.energy} />
       </div>
 

@@ -9,6 +9,7 @@ import { SCOREABLE_SCORING_VERSIONS } from './focusMetric'
 import { analyzeSession } from './sessionAnalysis'
 import { describeNextAction } from './sessionAnalysisPresentation'
 import { summarizeSessionAlignment } from './sessionIntent'
+import { formatMinutes } from './durationFormat'
 
 export const COHORT_SIZE = 8
 
@@ -144,8 +145,8 @@ function qualifiedExperiment(calibration, usable) {
     candidates.push({
       kind: 'duration',
       source: 'qualified_pattern',
-      title: `Test a ${best.minutes}-minute block`,
-      hypothesis: `${best.minutes}-minute sessions averaged ${best.focusPct}% focus (${best.n} sessions), versus ${longest.focusPct}% for ${longest.minutes}-minute blocks (${longest.n}). Test the shorter block once more.`,
+      title: `Test a ${formatMinutes(best.minutes)} block`,
+      hypothesis: `${formatMinutes(best.minutes)} sessions averaged ${best.focusPct}% focus (${best.n} sessions), versus ${longest.focusPct}% for ${formatMinutes(longest.minutes)} blocks (${longest.n}). Test the shorter block once more.`,
       evidence: { focusGap: best.focusPct - longest.focusPct, best, worst: longest, outcome },
       prefill: { duration: best.minutes },
       rank: (outcome && outcome.delta > 0 ? 1000 + outcome.delta : 0) + (best.focusPct - longest.focusPct) + Math.min(20, best.n + longest.n),

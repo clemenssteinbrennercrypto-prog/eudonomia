@@ -13,6 +13,7 @@
 import { comparableSessions, sessionAverageFocus, sessionFocusMeasurement } from './historyTrend'
 import { summarizeSessionAlignment } from './sessionIntent'
 import { sessionStartedAt } from './sessionTiming'
+import { formatMinutes } from './durationFormat'
 
 /** Nothing at all is claimed under this many usable sessions. */
 export const MIN_SESSIONS = 8
@@ -324,14 +325,14 @@ const INSIGHT_DEFINITIONS = [
     kind: 'planning',
     compute: planningFit,
     describe: (p) => p && p.ratio < 0.7
-      ? { text: `You plan ${p.plannedMedian} minutes but typically run ${p.actualMedian}. Planning the length you actually work would make the number mean something.`, n: p.n }
+      ? { text: `You plan ${formatMinutes(p.plannedMedian)} but typically run ${formatMinutes(p.actualMedian)}. Planning the length you actually work would make the number mean something.`, n: p.n }
       : null,
   },
   {
     kind: 'duration',
     compute: durationFit,
     describe: (d) => d?.shorterIsBetter
-      ? { text: `${d.shorterIsBetter.best.minutes}-minute sessions hold ${d.shorterIsBetter.best.focusPct}% focus; your ${d.shorterIsBetter.longest.minutes}-minute ones drop to ${d.shorterIsBetter.longest.focusPct}%. The longer block buys time, not attention.`, n: d.shorterIsBetter.best.n + d.shorterIsBetter.longest.n }
+      ? { text: `${formatMinutes(d.shorterIsBetter.best.minutes)} sessions hold ${d.shorterIsBetter.best.focusPct}% focus; your ${formatMinutes(d.shorterIsBetter.longest.minutes)} ones drop to ${d.shorterIsBetter.longest.focusPct}%. The longer block buys time, not attention.`, n: d.shorterIsBetter.best.n + d.shorterIsBetter.longest.n }
       : null,
   },
   {

@@ -19,8 +19,8 @@ export default function FocusScoreControls({ metricVersion, onVersionChange, sch
     <div className="focus-score-controls">
       {showMetricVersions && (
         <div className="lab-segments" role="group" aria-label="Focus Score formula">
-          <button type="button" aria-pressed={metricVersion === 2} className={metricVersion === 2 ? 'is-active' : ''} onClick={() => onVersionChange(2)}>V2 · Current</button>
-          <button type="button" aria-pressed={metricVersion === 1} className={metricVersion === 1 ? 'is-active' : ''} onClick={() => onVersionChange(1)}>V1 · Previous formula</button>
+          <button type="button" aria-pressed={metricVersion === 2} className={metricVersion === 2 ? 'is-active' : ''} onClick={() => onVersionChange(2)}>Time + attention + consistency</button>
+          <button type="button" aria-pressed={metricVersion === 1} className={metricVersion === 1 ? 'is-active' : ''} onClick={() => onVersionChange(1)}>Phase-weighted</button>
         </div>
       )}
       {metricVersion === 2 && (

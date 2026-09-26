@@ -5,6 +5,7 @@ import { hasTimeLimit as isTimed, isCustomDuration } from '../lib/sessionDuratio
 import { CLOUD_GOAL_MAX_CHARS } from '../lib/intentContract'
 import { getProtectionReadiness } from '../lib/protectionReadiness'
 import { useCompanionStatus } from '../lib/useCompanionStatus'
+import { formatMinutes } from '../lib/durationFormat'
 
 const DURATIONS = [15, 30, 60, 90]
 
@@ -199,7 +200,7 @@ export default function SessionIntentScreen({
               <div>
                 {DURATIONS.map(value => (
                   <button key={value} type="button" className={duration === value ? 'is-selected' : ''} onClick={() => setDuration(value)}>
-                    {value}<span> min</span>
+                    {formatMinutes(value)}
                   </button>
                 ))}
                 <button type="button" className={customDurationOpen && hasTimeLimit && !DURATIONS.includes(duration) ? 'is-selected' : ''} onClick={() => setCustomDurationOpen(true)}>
@@ -265,7 +266,7 @@ export default function SessionIntentScreen({
           <button className="session-intent-start" type="button" disabled={!canStart} onClick={onStart}>
             <span className="session-start-icon" aria-hidden="true">▶</span>
             <span>{protectionReady ? 'Start protected session' : 'Start focus session'}</span>
-            <span className="session-start-duration">{hasTimeLimit ? `${duration} min` : 'No time limit'}</span>
+            <span className="session-start-duration">{hasTimeLimit ? formatMinutes(duration) : 'No time limit'}</span>
           </button>
         </section>
 
@@ -280,7 +281,7 @@ export default function SessionIntentScreen({
               <strong>{setup.task}</strong>
               <p>{setup.goal || 'No definition of done recorded'}</p>
               <div>
-                <span>{setup.duration ? `${setup.duration} min` : 'No limit'}</span>
+                <span>{setup.duration ? formatMinutes(setup.duration) : 'No limit'}</span>
                 {setup.tags.slice(0, 2).map(tag => <span key={tag}>{tag}</span>)}
               </div>
             </button>

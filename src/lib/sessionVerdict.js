@@ -27,6 +27,7 @@
 
 import { callModel, parseModelJson } from './modelClient'
 import { sessionFocusPct } from './historyTrend'
+import { formatMinutes } from './durationFormat'
 
 /** Below this a session is noise, not evidence — same bar as calibration.js. */
 export const MIN_SESSION_SECONDS = 120
@@ -167,8 +168,8 @@ export function buildVerdictPrompt(input) {
     '',
     `Their stated goal: "${input.goal}"`,
     input.plannedMinutes == null
-      ? `No time limit was set; the session ran ${input.actualMinutes} min.`
-      : `Planned ${input.plannedMinutes} min, ran ${input.actualMinutes} min.`,
+      ? `No time limit was set; the session ran ${formatMinutes(input.actualMinutes)}.`
+      : `Planned ${formatMinutes(input.plannedMinutes)}, ran ${formatMinutes(input.actualMinutes)}.`,
   ]
 
   if (input.focusPct != null) {
@@ -188,7 +189,7 @@ export function buildVerdictPrompt(input) {
     lines.push('', 'Where the time went:')
     for (const entry of input.activities) {
       const where = [entry.app, entry.site].filter(Boolean).join(' / ')
-      lines.push(`  ${entry.minutes} min — ${where} (classified: ${entry.kind})`)
+      lines.push(`  ${formatMinutes(entry.minutes)} — ${where} (classified: ${entry.kind})`)
     }
   }
 

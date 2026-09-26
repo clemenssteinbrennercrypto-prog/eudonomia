@@ -171,7 +171,7 @@ describe('unlimited sessions', () => {
   it('does not fabricate a zero-minute plan for the judge', () => {
     const input = buildVerdictInput(sessionFixture({ plannedDuration: null }))
     expect(input.plannedMinutes).toBeNull()
-    expect(buildVerdictPrompt(input)).toContain('No time limit was set; the session ran 60 min.')
+    expect(buildVerdictPrompt(input)).toContain('No time limit was set; the session ran 1h.')
     expect(buildVerdictPrompt(input)).not.toContain('Planned 0 min')
   })
 })

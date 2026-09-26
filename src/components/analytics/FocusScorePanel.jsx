@@ -6,6 +6,7 @@ import { useCurrentTime } from '../../lib/useCurrentTime'
 import FocusScoreExplanation, { focusScoreLabel } from '../FocusScoreExplanation'
 import FocusScoreControls from '../FocusScoreControls'
 import { useFocusScoreSchedule } from '../../lib/useFocusScoreSchedule'
+import { formatMinutes } from '../../lib/durationFormat'
 
 /**
  * The versioned daily Focus Score — distinct from a single session's "time
@@ -42,7 +43,7 @@ export default function FocusScorePanel({ ledger, sessions }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
-            Focus Score · v{metricVersion}
+            Focus Score
           </p>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '5px 0 0' }}>{period.title}</p>
         </div>
@@ -116,7 +117,7 @@ export default function FocusScorePanel({ ledger, sessions }) {
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 7 }}>
                 <span>Duration adjustment</span>
-                <span>{measuredMinutes} / {FOCUS_METRIC_V1.fullDayMinutes} measured min</span>
+                <span>{fmtDuration(period.measuredSeconds)} / {formatMinutes(FOCUS_METRIC_V1.fullDayMinutes)} measured</span>
               </div>
               <div style={{ height: 7, borderRadius: 999, overflow: 'hidden', background: 'rgba(122,152,255,0.08)' }}>
                 <div style={{ width: `${qualificationPct}%`, height: '100%', borderRadius: 999, background: 'var(--ultra-bright)' }} />
@@ -130,7 +131,7 @@ export default function FocusScorePanel({ ledger, sessions }) {
                 {period.days.map(day => (
                   <div
                     key={day.key}
-                    title={`${day.key}: ${day.status === 'inactive' ? 'no session' : day.status === 'future' ? 'future' : day.status === 'different_generation' ? 'different scoring ruler' : day.score == null ? 'not measured' : `${day.score} focus score`}`}
+                    title={`${day.key}: ${day.status === 'inactive' ? 'no session' : day.status === 'future' ? 'future' : day.status === 'different_generation' ? 'different measurement method' : day.score == null ? 'not measured' : `${day.score} focus score`}`}
                     style={{
                       width: barWidth, minWidth: barWidth,
                       height: day.score == null ? 3 : Math.max(4, Math.round(day.score * 0.58)),
@@ -149,7 +150,7 @@ export default function FocusScorePanel({ ledger, sessions }) {
             {period.baseline != null && <span>{period.score - period.baseline >= 0 ? '+' : ''}{period.score - period.baseline} vs your own baseline</span>}
             {metricVersion === 1 && <span>
               {period.totalMeasuredDays >= FOCUS_METRIC_V1.calibrationReviewDays
-                ? 'V1 calibration review due'
+                ? 'Focus Score calibration review due'
                 : `${period.totalMeasuredDays}/${FOCUS_METRIC_V1.calibrationReviewDays} days until calibration review`}
             </span>}
           </div>

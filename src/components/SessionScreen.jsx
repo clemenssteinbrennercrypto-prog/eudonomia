@@ -75,6 +75,7 @@ import {
 } from '../lib/cameraMeasurement'
 import { attachSessionWindowLifecycle, canApplyCompanionActive } from '../lib/sessionWindowLifecycle'
 import { sessionShortcutAction } from '../lib/destructiveActions'
+import { formatDuration, formatTimer } from '../lib/durationFormat'
 import ConfirmDialog from './ConfirmDialog'
 import {
   BLINK_WIN_MS,
@@ -434,19 +435,9 @@ function createAmbientSource(ctx, mode) {
   return { source, gain }
 }
 
-function formatTime(s) {
-  s = Math.round(s)
-  const m   = Math.floor(s / 60)
-  const sec = s % 60
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-}
-
 function formatShortDuration(ms) {
   const total = Math.max(0, Math.floor(ms / 1000))
-  const mins = Math.floor(total / 60)
-  const secs = total % 60
-  if (mins <= 0) return `${secs}s`
-  return `${mins}m ${String(secs).padStart(2, '0')}s`
+  return formatDuration(total)
 }
 
 // ── Focus Ring (SVG) ──────────────────────────────────────────────────────────
@@ -513,7 +504,7 @@ function FocusRing({
         alignItems: 'center', justifyContent: 'center',
         gap: 0,
       }}>
-        <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? 'var(--text-muted)' : '#ffffff', fontWeight: 200 }}>{formatTime(timeLeft)}</span>
+        <span className="timer" style={{ fontSize: 42, lineHeight: 1, color: isPaused ? 'var(--text-muted)' : '#ffffff', fontWeight: 200 }}>{formatTimer(timeLeft)}</span>
         {countUp && <span style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>No time limit</span>}
       </div>
     </div>
@@ -3026,9 +3017,9 @@ export default function SessionScreen({
               animation: inFlowState ? 'flowPulse 2s ease-in-out infinite' : 'none',
             }} />
             <span style={{ fontSize: 12, color: inFlowState ? '#B79CFF' : 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
-              Deep Focus · {formatTime(deepFocusSeconds)}{inFlowState
+              Deep Focus · {formatTimer(deepFocusSeconds)}{inFlowState
                 ? ' · recording'
-                : ` · warm-up ${formatTime(flowWarmupSeconds)} / ${formatTime(FLOW_ENTRY_MS / 1000)}`}
+                : ` · warm-up ${formatTimer(flowWarmupSeconds)} / ${formatTimer(FLOW_ENTRY_MS / 1000)}`}
             </span>
           </div>
         )}
@@ -3053,7 +3044,7 @@ export default function SessionScreen({
           <p style={{
             fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginTop: 8, fontWeight: 500,
           }}>
-            {formatTime(currentStreak)} streak
+            {formatTimer(currentStreak)} streak
           </p>
         )}
 

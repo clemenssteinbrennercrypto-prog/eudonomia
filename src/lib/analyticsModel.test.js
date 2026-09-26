@@ -162,7 +162,7 @@ describe('Analytics model — recommendations and data', () => {
   })
 
   it('exports the selected derived evidence without claiming to be the raw archive', () => {
-    const exported = buildAnalyticsExport([session(1)], {
+    const exported = buildAnalyticsExport([session(1, { plannedDuration: 60 })], {
       generatedAt: '2026-09-16T12:00:00.000Z',
       scope: { range: 'all' },
     })
@@ -173,6 +173,7 @@ describe('Analytics model — recommendations and data', () => {
       generation: 2,
     })
     expect(exported.sessions[0]).toMatchObject({ id: 's-1', averageFocus: 70 })
+    expect(exported.summary.facets.duration[0].label).toBe('60 min planned')
     expect(exported.sessions[0]).not.toHaveProperty('timeline')
   })
 })

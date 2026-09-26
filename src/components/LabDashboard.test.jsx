@@ -52,18 +52,19 @@ describe('LabDashboard metric labels', () => {
     const originalLedger = loadFocusLedger()
     render(React.createElement(LabDashboard, { sessions: [current, historical], ledger: originalLedger }))
     expect(screen.getByRole('heading', { name: 'Focus Score' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'V2 · Current' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Time + attention + consistency' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
     expect(screen.getByText('47')).toBeInTheDocument()
-    expect(screen.getByText('Average of 2 measured days · v1')).toBeInTheDocument()
+    expect(screen.getByText('Phase-weighted average of 2 measured days')).toBeInTheDocument()
     const focusTime = screen.getByText('Focus time').parentElement
-    expect(focusTime).toHaveTextContent('120m')
-    expect(focusTime).toHaveTextContent('Across 2 measured days · V1')
+    expect(focusTime).toHaveTextContent('2h')
+    expect(focusTime).toHaveTextContent('Across 2 measured days · phase-weighted')
     expect(focusTime).not.toHaveTextContent('2m')
     expect(screen.getByText('Measured days').parentElement).toHaveTextContent('2/3days')
     expect(screen.getByText('Average attention')).toBeInTheDocument()
     expect(screen.queryByText('Time credit')).not.toBeInTheDocument()
-    expect(screen.getByText(/does not alter the V1 score/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not alter Focus Score/i)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\b(?:V1|V2|ruler)\b/i)
     expect(loadFocusLedger()).toEqual(originalLedger)
   })
 
@@ -80,12 +81,13 @@ describe('LabDashboard metric labels', () => {
     render(React.createElement(LabDashboard, { sessions: [saved], ledger: loadFocusLedger() }))
 
     const metric = screen.getByText('Focus time').parentElement
-    expect(metric).toHaveTextContent('120m')
-    expect(metric).toHaveTextContent('Phase-weighted V1 time')
+    expect(metric).toHaveTextContent('2h')
+    expect(metric).toHaveTextContent('Phase-weighted focus time')
     expect(metric).not.toHaveTextContent('—')
   })
 
   it('keeps the retired score formulas inspectable in the historical analytics panel', () => {
+    vi.setSystemTime(new Date(2026, 7, 25, 12))
     const startedAt = new Date(2026, 7, 25, 9).getTime()
     const saved = saveSession({
       startedAt, timestamp: startedAt + 7220_000,
@@ -94,10 +96,13 @@ describe('LabDashboard metric labels', () => {
       sessionEfficiency: 75, deepFocusSeconds: 7200,
     })
     render(React.createElement(FocusScorePanel, { sessions: [saved], ledger: loadFocusLedger() }))
-    fireEvent.click(screen.getByRole('button', { name: 'V1 · Previous formula' }))
+    expect(screen.getByText('Time + attention calculation')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'week' }))
+    expect(screen.getByText('Time + attention + consistency calculation')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Phase-weighted' }))
     expect(screen.getByText('72')).toBeInTheDocument()
-    expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
+    expect(screen.getByText('Phase-weighted average of 1 measured day')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\b(?:V1|V2|ruler)\b/i)
   })
 
   it('saves workday changes for tomorrow and reloads them without rewriting today', () => {
@@ -137,11 +142,11 @@ describe('LabDashboard metric labels', () => {
       sessionEfficiency: 75, deepFocusSeconds: 7200,
     })
     render(React.createElement(FocusScorePanel, { sessions: [saved], ledger: loadFocusLedger() }))
-    fireEvent.click(screen.getByRole('button', { name: 'V1 · Previous formula' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Phase-weighted' }))
     expect(screen.getByText('No session today.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^(Weekly|week)$/ }))
     expect(screen.getByText('72')).toBeInTheDocument()
-    expect(screen.getByText('Average of 1 measured day · v1')).toBeInTheDocument()
+    expect(screen.getByText('Phase-weighted average of 1 measured day')).toBeInTheDocument()
     expect(screen.getByText('No session today.')).toBeInTheDocument()
     expect(screen.getByText('Only measured days enter this average. Days without sessions do not lower it.')).toBeInTheDocument()
   })
@@ -362,7 +367,7 @@ describe('LabDashboard metric labels', () => {
     expect(html).toContain('Average attention')
     expect(html).toContain('Focus time')
     expect(html).toContain('10m')
-    expect(html).toContain('Phase-weighted V1 time')
+    expect(html).toContain('Phase-weighted focus time')
     expect(html).not.toContain('Time credit')
     expect(html).not.toContain('78% efficiency')
     expect(html).toContain('title="Focus 53"')

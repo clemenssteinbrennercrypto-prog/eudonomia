@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { buildAnalyticsStory } from '../../lib/analyticsModel'
 import { fmtDuration } from '../../lib/sessionAnalysisPresentation'
+import { measurementMethodLabel } from '../../lib/measurementTerminology'
 import Sessions from './Sessions'
 
 const OUTCOMES = [
@@ -108,7 +109,7 @@ function Progress({ progress, learning }) {
           {remaining > 0
             ? `${remaining} more compatible measured ${remaining === 1 ? 'session' : 'sessions'} before the latest 8 can be compared with the previous 8.`
             : 'Waiting for two complete comparable blocks.'}
-          {learning.generation ? ` Current ruler: V${learning.generation}.` : ' No explicit compatible ruler is available yet.'}
+          {learning.generation ? ` ${measurementMethodLabel(learning.generation)}.` : ' No compatible measurement method is available yet.'}
         </p>
       </section>
     )
@@ -121,7 +122,7 @@ function Progress({ progress, learning }) {
           <span className="analytics-kicker">Progress</span>
           <h2 id="progress-heading">Latest 8 vs previous 8</h2>
         </div>
-        <b>Ruler V{progress.generation}</b>
+        <b>{measurementMethodLabel(progress.generation)}</b>
       </div>
       <div className="analytics-comparison-grid">
         <div className="analytics-comparison-metric">

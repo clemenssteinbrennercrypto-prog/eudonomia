@@ -39,6 +39,7 @@ import {
   saveProtectionSetups,
 } from '../lib/storage'
 import ConfirmDialog from './ConfirmDialog'
+import { formatDuration } from '../lib/durationFormat'
 
 const FOCUS_PRESETS = ['VS Code', 'Figma', 'Terminal', 'Notion', 'Safari', 'Chrome']
 const DISTRACTION_PRESETS = ['YouTube', 'Instagram', 'Twitter/X', 'TikTok', 'Reddit', 'Netflix']
@@ -131,7 +132,7 @@ function ageLabel(ts, now = Date.now()) {
   const seconds = Math.max(0, Math.round((now - ts) / 1000))
   if (seconds < 2) return 'just now'
   if (seconds < 60) return `${seconds}s ago`
-  return `${Math.round(seconds / 60)}m ago`
+  return `${formatDuration(Math.round(seconds / 60) * 60)} ago`
 }
 
 function getProtectionStatus(debug, connected, now = Date.now()) {
@@ -784,8 +785,8 @@ function NativeCameraDiagnostics() {
           Native camera diagnostics
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
-          Native V2 is the measurement source for every new session. Historical V1 sessions
-          remain readable, but daily scores, trends and patterns never mix the two generations.
+          The native camera is the measurement source for every new session. Sessions from the
+          earlier camera method remain readable, but scores, trends and patterns never mix methods.
           These controls inspect capture health only; they do not change the scoring source.
         </div>
       </div>

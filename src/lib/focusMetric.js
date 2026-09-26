@@ -6,6 +6,7 @@
 import { ATTENTION_ACCUMULATION_VERSION } from './attentionSampling'
 import { NATIVE_CAMERA_MEASUREMENT_V2, WEBVIEW_CAMERA_MEASUREMENT } from './cameraMeasurement'
 import { activeFocusGeneration } from './historyTrend'
+import { formatDuration } from './durationFormat'
 
 export const ATTENTION_SCORING_VERSION = 1
 
@@ -465,12 +466,11 @@ export function withSessionFocusMetric(session) {
 // not a binary gate: once five real minutes exist, the metric scores only those
 // measured seconds and its volume term naturally withholds credit for gaps.
 export function describeFocusMetricRejection(reason, { measuredSeconds } = {}) {
-  const measuredMinutes = Number.isFinite(measuredSeconds) ? Math.round(measuredSeconds / 60) : 0
   switch (reason) {
     case 'insufficient_duration':
-      return `Only ${measuredMinutes} min of usable tracking — the daily score needs at least ${FOCUS_METRIC_V1.minMeasuredSeconds / 60} measured minutes.`
+      return `Only ${formatDuration(measuredSeconds)} of usable tracking — Focus Score needs at least ${formatDuration(FOCUS_METRIC_V1.minMeasuredSeconds)} of measured time.`
     case 'legacy_scoring_version':
-      return 'This session used a different scoring generation, so it is not mixed into your daily score.'
+      return 'This session used a different camera measurement method, so it is not mixed into Focus Score.'
     case 'invalid_measurement':
       return "This session's tracking data didn't validate, so it wasn't counted toward your daily score."
     default:

@@ -2,6 +2,7 @@ import { FOCUSED_SCORE } from '../../../lib/attention'
 import { buildScoreComponentSummary } from '../../../lib/analyticsModel'
 import { SCORE_COMPONENT_LABELS } from '../../../lib/attentionScore'
 import { describeConclusion, describeNextAction, fmtDuration } from '../../../lib/sessionAnalysisPresentation'
+import { measurementSourceLabel } from '../../../lib/measurementTerminology'
 
 function bandFor(average) {
   if (average == null) return null
@@ -18,9 +19,7 @@ function formatEvidence(evidence = {}) {
 }
 
 function sourceLabel(measurement) {
-  if (measurement.measurementSource === 'native_mediapipe_v2') return 'Native MediaPipe ruler · V2'
-  if (measurement.measurementSource) return `${measurement.measurementSource} · V${measurement.scoringVersion ?? '?'}`
-  return measurement.scoringVersion == null ? 'Measurement source not stored' : `Scoring ruler V${measurement.scoringVersion}`
+  return measurementSourceLabel(measurement.measurementSource, measurement.scoringVersion)
 }
 
 export default function WhyThisResult({ session, analysis }) {
@@ -44,7 +43,7 @@ export default function WhyThisResult({ session, analysis }) {
           <span className="analytics-kicker">Decision trace</span>
           <h2 id="why-result-heading">Why this result?</h2>
         </div>
-        <b>{analysis.version ? `Analysis V${analysis.version}` : 'Current analysis'}</b>
+        <b>Current analysis</b>
       </div>
 
       <ol className="analytics-reason-chain">
@@ -116,7 +115,7 @@ export default function WhyThisResult({ session, analysis }) {
               <span className="analytics-kicker">Score ledger</span>
               <h2>What changed the score</h2>
             </div>
-            <b>{scoreComponents.traceSamples} traced samples · V{session.scoreTraceVersion || latestTrace?.version}</b>
+            <b>{scoreComponents.traceSamples} traced samples</b>
           </div>
           <p className="analytics-footnote">Average delta is shown only when a component was active. Sampling and smoothing mean these rows are an audit trail, not percentages that should add to the session average.</p>
           <div className="analytics-component-table">

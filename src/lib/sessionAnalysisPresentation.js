@@ -5,21 +5,14 @@
 // history detail view render through these same functions so they can never
 // drift apart.
 
-// Durations are rounded to whole seconds before splitting into minutes and
-// seconds — a fractional accumulator otherwise renders as "12m 3.0000001s".
-export function fmtDuration(seconds) {
-  const s = Math.max(0, Math.round(seconds || 0))
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  const rem = s % 60
-  return rem > 0 ? `${m}m ${rem}s` : `${m}m`
-}
+import { formatTimer } from './durationFormat'
+
+// Keep the established export name for report callers while all screens share
+// the same app-wide duration policy.
+export { formatDuration as fmtDuration } from './durationFormat'
 
 export function fmtClock(seconds) {
-  const s = Math.max(0, Math.round(seconds || 0))
-  const m = Math.floor(s / 60)
-  const rem = s % 60
-  return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`
+  return formatTimer(seconds)
 }
 
 // Energy colours the SENTENCE, never the number — see sessionAnalysis.js and
@@ -51,7 +44,7 @@ export function describeConclusion(conclusion, facts) {
       // Deliberately not "older": the native V2 ruler is newer, just measured
       // differently, and is held out of comparison until it is promoted.
       return {
-        headline: 'This session was measured with a different scoring version, so its attention read is not compared here.',
+        headline: 'This session used a different camera measurement method, so its attention read is not compared here.',
         note: 'The read below still reflects what you reported.',
       }
     case 'HIGH_FOCUS_GOAL_MISSED':

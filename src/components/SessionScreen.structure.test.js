@@ -175,8 +175,8 @@ describe('SessionScreen accumulation wiring', () => {
   })
 
   it('shows the exact Deep Focus timer throughout the measured session', () => {
-    expect(source).toContain('Deep Focus · {formatTime(deepFocusSeconds)}')
-    expect(source).toContain('warm-up ${formatTime(flowWarmupSeconds)} / ${formatTime(FLOW_ENTRY_MS / 1000)}')
+    expect(source).toContain('Deep Focus · {formatTimer(deepFocusSeconds)}')
+    expect(source).toContain('warm-up ${formatTimer(flowWarmupSeconds)} / ${formatTimer(FLOW_ENTRY_MS / 1000)}')
     expect(source).toContain('setDeepFocusSeconds(result.flowSeconds)')
     expect(source).toContain('setFlowWarmupSeconds(flowGateRef.current.qualifiedMs / 1000)')
   })

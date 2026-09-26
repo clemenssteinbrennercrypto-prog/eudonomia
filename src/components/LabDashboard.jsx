@@ -109,7 +109,6 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     schedule: scheduleState.schedule,
   }), [source, focusModeEnabled, periodSelection, dashboardNow, nativeStatus, scheduleState.schedule])
   const { period } = data
-  const measuredMinutes = Math.round(period.measuredSeconds / 60)
   // V1 already stores one versioned, phase-weighted time contribution for
   // every qualifying historical session. The newer exact Flow accumulator is
   // forward-only; summing its known subset made a week containing old sessions
@@ -120,8 +119,8 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
     ? null
     : Math.round(period.deepFocusMinutes * 60)
   const focusTimeDetail = period.range === 'day'
-    ? 'Phase-weighted V1 time'
-    : `Across ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'} · V1`
+    ? 'Phase-weighted focus time'
+    : `Across ${period.activeDays} measured ${period.activeDays === 1 ? 'day' : 'days'} · phase-weighted`
   const hasAttentionSignal = data.attention.some(bin => !['inactive', 'no-signal', 'paused', 'future'].includes(bin.state))
   const selectRange = range => setPeriodSelection({ range, periodStart: null })
   const movePeriod = delta => setPeriodSelection(current => {
@@ -175,7 +174,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
             value={displayedFocusSeconds == null ? null : fmtDuration(displayedFocusSeconds)}
             detail={focusTimeDetail}
           />
-          <Metric label="Measured work" value={period.measuredSeconds > 0 ? measuredMinutes : null} suffix="min" />
+          <Metric label="Measured work" value={period.measuredSeconds > 0 ? fmtDuration(period.measuredSeconds) : null} />
           <Metric label="Average attention" value={period.efficiency} suffix="/100" />
           <Metric label="Measured days" value={`${period.activeDays}/${period.elapsedDays}`} suffix="days" />
         </div>
@@ -187,7 +186,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
       </section>
 
       <FocusScoreExplanation period={period} />
-      <p className="focus-score-explanation">Your workday plan stays available as context, but it does not alter the V1 score.</p>
+      <p className="focus-score-explanation">Your workday plan stays available as context, but it does not alter Focus Score.</p>
       <FocusScoreControls metricVersion={2} onVersionChange={() => {}} scheduleState={scheduleState} now={dashboardNow} showMetricVersions={false} />
 
       <section className="lab-attention-section">
@@ -224,7 +223,7 @@ export default function LabDashboard({ focusModeEnabled, sessions = [], ledger =
               {data.recentSessions.map(session => (
                 <div className="lab-session-row" key={session.id}>
                   <strong>{session.task}</strong>
-                  <span>{session.durationMinutes} min</span>
+                  <span>{fmtDuration(session.durationSeconds)}</span>
                   <span>{session.efficiency == null ? 'Not measured' : `${Math.round(session.efficiency)}/100 attention`}</span>
                   <em className={`is-${session.outcome.toLowerCase()}`}>{session.outcome}</em>
                 </div>

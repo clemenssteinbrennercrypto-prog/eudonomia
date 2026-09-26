@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { calibrate, outcomeFit, MIN_SESSIONS } from '../../lib/calibration'
+import { formatMinutes } from '../../lib/durationFormat'
 
 // Every axis here shares calibration.js's {ranked, best, worst} shape. Only
 // the ones built on rankBuckets() qualify for the generic card — duration and
@@ -62,11 +63,11 @@ function DurationCard({ duration }) {
       <p style={titleStyle}>Planned duration</p>
       {duration?.shorterIsBetter ? (
         <p style={bodyStyle}>
-          {duration.shorterIsBetter.best.minutes}-minute sessions hold {duration.shorterIsBetter.best.focusPct}% focus; your {duration.shorterIsBetter.longest.minutes}-minute ones drop to {duration.shorterIsBetter.longest.focusPct}%.
+          {formatMinutes(duration.shorterIsBetter.best.minutes)} sessions hold {duration.shorterIsBetter.best.focusPct}% focus; your {formatMinutes(duration.shorterIsBetter.longest.minutes)} ones drop to {duration.shorterIsBetter.longest.focusPct}%.
         </p>
       ) : duration?.ranked?.length ? (
         <p style={mutedStyle}>
-          No planned length clearly outperforms another yet — {duration.ranked.map(r => `${r.minutes}min (${r.n})`).join(', ')}.
+          No planned length clearly outperforms another yet — {duration.ranked.map(r => `${formatMinutes(r.minutes)} (${r.n})`).join(', ')}.
         </p>
       ) : (
         <p style={mutedStyle}>Not enough sessions at more than one planned length yet.</p>
@@ -82,7 +83,7 @@ function PlanningCard({ planning }) {
       {planning ? (
         planning.ratio < 0.7 ? (
           <p style={bodyStyle}>
-            You plan {planning.plannedMedian} minutes but typically run {planning.actualMedian} ({planning.n} sessions that ended early).
+            You plan {formatMinutes(planning.plannedMedian)} but typically run {formatMinutes(planning.actualMedian)} ({planning.n} sessions that ended early).
           </p>
         ) : (
           <p style={mutedStyle}>

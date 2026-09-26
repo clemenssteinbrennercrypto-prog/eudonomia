@@ -318,6 +318,16 @@ describe('dashboard data', () => {
     expect(result.recentSessions[0].efficiency).toBeNull()
   })
 
+  it('keeps exact recent-session seconds for display formatting', () => {
+    const result = buildDashboardData({
+      ledger: emptyFocusLedger(),
+      sessions: [{ id: 'brief', task: 'Quick note', timestamp: NOW, actualSeconds: 25 }],
+      focusConfig: {}, focusModeEnabled: false, now: NOW,
+    })
+    expect(result.recentSessions[0].durationSeconds).toBe(25)
+    expect(result.recentSessions[0]).not.toHaveProperty('durationMinutes')
+  })
+
   it('refuses a thin session focus value even when focusedSeconds exists', () => {
     const result = buildDashboardData({
       ledger: emptyFocusLedger(),
