@@ -26,7 +26,7 @@
     "@mediapipe/face_mesh": "^0.4.1633559619",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "three": "^0.179.1"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
